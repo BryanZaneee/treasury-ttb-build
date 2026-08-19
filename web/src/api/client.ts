@@ -135,6 +135,7 @@ export type RecordRow = {
   rules_ms: number | null
   reader_provider: string | null
   reader_model: string | null
+  prompt_version: string | null
 }
 
 export type FieldResult = {

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
@@ -12,6 +13,13 @@ import { matchesQuery } from '../lib/search'
  * record intact across a reload, and this applies the same predicate the inbox
  * does (lib/search) — if the two diverged, Next would walk a different set from
  * the one the reviewer was looking at.
+ *
+ * `children` sits above the queue position in the centre column, which is how
+ * the determination view puts its verdict between the two steps. The component
+ * always renders: it used to return null while its own query was in flight and
+ * whenever the record was outside the current queue, so the bar vanished and
+ * reappeared on every step — and now that it carries the verdict, that would
+ * take the verdict with it.
  */
 
 const FILTER_LABEL: Record<string, string> = {
@@ -23,15 +31,7 @@ const FILTER_LABEL: Record<string, string> = {
   '': 'All records',
 }
 
-export function QueueNav({
-  currentId,
-  filter,
-  query,
-}: {
-  currentId: string
-  filter: string
-  query: string
-}) {
+function useQueuePlace(currentId: string, filter: string, query: string) {
   const records = useQuery({
     queryKey: ['records', filter],
     queryFn: () => api<RecordsPage>(`/records${filter ? `?filter=${filter}` : ''}`),
@@ -39,28 +39,58 @@ export function QueueNav({
 
   const rows = (records.data?.records ?? []).filter((r) => matchesQuery(r, query))
   const index = rows.findIndex((r) => r.id === currentId)
-  if (index < 0) return null
 
   const params = new URLSearchParams()
   params.set('filter', filter)
   if (query) params.set('q', query)
   const search = params.toString() ? `?${params}` : ''
 
-  const previous = index > 0 ? rows[index - 1] : null
-  const next = index < rows.length - 1 ? rows[index + 1] : null
+  return {
+    index,
+    total: rows.length,
+    label: FILTER_LABEL[filter] ?? 'Queue',
+    previous: index > 0 ? rows[index - 1] : null,
+    next: index >= 0 && index < rows.length - 1 ? rows[index + 1] : null,
+    search,
+  }
+}
+
+export function QueueNav({
+  currentId,
+  filter,
+  query,
+  className = 'card queue-nav',
+  children,
+}: {
+  currentId: string
+  filter: string
+  query: string
+  className?: string
+  children?: ReactNode
+}) {
+  const place = useQueuePlace(currentId, filter, query)
 
   return (
-    <nav className="card queue-nav" aria-label="Queue navigation">
-      <Step to={previous && `/records/${previous.id}${search}`} record={previous} direction="back" />
+    <nav className={className} aria-label="Queue navigation">
+      <Step
+        to={place.previous && `/records/${place.previous.id}${place.search}`}
+        record={place.previous}
+        direction="back"
+      />
 
       <div className="queue-nav-place">
+        {children}
         <div className="queue-nav-count">
-          {index + 1} of {rows.length}
+          {place.index < 0 ? 'Not in this queue' : `${place.index + 1} of ${place.total}`}
         </div>
-        <div className="queue-nav-filter">{FILTER_LABEL[filter] ?? 'Queue'}</div>
+        <div className="queue-nav-filter">{place.label}</div>
       </div>
 
-      <Step to={next && `/records/${next.id}${search}`} record={next} direction="forward" />
+      <Step
+        to={place.next && `/records/${place.next.id}${place.search}`}
+        record={place.next}
+        direction="forward"
+      />
     </nav>
   )
 }

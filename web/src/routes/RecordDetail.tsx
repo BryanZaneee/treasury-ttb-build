@@ -14,6 +14,20 @@ import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 /** Minimised state and the open record survive reload, per device (S10). */
 const MINIMISED_KEY = 'ttb.detail.minimised'
 
+/**
+ * ponytail: three arrangements of the determination header, side by side behind
+ * a toggle so one can be chosen by looking at it rather than by describing it.
+ * Temporary — once a layout is picked, delete the other two, this key, and the
+ * segmented control that drives them.
+ */
+const LAYOUT_KEY = 'ttb.detail.layout'
+type Layout = 'a' | 'b' | 'c'
+const LAYOUTS: { key: Layout; label: string }[] = [
+  { key: 'a', label: 'A · verdict centred' },
+  { key: 'b', label: 'B · verdict below' },
+  { key: 'c', label: 'C · verdict left' },
+]
+
 export function RecordDetail() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
@@ -31,6 +45,9 @@ export function RecordDetail() {
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<null | 'accepted' | 'returned'>(null)
+  const [layout, setLayoutState] = useState<Layout>(
+    () => (localStorage.getItem(LAYOUT_KEY) as Layout | null) ?? 'a',
+  )
 
   const toast = useToast()
 
@@ -101,6 +118,38 @@ export function RecordDetail() {
     localStorage.setItem(MINIMISED_KEY, next ? '1' : '0')
   }
 
+  const setLayout = (next: Layout) => {
+    setLayoutState(next)
+    localStorage.setItem(LAYOUT_KEY, next)
+  }
+
+  const verdictBlock = (
+    <div className="result-verdict">
+      <Pill verdict={data.result} />
+      <div className="result-copy">{RESULT_COPY[kind]}</div>
+    </div>
+  )
+
+  /* Previous / Next used to sit below the field table, so their position moved
+     with the number of per-field notes — a control that walks down the page as
+     the thing it navigates gets longer. In the header it is fixed. */
+  const header =
+    layout === 'b' ? (
+      <>
+        <QueueNav currentId={id} filter={filter} query={query} className="result-head qn-b" />
+        <div className={`result-head result-head-${kind} qn-b-verdict`}>{verdictBlock}</div>
+      </>
+    ) : (
+      <QueueNav
+        currentId={id}
+        filter={filter}
+        query={query}
+        className={`result-head result-head-${kind} qn-${layout}`}
+      >
+        {verdictBlock}
+      </QueueNav>
+    )
+
   return (
     <div>
       <button
@@ -115,6 +164,18 @@ export function RecordDetail() {
         <div>
           <div className="eyebrow">Review findings</div>
           <h1>Application versus label</h1>
+        </div>
+        {/* ponytail: temporary layout comparison, see LAYOUT_KEY. */}
+        <div className="segmented push" role="group" aria-label="Header layout">
+          {LAYOUTS.map((l) => (
+            <button
+              key={l.key}
+              aria-pressed={layout === l.key}
+              onClick={() => setLayout(l.key)}
+            >
+              {l.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -195,33 +256,11 @@ export function RecordDetail() {
           </div>
         </div>
 
-        <div>
-          {data.verified ? (
-            <div className="card">
-              <div className={`result-head result-head-${kind}`}>
-                <div className="result-thumb">
-                  <img
-                    src={imageUrl(data.specimen || data.filename)}
-                    alt=""
-                  />
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <Pill verdict={data.result} />
-                  <div className="result-file" style={{ marginTop: 9 }}>
-                    {data.filename}
-                  </div>
-                  <div className="result-copy">{RESULT_COPY[kind]}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span className="result-elapsed">checked in {elapsed ?? '—'}</span>
-                  <div className="result-engine">{data.engine}</div>
-                  <div className="result-engine mono">
-                    prep {data.prep_ms ?? '—'} · reader {data.reader_ms ?? '—'} · rules{' '}
-                    {data.rules_ms ?? '—'} ms
-                  </div>
-                </div>
-              </div>
+        <div className="card">
+          {header}
 
+          {data.verified ? (
+            <>
               {data.result === 'invalid' ? (
                 /* No fields were adjudicated (PRD §3.2 ext), so the comparison
                    table would be four column headers over nothing. */
@@ -263,6 +302,12 @@ export function RecordDetail() {
               })}
                 </>
               )}
+
+              <div className="result-engine-line mono">
+                {data.engine} · checked in {elapsed ?? '—'} · prep {data.prep_ms ?? '—'} ·
+                reader {data.reader_ms ?? '—'} · rules {data.rules_ms ?? '—'} ms
+                {data.prompt_version ? ` · prompt ${data.prompt_version}` : ''}
+              </div>
 
               <div className="result-foot">
                 {closed ? (
@@ -367,9 +412,9 @@ export function RecordDetail() {
                   determination appends to the audit log.
                 </div>
               </div>
-            </div>
+            </>
           ) : (
-            <div className="placeholder">
+            <div className="placeholder placeholder-flush">
               <div className="placeholder-title">Not yet verified</div>
               <div className="placeholder-hint">
                 Confirm the application data on the left, then run AI verification. The service
@@ -378,8 +423,6 @@ export function RecordDetail() {
               </div>
             </div>
           )}
-
-          <QueueNav currentId={id} filter={filter} query={query} />
         </div>
       </div>
     </div>
