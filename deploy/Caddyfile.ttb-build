@@ -22,6 +22,15 @@ handle_path /ttb-build/* {
 
 	handle {
 		root * /var/www/ttb-build/web/dist
+
+		# Vite fingerprints every asset, so those are safe to cache forever.
+		# The SPA shell must never be cached: it is the file that names the
+		# current bundle, and a cached copy pins visitors to a stale deploy —
+		# which is exactly what happened on the first cutover.
+		@fingerprinted path /assets/*
+		header @fingerprinted Cache-Control "public, max-age=31536000, immutable"
+		header Cache-Control "no-cache, must-revalidate"
+
 		try_files {path} /index.html
 		file_server
 	}
