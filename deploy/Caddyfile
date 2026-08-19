@@ -1,0 +1,23 @@
+# App-host Caddy (PRD §9). Listens on :8080, serves the built frontend,
+# proxies /api to the api container, and serves the data volume's static
+# assets directly. M0 has no images/export content yet — those file_server
+# blocks become live once M1 writes data/images and data/records.csv.
+:8080 {
+	root * /srv/labelverify/web
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+	handle /images/* {
+		root * /srv/labelverify/data
+		file_server
+	}
+	handle /export/* {
+		root * /srv/labelverify/data
+		file_server
+	}
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+	encode gzip
+}

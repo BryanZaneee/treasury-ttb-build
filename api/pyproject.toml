@@ -1,0 +1,36 @@
+[project]
+name = "ttb-api"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.141.1",
+    "pydantic>=2",
+    "pydantic-settings>=2.15.0",
+    "python-multipart>=0.0.32",
+    "uvicorn[standard]>=0.52.4",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.3",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# B008: FastAPI's Depends/File/Form-as-default is the documented idiom.
+# RUF012: Pydantic models copy mutable defaults per instance; not a real risk.
+ignore = ["B008", "RUF012"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
