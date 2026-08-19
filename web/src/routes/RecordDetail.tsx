@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api, imageUrl } from '../api/client'
 import type { RecordDetail as Detail } from '../api/client'
@@ -7,6 +7,7 @@ import { Pill } from '../components/Pill'
 import { kindOf } from '../lib/verdict'
 import { FIELD_LABEL, RESULT_COPY } from '../lib/copy'
 import { REVIEWER } from '../lib/session'
+import { Worklist } from '../components/Worklist'
 import { useToast } from '../lib/toast'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
@@ -16,6 +17,12 @@ const MINIMISED_KEY = 'ttb.detail.minimised'
 export function RecordDetail() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
+  // The queue the reviewer came from. Deep-linking straight to a record with no
+  // params falls back to the inbox's own default view.
+  const [params] = useSearchParams()
+  const filter = params.get('filter') ?? 'attention'
+  const query = params.get('q') ?? ''
+  const backToInbox = `/inbox${params.toString() ? `?${params}` : ''}`
   const client = useQueryClient()
   const [minimised, setMinimised] = useState(() => localStorage.getItem(MINIMISED_KEY) === '1')
   const [reason, setReason] = useState('')
@@ -96,7 +103,7 @@ export function RecordDetail() {
       <button
         className="btn-link"
         style={{ marginBottom: 12 }}
-        onClick={() => navigate('/inbox')}
+        onClick={() => navigate(backToInbox)}
       >
         ← Back to review inbox
       </button>
@@ -108,7 +115,7 @@ export function RecordDetail() {
         </div>
       </div>
 
-      <div className="split">
+      <div className="split-3">
         <div className="stack">
           <div className="card card-pad">
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
@@ -347,10 +354,9 @@ export function RecordDetail() {
               </div>
             </div>
           )}
-          <p className="card-note" style={{ marginTop: 12 }}>
-            <Link to="/inbox">Return to the review inbox</Link>
-          </p>
         </div>
+
+        <Worklist currentId={id} filter={filter} query={query} />
       </div>
     </div>
   )

@@ -660,3 +660,4 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 .chip-warn { background: var(--review-bg); border-color: var(--review-bd); color: var(--review-fg); }
+.btn.disabled { opacity: 0.4; pointer-events: none; }

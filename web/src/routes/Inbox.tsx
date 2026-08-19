@@ -6,6 +6,7 @@ import type { Job, RecordRow, RecordsPage, FieldResult, RecordDetail } from '../
 import { Pill } from '../components/Pill'
 import { DOT_COLOR, kindOf } from '../lib/verdict'
 import { FIELD_LABEL, QUALITY_LABEL, engineLine } from '../lib/copy'
+import { matchesQuery } from '../lib/search'
 import { useToast } from '../lib/toast'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
@@ -17,9 +18,6 @@ const FILTERS = [
   { key: 'closed', label: 'Closed' },
   { key: '', label: 'All' },
 ] as const
-
-/** Search is case- and punctuation-insensitive (S5). */
-const loosely = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '')
 
 export function Inbox() {
   const [filter, setFilter] = useState<string>('attention')
@@ -93,13 +91,13 @@ export function Inbox() {
   const counts = all.data?.counts
   const total = all.data?.records.length ?? 0
   const closed = counts?.closed ?? 0
-  const rows = (view.data?.records ?? []).filter((r) => {
-    if (!query.trim()) return true
-    const needle = loosely(query)
-    return [r.id, r.applicant, r.app_brand, r.filename].some((v) =>
-      loosely(v ?? '').includes(needle),
-    )
-  })
+  const rows = (view.data?.records ?? []).filter((r) => matchesQuery(r, query))
+
+  // Carried into the determination view so its worklist is this same queue.
+  const queueParams = new URLSearchParams()
+  if (filter) queueParams.set('filter', filter)
+  if (query) queueParams.set('q', query)
+  const queueSearch = queueParams.toString() ? `?${queueParams}` : ''
 
   const countFor = (key: string) =>
     key === '' ? total : (counts?.[key as keyof typeof counts] ?? 0)
@@ -216,6 +214,7 @@ export function Inbox() {
             busy={busy === r.id}
             onToggle={() => setExpanded(expanded === r.id ? null : r.id)}
             onVerify={() => verify.mutate(r.id)}
+            queueSearch={queueSearch}
           />
         ))}
 
@@ -244,12 +243,14 @@ function QueueItem({
   busy,
   onToggle,
   onVerify,
+  queueSearch,
 }: {
   record: RecordRow
   open: boolean
   busy: boolean
   onToggle: () => void
   onVerify: () => void
+  queueSearch: string
 }) {
   const kind = kindOf(record.result)
   const detail = useQuery({
@@ -326,7 +327,7 @@ function QueueItem({
                 </div>
               ))}
               <div className="row" style={{ marginTop: 14 }}>
-                <Link className="btn" to={`/records/${record.id}`}>
+                <Link className="btn" to={`/records/${record.id}${queueSearch}`}>
                   Open full determination
                 </Link>
                 <div className="push mono" style={{ fontSize: 11.5, color: 'var(--ink-6)' }}>
