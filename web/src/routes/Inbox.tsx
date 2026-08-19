@@ -480,10 +480,16 @@ function QueueItem({
                   <div className="fields-name" style={{ fontSize: 13, fontWeight: 600 }}>
                     {FIELD_LABEL[f.field_key] ?? f.field_key}
                   </div>
-                  <div className="fields-value" style={{ fontSize: 13 }}>
+                  <div
+                    className={`fields-value${fieldValues(f).recorded ? '' : ' fields-unrecorded'}`}
+                    style={{ fontSize: 13 }}
+                  >
                     {fieldValues(f).app}
                   </div>
-                  <div className="fields-value" style={{ fontSize: 13 }}>
+                  <div
+                    className={`fields-value${fieldValues(f).recorded ? '' : ' fields-unrecorded'}`}
+                    style={{ fontSize: 13 }}
+                  >
                     {fieldValues(f).label}
                   </div>
                   <div>

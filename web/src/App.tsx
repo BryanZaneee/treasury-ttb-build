@@ -1,5 +1,5 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api/client'
 import type { Health, RecordsPage } from './api/client'
 import { Inbox } from './routes/Inbox'
@@ -10,6 +10,8 @@ import { Export } from './routes/Export'
 import { REVIEWER } from './lib/session'
 
 export function App() {
+  const client = useQueryClient()
+
   // The masthead badge counts what needs an agent, so it is the same number the
   // inbox leads with rather than a second definition of "outstanding".
   const counts = useQuery({
@@ -59,6 +61,14 @@ export function App() {
               Export
             </NavLink>
           </nav>
+
+          <button
+            className="masthead-refresh"
+            onClick={() => client.invalidateQueries()}
+            title="Refetch everything on this page"
+          >
+            <span aria-hidden="true">⟳</span> Refresh
+          </button>
 
           <div className="agent">
             <div className="agent-avatar">{REVIEWER.initials}</div>

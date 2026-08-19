@@ -138,7 +138,10 @@ def import_store(
         )
         field_results.extend(
             unpack_field_results(
-                record_id, row.get("field_results") or "", row.get("field_notes") or ""
+                record_id,
+                row.get("field_results") or "",
+                row.get("field_notes") or "",
+                row.get("field_values") or "",
             )
         )
 

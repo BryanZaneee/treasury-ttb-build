@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+import csv_io
 import db
 import seed
 from config import settings
@@ -439,6 +440,31 @@ def test_import_restores_verdicts_and_field_results() -> None:
         "brand", "classType", "abv", "net", "producer", "warning",
     }
     assert all(f["verdict"] == "match" for f in detail["field_results"])
+
+    # The evidence, not just the verdict. A store restored from a mirror that
+    # dropped these showed every field as "Not recorded" in the determination
+    # view - a verdict with no observed values behind it.
+    by_key = {f["field_key"]: f for f in detail["field_results"]}
+    assert by_key["brand"]["app_value"] == detail["app_brand"]
+    assert by_key["brand"]["label_value"] == detail["app_brand"], "a match reads the same"
+    assert by_key["warning"]["app_value"] == "declared"
+    assert by_key["warning"]["label_value"], "the warning body survives the round trip"
+
+
+def test_packed_field_values_survive_pipes_and_colons() -> None:
+    """The sibling `field_notes` column packs as `key:note|key:note`, which a
+    value containing either separator would corrupt. Observed label values
+    contain both routinely, which is why this column is JSON."""
+    rows = [
+        {"field_key": "producer", "app_value": "Bottled by: A|B Co", "label_value": None},
+        {"field_key": "brand", "app_value": None, "label_value": "X|Y: Z"},
+    ]
+    restored = csv_io.unpack_field_results(
+        "COLA-1", "producer:match|brand:fail", "", csv_io.pack_field_values(rows)
+    )
+    by_key = {r["field_key"]: r for r in restored}
+    assert by_key["producer"]["app_value"] == "Bottled by: A|B Co"
+    assert by_key["brand"]["label_value"] == "X|Y: Z"
 
 
 def test_importing_the_same_file_twice_is_idempotent() -> None:

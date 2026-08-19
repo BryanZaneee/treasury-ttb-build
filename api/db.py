@@ -331,15 +331,15 @@ def reset_images_dir() -> None:
     images.mkdir()
 
 
-def _pack_field_results(record_id: str) -> tuple[str, str]:
+def _pack_field_results(record_id: str) -> tuple[str, str, str]:
     rows = get_field_results(record_id)
     results = "|".join(f"{r['field_key']}:{r['verdict']}" for r in rows if r["verdict"])
     notes = "|".join(f"{r['field_key']}:{r['note']}" for r in rows if r["note"])
-    return results, notes
+    return results, notes, csv_io.pack_field_values(rows)
 
 
 def mirror_rows() -> list[dict[str, Any]]:
-    """Records joined with their packed field_results/field_notes (PRD §4.2)."""
+    """Records joined with their packed field results, notes and values."""
     conn = connect()
     try:
         records = conn.execute("SELECT * FROM records ORDER BY received").fetchall()
@@ -347,10 +347,11 @@ def mirror_rows() -> list[dict[str, Any]]:
         conn.close()
     rows = []
     for record in records:
-        field_results, field_notes = _pack_field_results(record["id"])
+        field_results, field_notes, field_values = _pack_field_results(record["id"])
         row = {col: record[col] for col in record.keys()}  # noqa: SIM118 (sqlite3.Row)
         row["field_results"] = field_results
         row["field_notes"] = field_notes
+        row["field_values"] = field_values
         rows.append(row)
     return rows
 

@@ -9,15 +9,23 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 from typing import Any
 
 MIRROR_COLUMNS = [
     "id", "received", "applicant", "beverage", "filename", "specimen", "quality",
     "app_brand", "app_class_type", "app_alcohol_content", "app_net_contents",
     "app_producer", "app_origin", "app_warning_declared",
-    "verified", "result", "field_results", "field_notes", "elapsed_ms", "engine",
-    "decision", "decided_by", "decided_at", "note",
+    "verified", "result", "field_results", "field_notes", "field_values", "elapsed_ms",
+    "engine", "decision", "decided_by", "decided_at", "note",
 ]
+
+# One column beyond PRD §4.2's fixed set, and the reason is worth stating: the
+# mirror as specified carries verdicts and notes but not the values they were
+# reached from, so a store restored from an export showed every field as "not
+# recorded" - a determination with its evidence deleted. JSON in a single cell
+# rather than two more `key:value|...` columns because observed label values
+# routinely contain both `|` and `:`, which the packed format cannot survive.
 
 _FORMULA_PREFIXES = ("=", "+", "-", "@")
 
@@ -30,6 +38,28 @@ def _sanitize_cell(value: object) -> str:
     if text.startswith(_FORMULA_PREFIXES):
         return "'" + text
     return text
+
+
+def pack_field_values(rows: list[Any]) -> str:
+    """The observed values, as `{field_key: {"app": ..., "label": ...}}`."""
+    packed = {
+        row["field_key"]: {"app": row["app_value"], "label": row["label_value"]}
+        for row in rows
+        if row["app_value"] is not None or row["label_value"] is not None
+    }
+    return json.dumps(packed, ensure_ascii=False, sort_keys=True) if packed else ""
+
+
+def unpack_field_values(packed: str) -> dict[str, dict[str, str | None]]:
+    """Inverse of `pack_field_values`. A cell that will not parse is dropped
+    rather than failing the import: the verdicts still restore without it."""
+    if not packed.strip():
+        return {}
+    try:
+        loaded = json.loads(packed)
+    except json.JSONDecodeError:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def to_csv(rows: list[dict[str, Any]]) -> bytes:
@@ -60,13 +90,14 @@ def parse_bool(value: object) -> bool:
     return str(value or "").strip().casefold() in _TRUE
 
 
-def unpack_field_results(record_id: str, packed: str, notes: str) -> list[dict[str, Any]]:
+def unpack_field_results(
+    record_id: str, packed: str, notes: str, values: str = ""
+) -> list[dict[str, Any]]:
     """Rebuild field_results rows from the mirror's packed cells (PRD §4.2).
 
-    The mirror carries verdict and note only, so this restores what the
-    determination view reads. `reader_value`, `ocr_value`, `agreed` and
-    `confidence` are not in the CSV and do not come back - they are per-reader
-    evidence, not the determination.
+    Verdict, note and the two observed values restore. `reader_value`,
+    `ocr_value`, `agreed` and `confidence` are not in the CSV and do not come
+    back - they are per-reader evidence, not the determination.
     """
     note_by_key = {}
     for chunk in (notes or "").split("|"):
@@ -74,18 +105,23 @@ def unpack_field_results(record_id: str, packed: str, notes: str) -> list[dict[s
         if sep and key.strip():
             note_by_key[key.strip()] = text.strip()
 
+    value_by_key = unpack_field_values(values or "")
+
     rows: list[dict[str, Any]] = []
     for chunk in (packed or "").split("|"):
         key, sep, verdict = chunk.partition(":")
         key, verdict = key.strip(), verdict.strip()
         if not sep or not key or not verdict:
             continue
+        observed = value_by_key.get(key) or {}
         rows.append(
             {
                 "record_id": record_id,
                 "field_key": key,
                 "verdict": verdict,
                 "note": note_by_key.get(key),
+                "app_value": observed.get("app"),
+                "label_value": observed.get("label"),
             }
         )
     return rows
