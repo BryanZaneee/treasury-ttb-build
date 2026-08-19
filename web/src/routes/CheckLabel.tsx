@@ -2,8 +2,12 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, imageUrl } from '../api/client'
-import type { Health, RecordRow, SpecimenSummary } from '../api/client'
+import type { Health, RecordDetail, RecordRow, SpecimenSummary } from '../api/client'
+import type { Toast } from '../lib/toast'
 import { useToast } from '../lib/toast'
+import { FIELD_LABEL, RESULT_COPY } from '../lib/copy'
+import { PILL_TEXT, kindOf } from '../lib/verdict'
+import { REVIEWER } from '../lib/session'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
 const BLANK = {
@@ -17,6 +21,15 @@ const BLANK = {
 }
 
 const ACCEPTED = 'image/png,image/jpeg,image/webp'
+
+/** A determination reads differently depending on what it says. */
+const TOAST_KIND: Record<string, Toast['kind']> = {
+  match: 'success',
+  review: 'warn',
+  fail: 'error',
+  invalid: 'error',
+  pending: 'info',
+}
 
 /**
  * S1/S2: file one application against one label.
@@ -103,6 +116,94 @@ export function CheckLabel() {
     if (fileRef.current) fileRef.current.value = ''
   }
 
+  const decide = useMutation({
+    mutationFn: ({ id, override }: { id: string; override: boolean }) =>
+      api(`/records/${id}`, {
+        method: 'PATCH',
+        body: { decision: 'accepted', override, reviewer_name: REVIEWER.name },
+      }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['records'] }),
+    onError: (e) => toast({ kind: 'error', title: 'Not accepted', body: String(e) }),
+  })
+
+  /**
+   * Accepting a record that did not pass records an override against the
+   * reviewer's name (PRD §5.1), so the toast names every disagreeing field
+   * before it will do so — the same thing the determination view does, rather
+   * than a one-click bypass of it. The server enforces the rule independently.
+   */
+  const confirmOverride = (record: RecordDetail) => {
+    const disagreeing = record.field_results.filter((f) => f.verdict !== 'match')
+    toast({
+      kind: 'warn',
+      title: 'This record did not pass',
+      sticky: true,
+      body: (
+        <>
+          Accepting it overrides {disagreeing.length} disagreeing field
+          {disagreeing.length === 1 ? '' : 's'}
+          {disagreeing.length > 0 &&
+            `: ${disagreeing.map((f) => FIELD_LABEL[f.field_key] ?? f.field_key).join(', ')}`}
+          . <strong>{REVIEWER.name}</strong>, the timestamp and the override flag are recorded.
+        </>
+      ),
+      actions: [
+        {
+          label: 'Accept application anyway',
+          onClick: () => {
+            decide.mutate({ id: record.id, override: true })
+          },
+        },
+        {
+          label: 'Open record',
+          tone: 'quiet',
+          onClick: () => {
+            navigate(`/records/${record.id}`)
+          },
+        },
+        { label: 'Cancel', tone: 'quiet', onClick: () => {} },
+      ],
+    })
+  }
+
+  const reportVerdict = (record: RecordDetail) => {
+    const kind = kindOf(record.result)
+    toast({
+      kind: TOAST_KIND[kind] ?? 'info',
+      title: `${record.app_brand || record.filename} — ${PILL_TEXT[kind]}`,
+      sticky: true,
+      body: (
+        <>
+          {RESULT_COPY[kind]}
+          <div style={{ marginTop: 6 }}>
+            Filed to the review inbox as <span className="mono">{record.id}</span>.
+          </div>
+        </>
+      ),
+      actions: [
+        {
+          label: 'Accept application',
+          onClick: () => {
+            if (record.result === 'match') {
+              decide.mutate({ id: record.id, override: false })
+              return
+            }
+            confirmOverride(record)
+            // The confirm replaces this toast rather than stacking on it.
+          },
+        },
+        {
+          label: 'Open record',
+          tone: 'quiet',
+          onClick: () => {
+            navigate(`/records/${record.id}`)
+          },
+        },
+        { label: 'Dismiss', tone: 'quiet', onClick: () => {} },
+      ],
+    })
+  }
+
   const submit = useMutation({
     mutationFn: async () => {
       const form = new FormData()
@@ -120,14 +221,23 @@ export function CheckLabel() {
       else form.set('specimen_key', sample)
 
       const record = await api<RecordRow>('/records', { method: 'POST', form })
-      return api<RecordRow>(`/records/${record.id}/verify`, { method: 'POST' })
+      await api<RecordRow>(`/records/${record.id}/verify`, { method: 'POST' })
+      // The detail, not the verify response: the toast names the disagreeing
+      // fields before it will record an override, and those are in it.
+      return api<RecordDetail>(`/records/${record.id}`)
     },
     onSuccess: (record) => {
       client.invalidateQueries({ queryKey: ['records'] })
       if (readByFallback(record, health.data?.provider)) {
         toast({ kind: 'warn', title: FALLBACK_TITLE, body: FALLBACK_BODY })
       }
-      navigate(`/records/${record.id}`)
+      reportVerdict(record)
+      // Stay put and clear the form: filing labels one after another is the
+      // job, and being thrown into the record after each one interrupts it.
+      // The toast carries the verdict and a way in.
+      setApplication({ ...BLANK })
+      setApplicant('')
+      clearImage()
     },
     onError: (e) => setError(String(e)),
   })
