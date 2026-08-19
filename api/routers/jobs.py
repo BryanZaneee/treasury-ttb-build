@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+import batching
 import db
 from routers import batches, records
 
@@ -54,15 +55,23 @@ _LOCK = threading.Lock()
 def _commit_batch(job: Job, batch_id: str) -> list[str]:
     """File every non-ambiguous staged row. Ambiguous rows block the whole
     commit (PRD §5.5); missing-image rows file and are simply not verifiable."""
-    staged = batches.STAGED.get(batch_id)
-    if staged is None:
+    entry = batches.STAGED.get(batch_id)
+    if entry is None:
         raise KeyError(f"unknown batch {batch_id!r}")
+
+    # This used to `continue` past ambiguous rows: the docstring promised a
+    # block and the code delivered a silent partial commit, so any caller that
+    # skipped the UI lost rows without being told.
+    unresolved = batching.unresolved(entry.rows)
+    if unresolved:
+        raise ValueError(
+            "resolve the ambiguous row(s) before committing: "
+            + ", ".join(str(n) for n in unresolved)
+        )
 
     record_ids = []
     received = datetime.now(UTC).isoformat()
-    for row in staged:
-        if row.bucket == "ambiguous":
-            continue
+    for row in entry.rows:
         values = row.values
         record_id = db.next_record_id()
         db.insert_record(

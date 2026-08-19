@@ -8,6 +8,7 @@ commits it (`POST /api/jobs`).
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from typing import Literal
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -54,11 +55,18 @@ class StagedBatch(BaseModel):
 # is written to the store at stage time, so losing one costs a re-upload.
 # ponytail: process-local dict; move to a table if staging ever needs to survive
 # a restart or span two workers.
-STAGED: dict[str, list[batching.Row]] = {}
+@dataclass
+class Staged:
+    rows: list[batching.Row]
+    images: list[str]
 
 
-def to_response(batch_id: str, rows: list[batching.Row], unused: list[str]) -> StagedBatch:
-    summary = BatchStageSummary(unused_images=unused)
+STAGED: dict[str, Staged] = {}
+
+
+def to_response(batch_id: str, staged: Staged) -> StagedBatch:
+    rows = staged.rows
+    summary = BatchStageSummary(unused_images=batching.unused_images(rows, staged.images))
     for row in rows:
         setattr(summary, row.bucket, getattr(summary, row.bucket) + 1)
     return StagedBatch(
@@ -102,10 +110,29 @@ def stage_batch(
         (db.data_dir() / "images" / name).write_bytes(image.file.read())
         names.append(name)
 
-    staged, unused = batching.pair(rows, names)
+    paired, _ = batching.pair(rows, names)
     batch_id = f"batch-{uuid.uuid4().hex[:8]}"
-    STAGED[batch_id] = staged
-    return to_response(batch_id, staged, unused)
+    STAGED[batch_id] = Staged(rows=paired, images=names)
+    return to_response(batch_id, STAGED[batch_id])
+
+
+class AssignRequest(BaseModel):
+    image: str | None = None
+
+
+@router.post("/batches/{batch_id}/rows/{row_no}/image", response_model=StagedBatch)
+def assign_image(batch_id: str, row_no: int, body: AssignRequest) -> StagedBatch:
+    """Pair a staged row with an uploaded image by hand, or clear it."""
+    staged = STAGED.get(batch_id)
+    if staged is None:
+        raise HTTPException(status_code=404, detail=f"unknown batch {batch_id!r}")
+    try:
+        batching.assign(staged.rows, staged.images, row_no, body.image)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc).strip("\"'")) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return to_response(batch_id, staged)
 
 
 def stage_sample_batch() -> StagedBatch:
@@ -113,7 +140,7 @@ def stage_sample_batch() -> StagedBatch:
     rows = seed.read_applications()
     seed.copy_fixture_images()
     names = [r["filename"] for r in rows]
-    staged, unused = batching.pair(rows, names)
+    paired, _ = batching.pair(rows, names)
     batch_id = f"sample-{uuid.uuid4().hex[:8]}"
-    STAGED[batch_id] = staged
-    return to_response(batch_id, staged, unused)
+    STAGED[batch_id] = Staged(rows=paired, images=names)
+    return to_response(batch_id, STAGED[batch_id])

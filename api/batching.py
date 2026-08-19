@@ -134,6 +134,47 @@ def pair(rows: list[dict[str, str]], image_names: list[str]) -> tuple[list[Row],
     return staged, unused
 
 
+def assign(rows: list[Row], images: list[str], row_no: int, image: str | None) -> None:
+    """Pair a row with an image by hand, or clear the pairing.
+
+    Filename pairing is right for a curated CSV and a folder, but it has no
+    answer for a typo: the reviewer can see that row 7 is that bottle even when
+    the names disagree, and re-uploading the whole batch to fix one character
+    is not a remedy.
+    """
+    row = next((r for r in rows if r.row == row_no), None)
+    if row is None:
+        raise KeyError(f"no row {row_no} in this batch")
+
+    if image is not None:
+        if image not in images:
+            raise KeyError(f"{image!r} was not uploaded with this batch")
+        claimed = {r.image for r in rows if r.image and r.row != row_no}
+        if image in claimed:
+            raise ValueError(f"{image!r} is already paired with another row")
+
+    row.image = image
+    row.candidate_filenames = []
+    row.errors = []
+    if image is None:
+        row.bucket = "missing_image"
+        row.errors.append("no image supplied for this row")
+    else:
+        # Assigned by a human, so it is matched - not a fuzzy guess the
+        # preview should ask them to confirm.
+        row.bucket = "matched"
+
+
+def unused_images(rows: list[Row], images: list[str]) -> list[str]:
+    claimed = {r.image for r in rows if r.image}
+    return sorted(set(images) - claimed)
+
+
+def unresolved(rows: list[Row]) -> list[int]:
+    """Row numbers still ambiguous, which no commit may quietly skip."""
+    return [r.row for r in rows if r.bucket == "ambiguous"]
+
+
 def blocks_commit(rows: list[Row]) -> bool:
     """Commit is blocked while any row is ambiguous. `missing_image` rows do
     not block: they file, and are editable but not verifiable (PRD §5.5)."""

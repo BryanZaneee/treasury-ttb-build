@@ -694,3 +694,76 @@ def test_an_uploaded_label_is_what_verify_resolves() -> None:
     assert stored.exists(), "verify resolves this path first"
     assert not (Path("fixtures") / body["specimen"]).exists(), "and cannot fall back to a fixture"
     assert body["specimen"] != "old-tom-pass.png"
+
+
+def test_assigning_an_image_over_the_api_unblocks_a_stuck_batch() -> None:
+    csv_bytes = (
+        b"filename,brand_name,class_type,alcohol_content,net_contents,applicant\n"
+        b"old-tom.png,Old Tom,Bourbon,45%,750 mL,Acme\n"
+    )
+    staged = client.post(
+        "/api/batches/stage",
+        headers=ACCESS,
+        files=[
+            ("applications_csv", ("apps.csv", csv_bytes, "text/csv")),
+            ("images", ("totally-different-name.png", _png(), "image/png")),
+        ],
+    ).json()
+    assert staged["summary"]["missing_image"] == 1
+    assert staged["summary"]["unused_images"] == ["totally-different-name.png"]
+
+    resp = client.post(
+        f"/api/batches/{staged['batch_id']}/rows/1/image",
+        headers=ACCESS,
+        json={"image": "totally-different-name.png"},
+    )
+    assert resp.status_code == 200
+    fixed = resp.json()
+    assert fixed["summary"]["matched"] == 1
+    assert fixed["summary"]["missing_image"] == 0
+    assert fixed["summary"]["unused_images"] == []
+    assert fixed["rows"][0]["image"] == "totally-different-name.png"
+
+
+def test_committing_an_unresolved_batch_is_refused() -> None:
+    """It used to skip ambiguous rows silently and file the rest."""
+    csv_bytes = (
+        b"filename,brand_name,class_type,alcohol_content,net_contents,applicant\n"
+        b"old-tom.png,Old Tom,Bourbon,45%,750 mL,Acme\n"
+        b"clean.png,Clean,Bourbon,45%,750 mL,Acme\n"
+    )
+    staged = client.post(
+        "/api/batches/stage",
+        headers=ACCESS,
+        files=[
+            ("applications_csv", ("apps.csv", csv_bytes, "text/csv")),
+            ("images", ("Old_Tom.jpg", _png("red"), "image/png")),
+            ("images", ("old-tom.jpeg", _png("blue"), "image/png")),
+            ("images", ("clean.png", _png("green"), "image/png")),
+        ],
+    ).json()
+    assert staged["blocks_commit"] is True
+
+    job_id = client.post(
+        "/api/jobs",
+        headers=ACCESS,
+        json={"scope": "batch", "batch_id": staged["batch_id"]},
+    ).json()["id"]
+    job = _await_job(job_id)
+    assert job["state"] == "error"
+    assert "ambiguous" in (job["error"] or "")
+    assert job["committed"] == 0, "nothing files while a row is unresolved"
+
+    client.post(
+        f"/api/batches/{staged['batch_id']}/rows/1/image",
+        headers=ACCESS,
+        json={"image": "Old_Tom.jpg"},
+    )
+    job_id = client.post(
+        "/api/jobs",
+        headers=ACCESS,
+        json={"scope": "batch", "batch_id": staged["batch_id"], "verify_now": False},
+    ).json()["id"]
+    job = _await_job(job_id)
+    assert job["state"] == "done"
+    assert job["committed"] == 2
