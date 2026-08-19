@@ -435,3 +435,65 @@ def test_verification_records_the_configured_reader_when_it_works() -> None:
     body = client.post(f"/api/records/{record_id}/verify", headers=ACCESS).json()
     assert body["reader_provider"] == "fake"
     assert "fake reader" in body["engine"]
+
+
+def test_specimen_catalogue_lists_the_named_samples() -> None:
+    """PRD §7: the bundled samples the single-label form is filled from."""
+    resp = client.get("/api/specimens")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 25
+    named = [s for s in body if s["title"]]
+    assert len(named) == 12, "the named samples lead the catalogue"
+    assert named[0]["filename"] == "old-tom-pass.png"
+    assert named[0]["title"] == "Clean match"
+
+
+def test_specimen_prefill_returns_the_application_as_filed() -> None:
+    resp = client.get("/api/specimens/old-tom-pass.png")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["applicant"] == "Old Tom Distillery LLC"
+    assert body["app"]["brand"] == "Old Tom Distillery"
+
+
+def test_specimen_prefill_rejects_an_unknown_filename() -> None:
+    assert client.get("/api/specimens/not-a-fixture.png").status_code == 404
+
+
+def test_bulk_verify_runs_exactly_the_selected_records() -> None:
+    seed.seed_store()
+    ids = [r["id"] for r in client.get("/api/records").json()["records"][:3]]
+    resp = client.post(
+        "/api/jobs", headers=ACCESS, json={"scope": "ids", "record_ids": ids}
+    )
+    assert resp.status_code == 200
+    job = _await_job(resp.json()["id"])
+    assert job["state"] == "done"
+    assert job["completed"] == 3
+    assert job["failed"] == 0
+
+    verified = [r for r in client.get("/api/records").json()["records"] if r["verified"]]
+    assert {r["id"] for r in verified} == set(ids), "nothing outside the selection ran"
+
+
+def test_bulk_verify_survives_an_id_that_does_not_exist() -> None:
+    """One bad record must not abort the rest of the job (PRD §5.1, S7)."""
+    seed.seed_store()
+    good = [r["id"] for r in client.get("/api/records").json()["records"][:2]]
+    resp = client.post(
+        "/api/jobs",
+        headers=ACCESS,
+        json={"scope": "ids", "record_ids": [*good, "COLA-2026-9999"]},
+    )
+    job = _await_job(resp.json()["id"])
+    assert job["state"] == "done"
+    assert job["failed"] == 1
+    assert sum(job["verdicts"].values()) == 2
+
+
+def test_bulk_verify_requires_ids() -> None:
+    resp = client.post("/api/jobs", headers=ACCESS, json={"scope": "ids", "record_ids": []})
+    job = _await_job(resp.json()["id"])
+    assert job["state"] == "error"
+    assert "record_ids" in (job["error"] or "")

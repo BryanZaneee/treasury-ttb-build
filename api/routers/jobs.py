@@ -23,8 +23,12 @@ router = APIRouter(tags=["jobs"])
 
 
 class JobCreateRequest(BaseModel):
-    scope: Literal["pending", "batch"]
+    scope: Literal["pending", "batch", "ids"]
     batch_id: str | None = None
+    # scope "ids": verify exactly these records. The reviewer selected them in
+    # the inbox, so the set is theirs to choose - the server does not re-derive
+    # it from a filter that may have moved on since.
+    record_ids: list[str] = []
     verify_now: bool = True
 
 
@@ -119,6 +123,10 @@ def _run(job: Job, body: JobCreateRequest) -> None:
             if not body.batch_id:
                 raise ValueError("batch_id is required for scope 'batch'")
             record_ids = _commit_batch(job, body.batch_id)
+        elif body.scope == "ids":
+            if not body.record_ids:
+                raise ValueError("record_ids is required for scope 'ids'")
+            record_ids = list(body.record_ids)
         else:
             record_ids = [
                 r["id"] for r in db.list_records(result_filter="pending") if r["specimen"]

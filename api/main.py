@@ -9,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 
 import db
 from config import settings
-from routers import batches, dev, jobs, records, store
+from routers import batches, jobs, records, specimens, store
 
 # Mutating routes require ACCESS_TOKEN. Admin-only routes additionally require
 # ADMIN_TOKEN. Matched by (method, path-prefix) since path params vary.
@@ -20,8 +20,6 @@ _ACCESS_ROUTES = [
     ("POST", "/api/batches/stage"),
     ("POST", "/api/jobs"),
     ("POST", "/api/fixtures"),
-    # The dev bench can call a paid provider on every request.
-    ("POST", "/api/dev/bench"),
 ]
 _ADMIN_ROUTES = [
     ("POST", "/api/store/import"),
@@ -96,8 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(batches.router, prefix="/api")
     app.include_router(jobs.router, prefix="/api")
     app.include_router(store.router, prefix="/api")
-    # Temporary: remove before the M6 cutover (see routers/dev.py).
-    app.include_router(dev.router, prefix="/api")
+    app.include_router(specimens.router, prefix="/api")
 
     @app.get("/api/health")
     def health() -> HealthResponse:
