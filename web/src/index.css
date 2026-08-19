@@ -101,10 +101,6 @@ input, textarea, select { font-family: inherit; }
   font-family: var(--mono); font-size: 11px; font-weight: 600;
   background: var(--badge); color: #fff; padding: 2px 6px; border-radius: 2px;
 }
-/* The dev tab is temporary: mono type and a dashed gold rule so nobody
-   mistakes it for part of the reviewer workflow. */
-.nav a.dev { font-family: var(--mono); font-size: 12px; border: 1px dashed rgba(184, 145, 47, 0.75); }
-.nav a.dev.active { background: var(--gold); border-style: solid; border-color: var(--gold); color: #241c07; }
 
 .agent {
   display: flex; align-items: center; gap: 10px;
@@ -245,7 +241,6 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
   background: var(--paper); border: 1px solid var(--rule); border-radius: 4px;
   box-shadow: var(--card-shadow); overflow: hidden;
 }
-.card + .card { margin-top: 16px; }
 .card-pad { padding: 16px; }
 .card-title {
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
@@ -255,22 +250,14 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 
 /* ---------------- queue table ---------------- */
 
-.queue-head, .queue-row {
-  display: grid;
-  grid-template-columns: 30px 76px minmax(0, 1fr) 150px 118px 128px 26px;
-  gap: 14px; align-items: center;
-}
 .queue-head {
-  padding: 10px 16px; background: var(--sunk); border-bottom: 1px solid var(--rule);
+  display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center;
+  padding-left: 16px;
+  background: var(--sunk); border-bottom: 1px solid var(--rule);
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--ink-4);
 }
 .queue-item { border-bottom: 1px solid var(--rule-soft); }
-.queue-row {
-  width: 100%; padding: 12px 16px; cursor: pointer; text-align: left;
-  background: none; border: none; border-radius: 0; min-height: 0; font: inherit; color: inherit;
-}
-.queue-row:hover { background: #f7f9fc; }
 .dot { width: 11px; height: 11px; border-radius: 50%; margin: 0 auto; }
 .thumb {
   width: 68px; height: 46px; border: 1px solid var(--rule); background: #faf7f0;
@@ -379,7 +366,33 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 .stack { display: flex; flex-direction: column; gap: 16px; }
 .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .push { margin-left: auto; }
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+
+/* Three columns on the determination view: specimen, findings, worklist. */
+.split-3 {
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr) minmax(220px, 260px);
+  gap: 20px;
+  align-items: start;
+}
+
+/* The batch page as one grid rather than two independent columns. Cards placed
+   by area share a row, so "Step 2" and "No files handy?" line up because the
+   grid says so - not because the cards above them happen to be the same height,
+   which they are not. */
+.batch-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  grid-template-areas:
+    'step1 run'
+    'step2 nofiles';
+  gap: 20px;
+  align-items: start;
+}
+.area-step1 { grid-area: step1; }
+.area-step2 { grid-area: step2; }
+.area-run { grid-area: run; }
+.area-nofiles { grid-area: nofiles; }
 .sample-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
 .sample {
   display: flex; gap: 9px; align-items: flex-start; text-align: left;
@@ -424,21 +437,183 @@ thead th {
 tbody td { padding: 11px 14px; border-bottom: 1px solid var(--rule-softer); vertical-align: top; }
 td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
+/* ---------------- inbox selection and bulk actions ---------------- */
+
+.queue-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  padding: 0 0 0 16px;
+}
+.queue-main {
+  display: grid;
+  grid-template-columns: 30px 76px minmax(0, 1fr) 150px 118px 128px 26px;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  padding: 12px 16px 12px 0;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 0;
+  min-height: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.queue-item:hover { background: #f7f9fc; }
+.queue-item.selected { background: #f2f7fb; }
+.queue-head-main {
+  display: grid;
+  grid-template-columns: 30px 76px minmax(0, 1fr) 150px 118px 128px 26px;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 16px 10px 0;
+}
+
+.bulkbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--navy);
+  color: #fff;
+  border-bottom: 1px solid var(--rule);
+}
+.bulkbar-count { font-size: 13px; font-weight: 600; }
+.bulkbar .btn-quiet { border-color: rgba(255, 255, 255, 0.35); }
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 21, 28, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 40;
+}
+.dialog {
+  background: var(--paper);
+  border-radius: 4px;
+  border: 1px solid var(--rule);
+  width: min(620px, 100%);
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(16, 40, 61, 0.28);
+}
+.dialog-head { padding: 16px 20px; border-bottom: 1px solid var(--rule); }
+.dialog-body { padding: 16px 20px; overflow-y: auto; }
+.dialog-foot {
+  padding: 14px 20px;
+  border-top: 1px solid var(--rule);
+  background: var(--sunk-2);
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.override-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule-softer);
+  font-size: 13px;
+}
+.override-row:last-child { border-bottom: none; }
+.override-fields { color: var(--ink-5); font-size: 12px; }
+
+/* A read-only information panel. Distinct from .check-row, which is a form
+   control with a 44px hit target and has no business displaying prose. */
+.readout {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--sunk-2);
+  font-size: 12.5px;
+  color: var(--ink-3);
+  line-height: 1.55;
+}
+
+/* ---------------- record worklist ---------------- */
+
+.worklist { position: sticky; top: 16px; }
+.worklist-scroll { max-height: calc(100vh - 220px); overflow-y: auto; }
+.worklist-item {
+  display: grid;
+  grid-template-columns: 11px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule-softer);
+  border-left: 3px solid transparent;
+  text-decoration: none;
+  color: inherit;
+}
+.worklist-item:hover { background: #f7f9fc; color: inherit; }
+.worklist-item[aria-current='true'] {
+  background: var(--sunk);
+  border-left-color: var(--gold);
+}
+.worklist-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; }
+.worklist-brand {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.worklist-meta {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-6);
+  margin-top: 2px;
+}
+
+/* ---------------- sample specimens ---------------- */
+
+.sample-tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--review-bg);
+  border: 1px solid var(--review-bd);
+  color: var(--review-fg);
+  padding: 1px 4px;
+  border-radius: 2px;
+  margin-bottom: 3px;
+}
+
+@media (max-width: 1200px) {
+  /* The worklist drops below the findings before anything else reflows. */
+  .split-3 { grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); }
+  .split-3 > .worklist { grid-column: 1 / -1; position: static; max-height: none; }
+}
 @media (max-width: 1100px) {
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .sample-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 900px) {
-  .split, .split-right { grid-template-columns: minmax(0, 1fr); }
+  .split, .split-right, .split-3 { grid-template-columns: minmax(0, 1fr); }
+  .grid-2 { grid-template-columns: minmax(0, 1fr); }
+  .batch-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'step1' 'run' 'step2' 'nofiles';
+  }
   .queue-head { display: none; }
-  .queue-row { grid-template-columns: 30px 76px minmax(0, 1fr) 128px 26px; }
-  .queue-row .hide-sm { display: none; }
+  .queue-main { grid-template-columns: 30px 76px minmax(0, 1fr) 128px 26px; }
+  .queue-main .hide-sm { display: none; }
 }
 @media (max-width: 720px) {
   main { padding: 18px 14px 56px; }
   .kpis { grid-template-columns: 1fr; }
   .sample-grid { grid-template-columns: repeat(2, 1fr); }
-  .grid-2 { grid-template-columns: 1fr; }
 }
 
 /* ---------------- toasts ---------------- */

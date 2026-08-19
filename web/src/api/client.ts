@@ -143,39 +143,6 @@ export type Counts = {
 
 export type RecordsPage = { records: RecordRow[]; counts: Counts; cursor: string | null }
 
-export type LaneResult = {
-  provider: string
-  model: string | null
-  effort: string | null
-  ok: boolean
-  error: string | null
-  reader_ms: number | null
-  rules_ms: number | null
-  total_ms: number | null
-  verdict: Verdict | null
-  quality: string | null
-  fields_correct: number | null
-  fields_total: number | null
-  input_tokens: number | null
-  output_tokens: number | null
-  fields: {
-    field_key: string
-    app_value: string | null
-    label_value: string | null
-    verdict: Verdict | null
-    expected: Verdict | null
-    note: string | null
-    confidence: number | null
-  }[]
-}
-
-export type BenchResponse = {
-  specimen: string
-  expected_verdict: Verdict | null
-  sharpness: number | null
-  lanes: LaneResult[]
-}
-
 export type SpecimenSummary = {
   filename: string
   brand: string

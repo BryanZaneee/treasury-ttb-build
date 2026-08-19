@@ -6,8 +6,8 @@ import { Inbox } from './routes/Inbox'
 import { CheckLabel } from './routes/CheckLabel'
 import { CheckBatch } from './routes/CheckBatch'
 import { RecordDetail } from './routes/RecordDetail'
-import { Settings } from './routes/Settings'
-import { Dev } from './routes/Dev'
+import { Export } from './routes/Export'
+import { REVIEWER } from './lib/session'
 
 export function App() {
   // The masthead badge counts what needs an agent, so it is the same number the
@@ -31,9 +31,6 @@ export function App() {
           </div>
 
           <nav className="nav" aria-label="Primary">
-            <NavLink to="/dev" className={({ isActive }) => `dev${isActive ? ' active' : ''}`}>
-              Reader bench
-            </NavLink>
             <NavLink to="/inbox" className={({ isActive }) => (isActive ? 'active' : '')}>
               Review inbox
               {attention > 0 && <span className="nav-badge">{attention}</span>}
@@ -44,16 +41,16 @@ export function App() {
             <NavLink to="/batch" className={({ isActive }) => (isActive ? 'active' : '')}>
               Batch upload
             </NavLink>
-            <NavLink to="/settings" className={({ isActive }) => (isActive ? 'active' : '')}>
-              Settings
+            <NavLink to="/export" className={({ isActive }) => (isActive ? 'active' : '')}>
+              Export
             </NavLink>
           </nav>
 
           <div className="agent">
-            <div className="agent-avatar">JP</div>
+            <div className="agent-avatar">{REVIEWER.initials}</div>
             <div>
-              <div className="agent-name">J. Park</div>
-              <div className="agent-role">Compliance Agent</div>
+              <div className="agent-name">{REVIEWER.name}</div>
+              <div className="agent-role">{REVIEWER.role}</div>
             </div>
           </div>
         </div>
@@ -62,13 +59,14 @@ export function App() {
       <main>
         <Routes>
           <Route path="/" element={<Navigate to="/inbox" replace />} />
-          <Route path="/dev" element={<Dev />} />
           <Route path="/inbox" element={<Inbox />} />
           <Route path="/check" element={<CheckLabel />} />
           <Route path="/batch" element={<CheckBatch />} />
           <Route path="/records/:id" element={<RecordDetail />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/store" element={<Navigate to="/settings" replace />} />
+          <Route path="/export" element={<Export />} />
+          {/* Older links kept working rather than 404ing. */}
+          <Route path="/settings" element={<Navigate to="/export" replace />} />
+          <Route path="/store" element={<Navigate to="/export" replace />} />
         </Routes>
       </main>
     </div>

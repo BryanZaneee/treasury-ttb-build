@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, imageUrl } from '../api/client'
 import type { RecordRow, SpecimenSummary } from '../api/client'
 import { QUALITY_LABEL } from '../lib/copy'
-import { useToast } from '../components/Toast'
+import { useToast } from '../lib/toast'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
 const BLANK = {
@@ -35,7 +35,7 @@ export function CheckLabel() {
 
   const specimens = useQuery({
     queryKey: ['specimens'],
-    queryFn: () => api<SpecimenSummary[]>('/dev/specimens'),
+    queryFn: () => api<SpecimenSummary[]>('/specimens'),
   })
   const named = (specimens.data ?? []).filter((s) => s.title)
   const chosen = specimens.data?.find((s) => s.filename === specimen)
@@ -43,7 +43,7 @@ export function CheckLabel() {
   const prefill = useMutation({
     mutationFn: (filename: string) =>
       api<{ app: Record<string, string>; applicant: string }>(
-        `/dev/fixture/${encodeURIComponent(filename)}`,
+        `/specimens/${encodeURIComponent(filename)}`,
       ),
     onSuccess: (data) => {
       setApplication({
@@ -109,10 +109,12 @@ export function CheckLabel() {
       </div>
 
       <div className="card card-pad">
-        <div className="card-title">Label specimen</div>
+        <div className="card-title">Label specimen · bundled test specimens</div>
         <p className="card-note">
-          Choose a bundled test specimen below. Test specimens cover clean artwork plus the
-          degraded captures agents receive in the field.
+          <strong>These are synthetic samples for testing, not real applications.</strong> The
+          brands are fictional and no real trade dress is reproduced. Between them they cover
+          clean artwork and the degraded captures agents receive in the field, and each one
+          reproduces a documented verdict.
         </p>
 
         {specimen ? (
@@ -150,8 +152,8 @@ export function CheckLabel() {
           </div>
         ) : (
           <div className="dropzone" style={{ margin: '14px 0' }}>
-            <div className="dropzone-title">Select a bundled specimen</div>
-            <div className="dropzone-hint">PNG or JPG · No file selected</div>
+            <div className="dropzone-title">Select a bundled test specimen</div>
+            <div className="dropzone-hint">Synthetic samples · no specimen selected</div>
           </div>
         )}
 
@@ -167,6 +169,7 @@ export function CheckLabel() {
                 <img src={imageUrl(s.filename)} alt="" />
               </span>
               <span>
+                <span className="sample-tag">Sample</span>
                 <span className="sample-title">{s.title}</span>
                 <span className="sample-hint">{s.hint}</span>
               </span>

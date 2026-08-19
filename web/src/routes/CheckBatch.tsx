@@ -89,9 +89,8 @@ export function CheckBatch() {
         </div>
       </div>
 
-      <div className="split-right">
-        <div>
-          <div className="card card-pad">
+      <div className="batch-grid">
+        <div className="card card-pad area-step1">
             <div className="row">
               <div className="card-title">Step 1 · Application CSV</div>
               <a className="push" href={apiUrl('/export/template.csv')} download>
@@ -142,7 +141,7 @@ export function CheckBatch() {
             </div>
           </div>
 
-          <div className="card card-pad">
+        <div className="card card-pad area-step2">
             <div className="card-title">Step 2 · Staged applications</div>
             {error && (
               <div className="banner-error" style={{ marginTop: 12, marginBottom: 0 }}>
@@ -224,10 +223,8 @@ export function CheckBatch() {
               </>
             )}
           </div>
-        </div>
 
-        <div className="stack">
-          <div className="card card-pad">
+        <div className="card card-pad area-run">
             <div className="card-title">Step 3 · Run</div>
             <label className="check-row" style={{ marginTop: 12, alignItems: 'flex-start' }}>
               <input
@@ -266,7 +263,7 @@ export function CheckBatch() {
             )}
           </div>
 
-          <div className="card card-pad" style={{ background: 'var(--sunk-2)' }}>
+        <div className="card card-pad area-nofiles" style={{ background: 'var(--sunk-2)' }}>
             <div className="card-title">No files handy?</div>
             <p className="card-note">
               Load a bundled sample batch of 25 applications with matching specimens — clean
@@ -282,7 +279,6 @@ export function CheckBatch() {
               Load bundled sample batch
             </button>
           </div>
-        </div>
       </div>
     </div>
   )

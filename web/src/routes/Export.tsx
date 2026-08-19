@@ -4,11 +4,11 @@ import { api, freshUrl } from '../api/client'
 import type { RecordsPage } from '../api/client'
 
 /**
- * Administration. The store is read as a normal web page — CSV exists only as a
- * file download (S13), so "view raw CSV" from the prototype is replaced by the
- * record table below.
+ * Export and store administration. The store is read as a normal web page — CSV
+ * exists only as a file download (S13), so "view raw CSV" from the prototype is
+ * replaced by the record table below.
  */
-export function Settings() {
+export function Export() {
   const client = useQueryClient()
   const [confirming, setConfirming] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -51,11 +51,11 @@ export function Settings() {
       <div className="page-head">
         <div>
           <div className="eyebrow">Administration</div>
-          <h1>Data &amp; verification settings</h1>
+          <h1>Export</h1>
         </div>
       </div>
 
-      <div className="grid-2" style={{ alignItems: 'start', gap: 20 }}>
+      <div className="grid-2" style={{ gap: 20 }}>
         <div className="card card-pad">
           <div style={{ fontSize: 15, fontWeight: 700 }}>Record store</div>
           <p className="card-note">
@@ -105,7 +105,7 @@ export function Settings() {
             A deterministic rules engine produces the verdict of record. The vision reader
             supplies observed values and may downgrade a verdict, never improve one.
           </p>
-          <div className="check-row" style={{ marginTop: 12, alignItems: 'flex-start' }}>
+          <div className="readout">
             <div>
               <strong>Reader:</strong>{' '}
               <span className="mono">

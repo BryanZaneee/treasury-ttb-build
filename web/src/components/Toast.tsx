@@ -1,5 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { ToastContext } from '../lib/toast'
+import type { Toast } from '../lib/toast'
 
 /**
  * Toasts exist for one thing: telling a reviewer that a determination was not
@@ -10,13 +12,6 @@ import type { ReactNode } from 'react'
  * Announced in a live region, because a reviewer working the queue by keyboard
  * has no reason to be looking at the bottom-right of the screen (PRD §8).
  */
-
-export type ToastKind = 'info' | 'warn'
-type Toast = { id: number; kind: ToastKind; title: string; body?: string }
-
-const ToastContext = createContext<(t: Omit<Toast, 'id'>) => void>(() => {})
-
-export const useToast = () => useContext(ToastContext)
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])

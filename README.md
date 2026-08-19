@@ -66,6 +66,10 @@ Local OCR needs Tesseract: `brew install tesseract`.
 | `ocr` | ~600 ms | none | Local Tesseract, two page-segmentation passes. No network. Also the automatic fallback. |
 | `fake` | ~0 ms | none | Replays the fixture ground truth. The CI reader (PRD §5.4). |
 
+Determinations are attributed to the signed-in reviewer. PRD §8 has no user accounts, so
+`web/src/lib/session.ts` is a mock session standing in until real authentication exists — it is
+the single definition the masthead and every determination both read.
+
 Rules own the verdict. A reader supplies observed values and may **downgrade** a verdict or
 attach a note; it may never improve one (PRD §3.2).
 
@@ -74,17 +78,6 @@ failing — the service never blocks on a reader. Because OCR reads blurred, ang
 low-contrast captures markedly less reliably, the reviewer is told: a toast is raised on the
 determination, the record carries a *Read by local OCR* chip, and the engine string names what
 actually read the label.
-
-### Reader bench
-
-The **Reader bench** tab (first in the nav) races any combination of readers against one
-specimen and reports per-stage timings, token counts, the verdict each produced, and how each
-scored against the fixture ground truth. It is the interactive form of the PRD §5.4 bake-off.
-
-It is a development affordance: it calls a paid provider on every run, and it — along with
-`api/routers/dev.py` — should be removed before the M6 cutover.
-
----
 
 ## Quality gates
 

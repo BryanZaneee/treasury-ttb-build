@@ -6,7 +6,7 @@ import type { Job, RecordRow, RecordsPage, FieldResult, RecordDetail } from '../
 import { Pill } from '../components/Pill'
 import { DOT_COLOR, kindOf } from '../lib/verdict'
 import { FIELD_LABEL, QUALITY_LABEL, engineLine } from '../lib/copy'
-import { useToast } from '../components/Toast'
+import { useToast } from '../lib/toast'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
 const FILTERS = [
@@ -110,12 +110,6 @@ export function Inbox() {
         <div>
           <div className="eyebrow">Queue</div>
           <h1>Review inbox</h1>
-        </div>
-        <div className="page-aside">
-          {counts?.attention ?? 0} application{counts?.attention === 1 ? '' : 's'} require an
-          agent; {closed} cleared automatically.
-          <br />
-          <span className="mono">{total} records persisted · records.csv</span>
         </div>
       </div>
 

@@ -5,8 +5,9 @@ import { ApiError, api, imageUrl } from '../api/client'
 import type { RecordDetail as Detail } from '../api/client'
 import { Pill } from '../components/Pill'
 import { kindOf } from '../lib/verdict'
-import { FIELD_LABEL, QUALITY_LABEL, RESULT_COPY } from '../lib/copy'
-import { useToast } from '../components/Toast'
+import { FIELD_LABEL, RESULT_COPY } from '../lib/copy'
+import { REVIEWER } from '../lib/session'
+import { useToast } from '../lib/toast'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
 /** Minimised state and the open record survive reload, per device (S10). */
@@ -17,7 +18,6 @@ export function RecordDetail() {
   const navigate = useNavigate()
   const client = useQueryClient()
   const [minimised, setMinimised] = useState(() => localStorage.getItem(MINIMISED_KEY) === '1')
-  const [reviewer, setReviewer] = useState(() => localStorage.getItem('ttb.reviewer') ?? '')
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<null | 'accepted' | 'returned'>(null)
@@ -106,13 +106,6 @@ export function RecordDetail() {
           <div className="eyebrow">Review findings</div>
           <h1>Application versus label</h1>
         </div>
-        <div className="page-aside">
-          Review the evidence below before making a determination.
-          <br />
-          <span className="mono">
-            {data.id} · {data.applicant}
-          </span>
-        </div>
       </div>
 
       <div className="split">
@@ -131,13 +124,11 @@ export function RecordDetail() {
                 style={{ width: '100%', display: 'block' }}
               />
             </div>
-            <div className="row" style={{ gap: 8, marginTop: 12 }}>
-              <span className="chip">{QUALITY_LABEL[data.quality ?? ''] ?? 'Not assessed'}</span>
-              <span className="chip">{data.beverage}</span>
-              {readByFallback(data, health.data?.provider) && (
+            {readByFallback(data, health.data?.provider) && (
+              <div className="row" style={{ gap: 8, marginTop: 12 }}>
                 <span className="chip chip-warn">Read by local OCR</span>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           <div className="card card-pad">
@@ -288,29 +279,21 @@ export function RecordDetail() {
                         </div>
                       </div>
                     )}
-                    <div className="grid-2" style={{ maxWidth: 620 }}>
-                      <label className="field">
-                        <span className="field-label">Reviewer name</span>
+                    {confirming === 'returned' && (
+                      <label className="field" style={{ maxWidth: 620 }}>
+                        <span className="field-label">Reason returned to applicant</span>
                         <input
                           type="text"
-                          value={reviewer}
-                          onChange={(e) => {
-                            setReviewer(e.target.value)
-                            localStorage.setItem('ttb.reviewer', e.target.value)
-                          }}
+                          value={reason}
+                          onChange={(e) => setReason(e.target.value)}
                         />
                       </label>
-                      {confirming === 'returned' && (
-                        <label className="field">
-                          <span className="field-label">Reason returned to applicant</span>
-                          <input
-                            type="text"
-                            value={reason}
-                            onChange={(e) => setReason(e.target.value)}
-                          />
-                        </label>
-                      )}
-                    </div>
+                    )}
+                    <p className="card-note">
+                      This determination will be recorded against{' '}
+                      <strong>{REVIEWER.name}</strong>, with the timestamp and, where it
+                      applies, the override flag.
+                    </p>
                     <div className="row">
                       <button
                         className={`btn ${confirming === 'accepted' ? 'btn-accept' : 'btn-return'}`}
@@ -319,7 +302,7 @@ export function RecordDetail() {
                           decide.mutate({
                             decision: confirming,
                             override: confirming === 'accepted' && disagreeing.length > 0,
-                            reviewer_name: reviewer || null,
+                            reviewer_name: REVIEWER.name,
                             reason: confirming === 'returned' ? reason : null,
                           })
                         }
