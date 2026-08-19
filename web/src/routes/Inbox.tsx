@@ -5,7 +5,7 @@ import { api, freshUrl, imageUrl } from '../api/client'
 import type { Job, RecordRow, RecordsPage, FieldResult, RecordDetail } from '../api/client'
 import { Pill } from '../components/Pill'
 import { DOT_COLOR, kindOf } from '../lib/verdict'
-import { FIELD_LABEL, QUALITY_LABEL, engineLine } from '../lib/copy'
+import { FIELD_LABEL, QUALITY_LABEL, engineLine, fieldValues } from '../lib/copy'
 import { matchesQuery } from '../lib/search'
 import { BulkDecisionDialog } from '../components/BulkDecisionDialog'
 import { useToast } from '../lib/toast'
@@ -474,10 +474,10 @@ function QueueItem({
                     {FIELD_LABEL[f.field_key] ?? f.field_key}
                   </div>
                   <div className="fields-value" style={{ fontSize: 13 }}>
-                    {f.app_value || '—'}
+                    {fieldValues(f).app}
                   </div>
                   <div className="fields-value" style={{ fontSize: 13 }}>
-                    {f.label_value || 'Not on label'}
+                    {fieldValues(f).label}
                   </div>
                   <div>
                     <Pill verdict={f.verdict} small />

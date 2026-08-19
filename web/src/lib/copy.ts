@@ -47,3 +47,20 @@ export function engineLine(record: {
 export function received(record: RecordRow) {
   return record.received.slice(0, 10)
 }
+
+/**
+ * What a field's recorded values should read as.
+ *
+ * The CSV mirror carries verdict and note but not the observed values (PRD
+ * §4.2), so a record restored from an export has a verdict and no evidence.
+ * Rendering that as "Not on label" states something the store does not know —
+ * and next to a Match verdict it reads as a contradiction.
+ */
+export function fieldValues(field: { app_value: string | null; label_value: string | null }) {
+  const recorded = field.app_value != null || field.label_value != null
+  return {
+    app: field.app_value || (recorded ? '—' : 'Not recorded'),
+    label: field.label_value || (recorded ? 'Not on label' : 'Not recorded'),
+    recorded,
+  }
+}

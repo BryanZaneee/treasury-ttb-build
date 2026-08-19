@@ -654,3 +654,21 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 .dropzone { width: 100%; font: inherit; color: inherit; min-height: 0; cursor: pointer; }
 .dropzone:hover { background: #f3f6f9; }
 .dropzone.dragging { border-color: var(--link); border-style: solid; background: #f0f6fb; }
+
+/* An unpaired row still occupies a thumbnail's worth of space, so the table
+   does not reflow as rows are paired. */
+.thumb-empty {
+  font-size: 10px;
+  color: var(--ink-6);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.unused-strip { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.unused-strip figure { margin: 0; max-width: 88px; }
+.unused-strip figcaption {
+  font-size: 10px;
+  color: var(--ink-6);
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.fields-unrecorded { color: var(--ink-6); font-style: italic; }

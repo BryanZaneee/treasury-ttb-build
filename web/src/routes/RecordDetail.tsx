@@ -5,7 +5,7 @@ import { ApiError, api, imageUrl } from '../api/client'
 import type { RecordDetail as Detail } from '../api/client'
 import { Pill } from '../components/Pill'
 import { kindOf } from '../lib/verdict'
-import { FIELD_LABEL, RESULT_COPY } from '../lib/copy'
+import { FIELD_LABEL, RESULT_COPY, fieldValues } from '../lib/copy'
 import { REVIEWER } from '../lib/session'
 import { Worklist } from '../components/Worklist'
 import { useToast } from '../lib/toast'
@@ -225,19 +225,26 @@ export function RecordDetail() {
                 <div>Label shows</div>
                 <div>Result</div>
               </div>
-              {data.field_results.map((f) => (
+              {data.field_results.map((f) => {
+                const values = fieldValues(f)
+                return (
                 <div className="fields-row" key={f.field_key}>
                   <div>
                     <div className="fields-name">{FIELD_LABEL[f.field_key] ?? f.field_key}</div>
                     {f.note && <div className="fields-note">{f.note}</div>}
                   </div>
-                  <div className="fields-value">{f.app_value || '—'}</div>
-                  <div className="fields-value">{f.label_value || 'Not on label'}</div>
+                  <div className={`fields-value${values.recorded ? '' : ' fields-unrecorded'}`}>
+                    {values.app}
+                  </div>
+                  <div className={`fields-value${values.recorded ? '' : ' fields-unrecorded'}`}>
+                    {values.label}
+                  </div>
                   <div>
                     <Pill verdict={f.verdict} small />
                   </div>
                 </div>
-              ))}
+                )
+              })}
 
               <div className="result-foot">
                 {closed ? (

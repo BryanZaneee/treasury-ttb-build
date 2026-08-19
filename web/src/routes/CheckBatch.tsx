@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { api, apiUrl } from '../api/client'
+import { api, apiUrl, imageUrl } from '../api/client'
 import type { Job, StagedBatch } from '../api/client'
 
 const BUCKET: Record<string, { label: string; pill: string }> = {
@@ -48,6 +48,19 @@ export function CheckBatch() {
     onSuccess: (data) => {
       setBatch(data)
       setJob(null)
+      setError(null)
+    },
+    onError: (e) => setError(String(e)),
+  })
+
+  const assign = useMutation({
+    mutationFn: ({ row, image }: { row: number; image: string | null }) =>
+      api<StagedBatch>(`/batches/${batch!.batch_id}/rows/${row}/image`, {
+        method: 'POST',
+        body: { image },
+      }),
+    onSuccess: (updated) => {
+      setBatch(updated)
       setError(null)
     },
     onError: (e) => setError(String(e)),
@@ -171,16 +184,28 @@ export function CheckBatch() {
                   </span>
                 </div>
                 {batch.summary.unused_images.length > 0 && (
-                  <p className="card-note">
-                    {batch.summary.unused_images.length} uploaded image
-                    {batch.summary.unused_images.length === 1 ? '' : 's'} no row claims:{' '}
-                    <span className="mono">{batch.summary.unused_images.join(', ')}</span>
-                  </p>
+                  <>
+                    <p className="card-note">
+                      {batch.summary.unused_images.length} uploaded image
+                      {batch.summary.unused_images.length === 1 ? '' : 's'} no row claims. Pair
+                      one with a row using the Image column below.
+                    </p>
+                    <div className="unused-strip">
+                      {batch.summary.unused_images.map((name) => (
+                        <figure key={name}>
+                          <span className="thumb">
+                            <img src={imageUrl(name)} alt="" />
+                          </span>
+                          <figcaption className="mono">{name}</figcaption>
+                        </figure>
+                      ))}
+                    </div>
+                  </>
                 )}
                 {batch.blocks_commit && (
                   <div className="banner-error" style={{ marginTop: 12 }}>
-                    Commit is blocked while any row is ambiguous. Rename or remove the duplicate
-                    images listed below, then stage again.
+                    Commit is blocked while any row is ambiguous. Pick the right image for each
+                    one in the Image column below — no need to re-upload the batch.
                   </div>
                 )}
                 <div className="scroll-x" style={{ marginTop: 12 }}>
@@ -188,17 +213,27 @@ export function CheckBatch() {
                     <thead>
                       <tr>
                         <th>#</th>
+                        <th>Label</th>
                         <th>Brand</th>
                         <th>Applicant</th>
                         <th>Filename</th>
                         <th>Pairing</th>
-                        <th>Notes</th>
+                        <th>Image</th>
                       </tr>
                     </thead>
                     <tbody>
                       {batch.rows.map((r) => (
                         <tr key={r.row}>
                           <td className="num">{r.row}</td>
+                          <td>
+                            {r.image ? (
+                              <span className="thumb">
+                                <img src={imageUrl(r.image)} alt="" />
+                              </span>
+                            ) : (
+                              <span className="thumb thumb-empty">none</span>
+                            )}
+                          </td>
                           <td>{r.brand}</td>
                           <td>{r.applicant}</td>
                           <td className="mono" style={{ fontSize: 12 }}>
@@ -208,12 +243,36 @@ export function CheckBatch() {
                             <span className={`pill pill-sm ${BUCKET[r.bucket].pill}`}>
                               {BUCKET[r.bucket].label}
                             </span>
-                          </td>
-                          <td style={{ fontSize: 12, color: 'var(--ink-5)' }}>
-                            {r.errors.join('; ')}
-                            {r.candidate_filenames.length > 0 && (
-                              <div className="mono">{r.candidate_filenames.join(', ')}</div>
+                            {r.errors.length > 0 && (
+                              <div style={{ fontSize: 11, color: 'var(--ink-5)', marginTop: 4 }}>
+                                {r.errors.join('; ')}
+                              </div>
                             )}
+                          </td>
+                          <td>
+                            <select
+                              value={r.image ?? ''}
+                              disabled={assign.isPending}
+                              aria-label={`Image for row ${r.row}`}
+                              onChange={(e) =>
+                                assign.mutate({ row: r.row, image: e.target.value || null })
+                              }
+                            >
+                              <option value="">— no image —</option>
+                              {/* Its own pairing, the candidates that made it
+                                  ambiguous, and anything no other row claimed. */}
+                              {[
+                                ...new Set([
+                                  ...(r.image ? [r.image] : []),
+                                  ...r.candidate_filenames,
+                                  ...batch.summary.unused_images,
+                                ]),
+                              ].map((name) => (
+                                <option key={name} value={name}>
+                                  {name}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                         </tr>
                       ))}
