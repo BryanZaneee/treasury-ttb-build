@@ -3,12 +3,15 @@
 from typing import Literal
 
 from fastapi import APIRouter, File, Header, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 
+import batching
 import db
 import seed
 from config import settings
 from csv_io import CsvImportError, from_csv
+from routers.batches import StagedBatch, stage_sample_batch
 
 router = APIRouter(tags=["store"])
 
@@ -21,6 +24,7 @@ class FixturesResponse(BaseModel):
     mode: Literal["stage", "reset"]
     staged_count: int = 0
     reset_count: int = 0
+    batch: StagedBatch | None = None
 
 
 class StoreImportResponse(BaseModel):
@@ -34,6 +38,30 @@ def _require_admin(authorization: str | None) -> None:
         raise HTTPException(status_code=401, detail="admin token required")
 
 
+@router.get("/export/records.csv")
+def export_records_csv() -> Response:
+    """The CSV mirror (PRD §4.2). Caddy serves this straight off the data volume
+    in production; locally there is no Caddy, so the API stands in."""
+    db.write_mirror()
+    return Response(
+        content=(db.data_dir() / "records.csv").read_bytes(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="records.csv"'},
+    )
+
+
+@router.get("/export/template.csv")
+def export_template_csv() -> Response:
+    """A blank batch-intake CSV (S11). Header is the applicant-facing one from
+    PRD §4.3, which is what batching.parse_csv accepts."""
+    header = ",".join(batching.INTAKE_COLUMNS)
+    return Response(
+        content=f"{header}\n".encode(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="template.csv"'},
+    )
+
+
 @router.post("/fixtures", response_model=FixturesResponse)
 def fixtures(
     body: FixturesRequest, authorization: str | None = Header(None)
@@ -45,10 +73,10 @@ def fixtures(
         _require_admin(authorization)
         count = seed.reset_store()
         return FixturesResponse(mode="reset", reset_count=count)
-    # "stage" previews the bundled sample batch without writing anything;
-    # real staging logic (pairing, per-row buckets) is batching.py's job (M5).
-    applications = seed.read_applications()
-    return FixturesResponse(mode="stage", staged_count=len(applications))
+    # "stage" previews the bundled sample batch (S4). Nothing is filed until a
+    # job commits the returned batch_id.
+    batch = stage_sample_batch()
+    return FixturesResponse(mode="stage", staged_count=len(batch.rows), batch=batch)
 
 
 @router.post("/store/import", response_model=StoreImportResponse)
