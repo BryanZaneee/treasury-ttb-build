@@ -3,18 +3,26 @@
 #
 # handle_path strips the /ttb-build prefix, so the SPA sees paths at its own
 # root and the API sees /api/* exactly as it does locally.
+#
+# The two inner handle blocks are mutually exclusive and evaluated in order,
+# which matters: a bare `try_files` beside the proxy would rewrite /api/health
+# to /index.html before the proxy matcher ever ran, and every API call would be
+# answered with the SPA shell.
 
 redir /ttb-build /ttb-build/ permanent
 
 handle_path /ttb-build/* {
-	@ttb_api path /api/*
-	reverse_proxy @ttb_api 127.0.0.1:8020 {
-		# Verification streams field results as they resolve; buffering would
-		# hold the whole response and defeat the point.
-		flush_interval -1
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8020 {
+			# Verification streams field results as they resolve; buffering
+			# would hold the whole response and defeat the point.
+			flush_interval -1
+		}
 	}
 
-	root * /var/www/ttb-build/web
-	try_files {path} /index.html
-	file_server
+	handle {
+		root * /var/www/ttb-build/web/dist
+		try_files {path} /index.html
+		file_server
+	}
 }
