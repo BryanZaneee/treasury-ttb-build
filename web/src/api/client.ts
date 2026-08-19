@@ -20,6 +20,23 @@ const BASE = `${ROOT}/api`
 /** Absolute URL for an API path, base-path aware. */
 export const apiUrl = (path: string) => `${BASE}${path}`
 
+/**
+ * The deployed site sits behind a Cloudflare zone with caching turned on for
+ * everything, which cached GET /api/records for 27 minutes on first cutover:
+ * the inbox kept reporting stale counts and verification looked like it did
+ * nothing. Origin `Cache-Control: no-store` is not honoured there.
+ *
+ * A unique query parameter makes every read a distinct URL, so it can never be
+ * answered from a shared cache. The proper fix is a cache-bypass rule for
+ * /ttb-build/api/* in the Cloudflare dashboard; until that exists this keeps
+ * the store honest from the client side.
+ */
+const uncacheable = (url: string) =>
+  `${url}${url.includes('?') ? '&' : '?'}_=${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
+
+/** Absolute URL for a read that must never be served from a cache. */
+export const freshUrl = (path: string) => uncacheable(apiUrl(path))
+
 /** Absolute URL for a stored specimen image. */
 export const imageUrl = (name: string) => `${BASE}/images/${encodeURIComponent(name)}`
 const ACCESS_TOKEN = import.meta.env.VITE_ACCESS_TOKEN ?? ''
@@ -50,9 +67,12 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   if (token) headers.Authorization = `Bearer ${token}`
   if (body !== undefined) headers['Content-Type'] = 'application/json'
 
-  const response = await fetch(`${BASE}${path}`, {
+  // Reads must never be answered from a cache; writes are never cached.
+  const url = method === 'GET' ? uncacheable(`${BASE}${path}`) : `${BASE}${path}`
+  const response = await fetch(url, {
     method,
     headers,
+    cache: 'no-store',
     body: form ?? (body === undefined ? undefined : JSON.stringify(body)),
   })
 

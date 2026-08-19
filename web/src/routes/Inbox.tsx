@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, apiUrl, imageUrl } from '../api/client'
+import { api, freshUrl, imageUrl } from '../api/client'
 import type { Job, RecordRow, RecordsPage, FieldResult, RecordDetail } from '../api/client'
 import { Pill } from '../components/Pill'
 import { DOT_COLOR, kindOf } from '../lib/verdict'
@@ -170,7 +170,7 @@ export function Inbox() {
           aria-label="Search brand, applicant, or COLA ID"
           style={{ flex: 1, minWidth: 150 }}
         />
-        <a className="btn btn-quiet" href={apiUrl('/export/records.csv')} download>
+        <a className="btn btn-quiet" href={freshUrl('/export/records.csv')} download>
           Export CSV
         </a>
       </div>

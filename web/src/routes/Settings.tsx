@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, apiUrl } from '../api/client'
+import { api, freshUrl } from '../api/client'
 import type { RecordsPage } from '../api/client'
 
 /**
@@ -64,7 +64,7 @@ export function Settings() {
             regenerated after every mutation.
           </p>
           <div className="stack" style={{ gap: 10, marginTop: 14 }}>
-            <a className="btn btn-wide" href={apiUrl('/export/records.csv')} download>
+            <a className="btn btn-wide" href={freshUrl('/export/records.csv')} download>
               Export records as CSV
             </a>
             <button className="btn btn-quiet btn-wide" onClick={() => setShowStore((v) => !v)}>
