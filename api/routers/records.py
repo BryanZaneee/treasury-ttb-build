@@ -1,15 +1,20 @@
 """Records endpoints (PRD §5.1).
 
-M0 stub: no store exists until M1, so every handler returns a correctly
-shaped, empty-or-placeholder response rather than a 501 — this lets
-openapi-typescript generate real TS types against the M0 API surface.
+GET/create/read are DB-backed (M1). Verify and decision-issuing PATCH stay
+contract-only stubs until the rules engine (M2) and reader layer (M3) exist
+to actually produce a verdict - wiring them now would mean inventing the
+verdict logic here instead of in adjudicate.py, which is a separate milestone.
 """
 
-from typing import Literal
+import sqlite3
+import uuid
+from datetime import UTC, datetime
+from typing import Any, Literal
 
-from fastapi import APIRouter, Form, UploadFile
+from fastapi import APIRouter, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
+import db
 from models import Application, FieldResult, Record
 
 router = APIRouter(tags=["records"])
@@ -50,23 +55,10 @@ class RecordPatchRequest(BaseModel):
     reason: str | None = None
 
 
-def _placeholder_record(record_id: str, body: RecordCreateRequest | None = None) -> Record:
-    app = body.application if body else None
-    return Record(
-        id=record_id,
-        received="",
-        applicant=body.applicant if body else "",
-        beverage=body.beverage if body else "",
-        filename="",
-        specimen=body.specimen_key or "" if body else "",
-        app_brand=app.brand if app else "",
-        app_class_type=app.class_type if app else "",
-        app_alcohol_content=app.abv if app else "",
-        app_net_contents=app.net if app else "",
-        app_producer=app.producer if app else None,
-        app_origin=app.origin if app else None,
-        app_warning_declared=app.warning if app else False,
-    )
+def _row_to_record(row: sqlite3.Row) -> Record:
+    # sqlite3.Row iterates its *values*, not column names - .keys() is required here,
+    # not the redundant call SIM118 assumes for a plain dict.
+    return Record(**{col: row[col] for col in row.keys() if col in Record.model_fields})  # noqa: SIM118
 
 
 @router.get("/records", response_model=RecordsListResponse)
@@ -75,7 +67,13 @@ def list_records(
     q: str | None = None,
     cursor: str | None = None,
 ) -> RecordsListResponse:
-    return RecordsListResponse()
+    rows = db.list_records(result_filter=filter, query=q)
+    counts = db.filter_counts()
+    return RecordsListResponse(
+        records=[_row_to_record(r) for r in rows],
+        counts=RecordCounts(**counts),
+        cursor=None,
+    )
 
 
 @router.post("/records", response_model=Record, status_code=201)
@@ -86,27 +84,63 @@ def create_record(
     specimen_key: str | None = Form(None),
     image: UploadFile | None = None,
 ) -> Record:
-    # M0: multipart contract only — no image storage or DB write until M1.
     app = Application.model_validate_json(application)
-    body = RecordCreateRequest(
-        applicant=applicant,
-        beverage=beverage,
-        application=app,
-        specimen_key=specimen_key,
-    )
-    return _placeholder_record("stub", body)
+    record_id = f"COLA-{uuid.uuid4().hex[:8].upper()}"
+    filename = (image.filename if image else None) or specimen_key or ""
+    record: dict[str, Any] = {
+        "id": record_id,
+        "received": datetime.now(UTC).isoformat(),
+        "applicant": applicant,
+        "beverage": beverage,
+        "filename": filename,
+        "specimen": specimen_key or filename,
+        "quality": None,
+        "app_brand": app.brand,
+        "app_class_type": app.class_type,
+        "app_alcohol_content": app.abv,
+        "app_net_contents": app.net,
+        "app_producer": app.producer,
+        "app_origin": app.origin,
+        "app_warning_declared": app.warning,
+        "verified": False,
+        "result": None,
+    }
+    if image is not None:
+        image_bytes = image.file.read()
+        (db.data_dir() / "images" / filename).write_bytes(image_bytes)
+    db.insert_record(record)
+    row = db.get_record(record_id)
+    assert row is not None  # just inserted, must exist
+    return _row_to_record(row)
 
 
 @router.get("/records/{record_id}", response_model=RecordDetail)
 def get_record(record_id: str) -> RecordDetail:
-    return RecordDetail(**_placeholder_record(record_id).model_dump())
+    row = db.get_record(record_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="record not found")
+    field_rows = db.get_field_results(record_id)
+    return RecordDetail(
+        **_row_to_record(row).model_dump(),
+        field_results=[FieldResult(**dict(r)) for r in field_rows],
+    )
 
 
 @router.patch("/records/{record_id}", response_model=Record)
 def patch_record(record_id: str, body: RecordPatchRequest) -> Record:
-    return _placeholder_record(record_id)
+    # M1: contract only. Field edits and the accept/override enforcement rule
+    # (PRD §5.1) land once M2's rules engine can re-derive a verdict.
+    row = db.get_record(record_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="record not found")
+    return _row_to_record(row)
 
 
 @router.post("/records/{record_id}/verify", response_model=Record)
 def verify_record(record_id: str) -> Record:
-    return _placeholder_record(record_id)
+    # M1: contract only - real verification needs adjudicate.py (M2) and a
+    # reader (M3).
+    row = db.get_record(record_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="record not found")
+    return _row_to_record(row)

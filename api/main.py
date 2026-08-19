@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
+import db
 from config import settings
 from routers import batches, jobs, records, store
 
@@ -44,8 +45,15 @@ class TokenMiddleware(BaseHTTPMiddleware):
         if needs_access or needs_admin:
             auth = request.headers.get("authorization", "")
             token = auth.removeprefix("Bearer ").strip() if auth else ""
-            required = settings.admin_token if needs_admin else settings.access_token
-            if not required or token != required:
+            if needs_admin:
+                ok = bool(settings.admin_token) and token == settings.admin_token
+            else:
+                # The admin token satisfies any access-only route too - an
+                # admin can do everything a reviewer can. Reject an empty
+                # token outright so an unset admin_token can't match one.
+                valid = {t for t in (settings.access_token, settings.admin_token) if t}
+                ok = bool(token) and token in valid
+            if not ok:
                 return JSONResponse({"detail": "unauthorized"}, status_code=401)
 
         return await call_next(request)
@@ -62,6 +70,8 @@ class HealthResponse(BaseModel):
 
 
 def create_app() -> FastAPI:
+    db.init_db()
+
     app = FastAPI(title="TTB Label Verification API")
 
     app.add_middleware(TokenMiddleware)
@@ -80,12 +90,22 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     def health() -> HealthResponse:
-        # M0: no store, no image volume, no reader exist yet (M1/M3). These
-        # fields report the wiring status honestly rather than faking a check
-        # against a system that does not exist.
+        # Reader reachability and prompt version are M3 concerns - no reader
+        # exists yet, so those fields stay honest placeholders until then.
+        # Deliberately blind: a health endpoint must report "unhealthy" for
+        # any storage failure, not just the ones we anticipated.
+        try:
+            db.init_db()
+            store_readable: bool | None = True
+        except Exception:  # noqa: BLE001
+            store_readable = False
+        try:
+            images_writable = db.data_dir().joinpath("images").is_dir()
+        except Exception:  # noqa: BLE001
+            images_writable = False
         return HealthResponse(
-            store_readable=None,
-            images_writable=None,
+            store_readable=store_readable,
+            images_writable=images_writable,
             reader_reachable=None,
             prompt_version=None,
             provider=settings.reader_provider,

@@ -1,0 +1,928 @@
+{
+  "old-tom-pass.png": {
+    "applicant": "Old Tom Distillery LLC",
+    "beverage": "Distilled Spirits",
+    "app": {
+      "brand": "Old Tom Distillery",
+      "classType": "Kentucky Straight Bourbon Whiskey",
+      "abv": "45%",
+      "net": "750 mL",
+      "producer": "Old Tom Distillery, Bardstown, KY",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Old Tom Distillery",
+      "classType": "Kentucky Straight Bourbon Whiskey",
+      "abv": "45% Alc./Vol. (90 Proof)",
+      "net": "750 mL",
+      "producer": "Old Tom Distillery, Bardstown, KY",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "normal",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "match"
+    },
+    "verdict": "match"
+  },
+  "stones-throw-caps.jpg": {
+    "applicant": "Stone's Throw Spirits Co.",
+    "beverage": "Distilled Spirits",
+    "app": {
+      "brand": "Stone's Throw",
+      "classType": "Kentucky Straight Bourbon Whiskey",
+      "abv": "45%",
+      "net": "750 mL",
+      "producer": "Stone's Throw Spirits, Loretto, KY",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "STONE'S THROW",
+      "classType": "Kentucky Straight Bourbon Whiskey",
+      "abv": "45% Alc./Vol. (90 Proof)",
+      "net": "750 mL",
+      "producer": "Stone's Throw Spirits, Loretto, KY",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "normal",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "review",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "match"
+    },
+    "verdict": "review"
+  },
+  "harbor-mist-nowarning.png": {
+    "applicant": "Harbor Mist Brewing",
+    "beverage": "Malt Beverage",
+    "app": {
+      "brand": "Harbor Mist",
+      "classType": "India Pale Ale",
+      "abv": "6.8%",
+      "net": "12 FL OZ",
+      "producer": "Harbor Mist Brewing, Astoria, OR",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Harbor Mist",
+      "classType": "India Pale Ale",
+      "abv": "6.8% Alc./Vol.",
+      "net": "12 FL OZ",
+      "producer": "Harbor Mist Brewing, Astoria, OR",
+      "origin": null,
+      "warningPresent": false,
+      "warningBody": null,
+      "warningHeaderCase": null,
+      "warningHeaderBold": null
+    },
+    "quality": "normal",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "fail"
+    },
+    "verdict": "fail"
+  },
+  "cedar-ridge-titlecase.jpg": {
+    "applicant": "Cedar Ridge Vineyards",
+    "beverage": "Wine",
+    "app": {
+      "brand": "Cedar Ridge",
+      "classType": "Napa Valley Cabernet Sauvignon",
+      "abv": "14.2%",
+      "net": "750 mL",
+      "producer": "Cedar Ridge Vineyards, Rutherford, CA",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Cedar Ridge",
+      "classType": "Napa Valley Cabernet Sauvignon",
+      "abv": "14.2% Alc./Vol.",
+      "net": "750 mL",
+      "producer": "Cedar Ridge Vineyards, Rutherford, CA",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "title",
+      "warningHeaderBold": true
+    },
+    "quality": "normal",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "review"
+    },
+    "verdict": "review"
+  },
+  "lark-hollow-reworded.png": {
+    "applicant": "Lark Hollow Craft Spirits",
+    "beverage": "Distilled Spirits",
+    "app": {
+      "brand": "Lark Hollow",
+      "classType": "Small Batch Gin",
+      "abv": "44%",
+      "net": "750 mL",
+      "producer": "Lark Hollow Craft Spirits, Asheville, NC",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Lark Hollow",
+      "classType": "Small Batch Gin",
+      "abv": "44% Alc./Vol. (88 Proof)",
+      "net": "750 mL",
+      "producer": "Lark Hollow Craft Spirits, Asheville, NC",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: Drinking alcohol may be harmful to your health. Please enjoy responsibly and never drink and drive.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "normal",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "fail"
+    },
+    "verdict": "fail"
+  },
+  "vinos-del-sol-abv.jpg": {
+    "applicant": "Sol Selections",
+    "beverage": "Wine",
+    "app": {
+      "brand": "Viños del Sol",
+      "classType": "Rioja Tempranillo",
+      "abv": "13.5%",
+      "net": "750 mL",
+      "producer": "Sol Selections, Miami, FL",
+      "origin": "Product of Spain",
+      "warning": true
+    },
+    "label": {
+      "brand": "Viños del Sol",
+      "classType": "Rioja Tempranillo",
+      "abv": "12.5% Alc./Vol.",
+      "net": "750 mL",
+      "producer": "Sol Selections, Miami, FL",
+      "origin": "Product of Spain",
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "normal",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "fail",
+      "net": "match",
+      "producer": "match",
+      "origin": "match",
+      "warning": "match"
+    },
+    "verdict": "fail"
+  },
+  "iron-gate-blur.jpg": {
+    "applicant": "Iron Gate Rye Works",
+    "beverage": "Distilled Spirits",
+    "app": {
+      "brand": "Iron Gate",
+      "classType": "Straight Rye Whiskey",
+      "abv": "50%",
+      "net": "750 mL",
+      "producer": "Iron Gate Rye Works, Frederick, MD",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Iron Gate",
+      "classType": "Straight Rye Whiskey",
+      "abv": "50% Alc./Vol. (100 Proof)",
+      "net": "750 mL",
+      "producer": "Iron Gate Rye Works, Frederick, MD",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "blurry",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "match"
+    },
+    "verdict": "match"
+  },
+  "saltmarsh-glare.jpg": {
+    "applicant": "Saltmarsh Brewing Union",
+    "beverage": "Malt Beverage",
+    "app": {
+      "brand": "Saltmarsh",
+      "classType": "Gose Style Ale",
+      "abv": "4.5%",
+      "net": "16 FL OZ",
+      "producer": "Saltmarsh Brewing Union, Portland, ME",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Saltmarsh",
+      "classType": "Gose Style Ale",
+      "abv": "4.5% Alc./Vol.",
+      "net": "ILLEGIBLE",
+      "producer": "Saltmarsh Brewing Union, Portland, ME",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "glare",
+    "illegible": [
+      "net"
+    ],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "fail",
+      "producer": "match",
+      "warning": "match"
+    },
+    "verdict": "fail"
+  },
+  "north-fen-pixel.png": {
+    "applicant": "North Fen Vodka Company",
+    "beverage": "Distilled Spirits",
+    "app": {
+      "brand": "North Fen",
+      "classType": "Vodka",
+      "abv": "40%",
+      "net": "1 L",
+      "producer": "North Fen Vodka Co., Duluth, MN",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "ILLEGIBLE",
+      "classType": "Vodka",
+      "abv": "40% Alc./Vol. (80 Proof)",
+      "net": "1 L",
+      "producer": "North Fen Vodka Co., Duluth, MN",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "pixelated",
+    "illegible": [
+      "brand"
+    ],
+    "field_verdicts": {
+      "brand": "fail",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "match"
+    },
+    "verdict": "fail"
+  },
+  "brasserie-verte-origin.jpg": {
+    "applicant": "Continental Beverage Imports",
+    "beverage": "Malt Beverage",
+    "app": {
+      "brand": "Brasserie Verte",
+      "classType": "Belgian Style Tripel",
+      "abv": "9.2%",
+      "net": "330 mL",
+      "producer": "Continental Beverage Imports, Newark, NJ",
+      "origin": "Product of Belgium",
+      "warning": true
+    },
+    "label": {
+      "brand": "Brasserie Verte",
+      "classType": "Belgian Style Tripel",
+      "abv": "9.2% Alc./Vol.",
+      "net": "330 mL",
+      "producer": "Continental Beverage Imports, Newark, NJ",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "angled",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "origin": "fail",
+      "warning": "match"
+    },
+    "verdict": "fail"
+  },
+  "quarry-house-units.png": {
+    "applicant": "Quarry House Cellars",
+    "beverage": "Wine",
+    "app": {
+      "brand": "Quarry House",
+      "classType": "Willamette Valley Pinot Noir",
+      "abv": "13.1%",
+      "net": "750 mL",
+      "producer": "Quarry House Cellars, Dundee, OR",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Quarry House",
+      "classType": "Willamette Valley Pinot Noir",
+      "abv": "13.1% Alc./Vol.",
+      "net": "75 cl",
+      "producer": "Quarry House Cellars, Dundee, OR",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "normal",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "review",
+      "producer": "match",
+      "warning": "match"
+    },
+    "verdict": "review"
+  },
+  "golden-hour-nonbold.jpg": {
+    "applicant": "Golden Hour Liqueurs",
+    "beverage": "Distilled Spirits",
+    "app": {
+      "brand": "Golden Hour",
+      "classType": "Orange Liqueur",
+      "abv": "24%",
+      "net": "500 mL",
+      "producer": "Golden Hour Liqueurs, Sonoma, CA",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Golden Hour",
+      "classType": "Orange Liqueur",
+      "abv": "24% Alc./Vol. (48 Proof)",
+      "net": "500 mL",
+      "producer": "Golden Hour Liqueurs, Sonoma, CA",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": false
+    },
+    "quality": "normal",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "review"
+    },
+    "verdict": "review"
+  },
+  "ember-line-heavyblur.jpg": {
+    "applicant": "Ember Line Works",
+    "beverage": "Distilled Spirits",
+    "app": {
+      "brand": "Ember Line",
+      "classType": "Single Malt Whiskey",
+      "abv": "58.4%",
+      "net": "700 mL",
+      "producer": "Ember Line Works, Bend, OR",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Ember Line",
+      "classType": "Single Malt Whiskey",
+      "abv": "ILLEGIBLE",
+      "net": "700 mL",
+      "producer": "Ember Line Works, Bend, OR",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "ILLEGIBLE",
+      "warningHeaderCase": null,
+      "warningHeaderBold": null
+    },
+    "quality": "heavyBlur",
+    "illegible": [
+      "abv",
+      "warning"
+    ],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "fail",
+      "net": "match",
+      "producer": "match",
+      "warning": "fail"
+    },
+    "verdict": "fail"
+  },
+  "stillwater-glare.jpg": {
+    "applicant": "Stillwater Landing",
+    "beverage": "Wine",
+    "app": {
+      "brand": "Stillwater Landing",
+      "classType": "Finger Lakes Dry Riesling",
+      "abv": "11.5%",
+      "net": "750 mL",
+      "producer": "Stillwater Landing, Geneva, NY",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Stillwater Landing",
+      "classType": "Finger Lakes Dry Riesling",
+      "abv": "ILLEGIBLE",
+      "net": "750 mL",
+      "producer": "Stillwater Landing, Geneva, NY",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "glare",
+    "illegible": [
+      "abv"
+    ],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "fail",
+      "net": "match",
+      "producer": "match",
+      "warning": "match"
+    },
+    "verdict": "fail"
+  },
+  "red-kite-pixel.png": {
+    "applicant": "Red Kite Brewing",
+    "beverage": "Malt Beverage",
+    "app": {
+      "brand": "Red Kite",
+      "classType": "American Pale Ale",
+      "abv": "5.2%",
+      "net": "16 FL OZ",
+      "producer": "Red Kite Brewing, Fort Collins, CO",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Red Kite",
+      "classType": "ILLEGIBLE",
+      "abv": "5.2% Alc./Vol.",
+      "net": "16 FL OZ",
+      "producer": "Red Kite Brewing, Fort Collins, CO",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "pixelated",
+    "illegible": [
+      "classType"
+    ],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "fail",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "match"
+    },
+    "verdict": "fail"
+  },
+  "casa-luz-origin.jpg": {
+    "applicant": "Casa Luz Selections",
+    "beverage": "Distilled Spirits",
+    "app": {
+      "brand": "Casa Luz",
+      "classType": "100% de Agave Blanco Tequila",
+      "abv": "40%",
+      "net": "750 mL",
+      "producer": "Casa Luz Selections, San Antonio, TX",
+      "origin": "Product of Mexico",
+      "warning": true
+    },
+    "label": {
+      "brand": "Casa Luz",
+      "classType": "100% de Agave Blanco Tequila",
+      "abv": "40% Alc./Vol. (80 Proof)",
+      "net": "750 mL",
+      "producer": "Casa Luz Selections, San Antonio, TX",
+      "origin": "Product of Mexico",
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "normal",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "origin": "match",
+      "warning": "match"
+    },
+    "verdict": "match"
+  },
+  "fogbank-dark.jpg": {
+    "applicant": "Fogbank Brewing",
+    "beverage": "Malt Beverage",
+    "app": {
+      "brand": "Fogbank",
+      "classType": "Baltic Porter",
+      "abv": "8.1%",
+      "net": "500 mL",
+      "producer": "Fogbank Brewing, Duluth, MN",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Fogbank",
+      "classType": "Baltic Porter",
+      "abv": "8.1% Alc./Vol.",
+      "net": "500 mL",
+      "producer": "Fogbank Brewing, Duluth, MN",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "ILLEGIBLE",
+      "warningHeaderCase": null,
+      "warningHeaderBold": null
+    },
+    "quality": "dark",
+    "illegible": [
+      "warning"
+    ],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "fail"
+    },
+    "verdict": "fail"
+  },
+  "pilgrim-oak-damaged.jpg": {
+    "applicant": "Pilgrim Oak Cider Works",
+    "beverage": "Distilled Spirits",
+    "app": {
+      "brand": "Pilgrim Oak",
+      "classType": "Apple Brandy",
+      "abv": "42%",
+      "net": "375 mL",
+      "producer": "Pilgrim Oak Cider Works, Hood River, OR",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Pilgrim Oak",
+      "classType": "Apple Brandy",
+      "abv": "42% Alc./Vol. (84 Proof)",
+      "net": "375 mL",
+      "producer": "ILLEGIBLE",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "damaged",
+    "illegible": [
+      "producer"
+    ],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "fail",
+      "warning": "match"
+    },
+    "verdict": "fail"
+  },
+  "tallgrass-cropped.png": {
+    "applicant": "Tallgrass Union",
+    "beverage": "Malt Beverage",
+    "app": {
+      "brand": "Tallgrass Union",
+      "classType": "Saison",
+      "abv": "6.4%",
+      "net": "750 mL",
+      "producer": "Tallgrass Union, Lawrence, KS",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Tallgrass Union",
+      "classType": "Saison",
+      "abv": "6.4% Alc./Vol.",
+      "net": "750 mL",
+      "producer": "Tallgrass Union, Lawrence, KS",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "ILLEGIBLE",
+      "warningHeaderCase": null,
+      "warningHeaderBold": null
+    },
+    "quality": "cropped",
+    "illegible": [
+      "warning"
+    ],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "fail"
+    },
+    "verdict": "fail"
+  },
+  "maison-clair-angled.jpg": {
+    "applicant": "Clair Vineyard Selections",
+    "beverage": "Wine",
+    "app": {
+      "brand": "Maison Clair",
+      "classType": "Côtes de Provence Rosé",
+      "abv": "12.8%",
+      "net": "750 mL",
+      "producer": "Clair Vineyard Selections, Chicago, IL",
+      "origin": "Product of France",
+      "warning": true
+    },
+    "label": {
+      "brand": "Maison Clair",
+      "classType": "Côtes de Provence Rosé",
+      "abv": "12.8% Alc./Vol.",
+      "net": "750 mL",
+      "producer": "Clair Vineyard Selections, Chicago, IL",
+      "origin": "Product of France",
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "angled",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "review",
+      "producer": "match",
+      "origin": "match",
+      "warning": "match"
+    },
+    "verdict": "review"
+  },
+  "blue-heron-blur.jpg": {
+    "applicant": "Blue Heron Distilling",
+    "beverage": "Distilled Spirits",
+    "app": {
+      "brand": "Blue Heron",
+      "classType": "Straight Rye Whiskey",
+      "abv": "47%",
+      "net": "750 mL",
+      "producer": "Blue Heron Distilling, Chestertown, MD",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Blue Heron",
+      "classType": "Straight Rye Whiskey",
+      "abv": "47% Alc./Vol. (94 Proof)",
+      "net": "750 mL",
+      "producer": "Blue Heron Distilling, Chestertown, MD",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "blurry",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "match"
+    },
+    "verdict": "match"
+  },
+  "copper-kettle-pass.png": {
+    "applicant": "Copper Kettle Imports",
+    "beverage": "Distilled Spirits",
+    "app": {
+      "brand": "Copper Kettle",
+      "classType": "Blended Scotch Whisky",
+      "abv": "43%",
+      "net": "1 L",
+      "producer": "Copper Kettle Imports, Boston, MA",
+      "origin": "Product of Scotland",
+      "warning": true
+    },
+    "label": {
+      "brand": "Copper Kettle",
+      "classType": "Blended Scotch Whisky",
+      "abv": "43% Alc./Vol. (86 Proof)",
+      "net": "1 L",
+      "producer": "Copper Kettle Imports, Boston, MA",
+      "origin": "Product of Scotland",
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "normal",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "origin": "match",
+      "warning": "match"
+    },
+    "verdict": "match"
+  },
+  "wildvine-glare.jpg": {
+    "applicant": "Wildvine Cellars",
+    "beverage": "Wine",
+    "app": {
+      "brand": "Wildvine",
+      "classType": "Sonoma Coast Orange Wine",
+      "abv": "13.4%",
+      "net": "750 mL",
+      "producer": "Wildvine Cellars, Sebastopol, CA",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "ILLEGIBLE",
+      "classType": "Sonoma Coast Orange Wine",
+      "abv": "13.4% Alc./Vol.",
+      "net": "750 mL",
+      "producer": "Wildvine Cellars, Sebastopol, CA",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "glare",
+    "illegible": [
+      "brand"
+    ],
+    "field_verdicts": {
+      "brand": "fail",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "match"
+    },
+    "verdict": "fail"
+  },
+  "south-shoal-pixel.png": {
+    "applicant": "South Shoal Beverage",
+    "beverage": "Malt Beverage",
+    "app": {
+      "brand": "South Shoal",
+      "classType": "Flavored Malt Beverage",
+      "abv": "5.0%",
+      "net": "12 FL OZ",
+      "producer": "South Shoal Beverage, New Bedford, MA",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "South Shoal",
+      "classType": "Flavored Malt Beverage",
+      "abv": "5.0% Alc./Vol.",
+      "net": "ILLEGIBLE",
+      "producer": "South Shoal Beverage, New Bedford, MA",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "pixelated",
+    "illegible": [
+      "net"
+    ],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "fail",
+      "producer": "match",
+      "warning": "match"
+    },
+    "verdict": "fail"
+  },
+  "abbey-row-pass.jpg": {
+    "applicant": "Abbey Row Brewing",
+    "beverage": "Malt Beverage",
+    "app": {
+      "brand": "Abbey Row",
+      "classType": "Belgian Style Dubbel",
+      "abv": "7.6%",
+      "net": "330 mL",
+      "producer": "Abbey Row Brewing, Kalamazoo, MI",
+      "origin": null,
+      "warning": true
+    },
+    "label": {
+      "brand": "Abbey Row",
+      "classType": "Belgian Style Dubbel",
+      "abv": "7.6% Alc./Vol.",
+      "net": "330 mL",
+      "producer": "Abbey Row Brewing, Kalamazoo, MI",
+      "origin": null,
+      "warningPresent": true,
+      "warningBody": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "warningHeaderCase": "upper",
+      "warningHeaderBold": true
+    },
+    "quality": "normal",
+    "illegible": [],
+    "field_verdicts": {
+      "brand": "match",
+      "classType": "match",
+      "abv": "match",
+      "net": "match",
+      "producer": "match",
+      "warning": "match"
+    },
+    "verdict": "match"
+  }
+}

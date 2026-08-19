@@ -4,11 +4,17 @@ Mirrors the variables in .env.example verbatim. Per-provider effort clamping and
 spend accounting (PRD §5.2, §8) are M3 concerns and are not implemented here.
 """
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# .env lives at the repo root (one level up from api/), not inside api/ itself -
+# it's shared with the frontend's Vite config (PRD §9 subpath threading).
+_ROOT_ENV = Path(__file__).resolve().parent.parent / ".env"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ROOT_ENV, extra="ignore")
 
     reader_provider: str = "fake"
     reader_model: str = "gpt-5.6-luna"
@@ -26,7 +32,7 @@ class Settings(BaseSettings):
     auto_approve_matches: bool = False
     qa_sample_rate: float = 0.05
 
-    data_dir: str = "./data"
+    data_dir: str = str(_ROOT_ENV.parent / "data")
     public_base_path: str = ""
 
 

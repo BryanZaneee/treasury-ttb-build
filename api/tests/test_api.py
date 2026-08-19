@@ -1,10 +1,6 @@
-"""Contract test: app boots, health responds, and each of the ten M0 stub
-routes exists and returns the right shape for an empty/stub case."""
-
-import os
-
-os.environ.setdefault("ACCESS_TOKEN", "test-access-token")
-os.environ.setdefault("ADMIN_TOKEN", "test-admin-token")
+"""Contract test: app boots, health responds, and each documented route
+exists with the right shape. GET/create/read records are DB-backed (M1);
+verify/patch/batches/jobs stay contract-only stubs until M2/M3/M5."""
 
 from fastapi.testclient import TestClient
 
@@ -58,24 +54,59 @@ def test_create_record_stub() -> None:
     assert body["result"] is None
 
 
-def test_get_record_stub() -> None:
-    resp = client.get("/api/records/abc123")
+def _create_record() -> str:
+    resp = client.post(
+        "/api/records",
+        headers=ACCESS,
+        data={
+            "applicant": "Acme Distilling",
+            "beverage": "spirits",
+            "application": (
+                '{"brand": "Old Tom", "class_type": "Bourbon", "abv": "45%", '
+                '"net": "750 mL"}'
+            ),
+        },
+        files={},
+    )
+    return str(resp.json()["id"])
+
+
+def test_get_record_not_found() -> None:
+    resp = client.get("/api/records/does-not-exist")
+    assert resp.status_code == 404
+
+
+def test_get_record() -> None:
+    record_id = _create_record()
+    resp = client.get(f"/api/records/{record_id}")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["id"] == "abc123"
+    assert body["id"] == record_id
     assert body["field_results"] == []
 
 
+def test_patch_record_not_found() -> None:
+    resp = client.patch("/api/records/does-not-exist", headers=ACCESS, json={})
+    assert resp.status_code == 404
+
+
 def test_patch_record_stub() -> None:
-    resp = client.patch("/api/records/abc123", headers=ACCESS, json={})
+    record_id = _create_record()
+    resp = client.patch(f"/api/records/{record_id}", headers=ACCESS, json={})
     assert resp.status_code == 200
-    assert resp.json()["id"] == "abc123"
+    assert resp.json()["id"] == record_id
+
+
+def test_verify_record_not_found() -> None:
+    resp = client.post("/api/records/does-not-exist/verify", headers=ACCESS)
+    assert resp.status_code == 404
 
 
 def test_verify_record_stub() -> None:
-    resp = client.post("/api/records/abc123/verify", headers=ACCESS)
+    record_id = _create_record()
+    resp = client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
     assert resp.status_code == 200
-    assert resp.json()["id"] == "abc123"
+    assert resp.json()["id"] == record_id
 
 
 def test_stage_batch_stub() -> None:
@@ -117,11 +148,34 @@ def test_store_import_requires_admin_token() -> None:
     assert resp.status_code == 401
 
 
-def test_store_import_stub() -> None:
+def test_store_import_rejects_missing_required_column() -> None:
     resp = client.post(
         "/api/store/import",
         headers=ADMIN,
         files={"csv_file": ("records.csv", b"id\n", "text/csv")},
     )
+    assert resp.status_code == 422
+
+
+def test_store_import() -> None:
+    csv_bytes = b"id,app_brand,app_class_type,app_alcohol_content,app_net_contents\nrec-1,Old Tom,Bourbon,45%,750 mL\n"
+    resp = client.post(
+        "/api/store/import",
+        headers=ADMIN,
+        files={"csv_file": ("records.csv", csv_bytes, "text/csv")},
+    )
     assert resp.status_code == 200
-    assert resp.json() == {"imported": 0, "skipped": 0}
+    assert resp.json() == {"imported": 1, "skipped": 0}
+
+
+def test_fixtures_reset_requires_admin() -> None:
+    resp = client.post("/api/fixtures", headers=ACCESS, json={"mode": "reset"})
+    assert resp.status_code == 401
+
+
+def test_fixtures_reset() -> None:
+    resp = client.post("/api/fixtures", headers=ADMIN, json={"mode": "reset"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["mode"] == "reset"
+    assert body["reset_count"] == 25
