@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, freshUrl, imageUrl } from '../api/client'
 import type { Job, RecordRow, RecordsPage, FieldResult, RecordDetail } from '../api/client'
@@ -14,7 +14,7 @@ import { REVIEWER } from '../lib/session'
 
 const FILTERS = [
   { key: 'attention', label: 'Needs attention' },
-  { key: 'pending', label: 'Awaiting AI' },
+  { key: 'pending', label: 'Awaiting AI verification' },
   { key: 'review', label: 'Review' },
   { key: 'fail', label: 'Fail' },
   { key: 'closed', label: 'Closed' },
@@ -22,8 +22,15 @@ const FILTERS = [
 ] as const
 
 export function Inbox() {
-  const [filter, setFilterState] = useState<string>('attention')
-  const [query, setQueryState] = useState('')
+  // Seeded from the URL so "Back to review inbox" returns to the queue the
+  // reviewer left, rather than dropping them in the default view. Read once:
+  // the inbox owns its filter after that, and rewriting the URL on every
+  // keystroke would fill the history with search fragments.
+  const [entry] = useSearchParams()
+  const [filter, setFilterState] = useState<string>(
+    () => entry.get('filter') ?? 'attention',
+  )
+  const [query, setQueryState] = useState(() => entry.get('q') ?? '')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   // Selection is scoped to what the reviewer can currently see. Changing the
@@ -164,7 +171,7 @@ export function Inbox() {
 
   // Carried into the determination view so its worklist is this same queue.
   const queueParams = new URLSearchParams()
-  if (filter) queueParams.set('filter', filter)
+  queueParams.set('filter', filter)
   if (query) queueParams.set('q', query)
   const queueSearch = queueParams.toString() ? `?${queueParams}` : ''
 
@@ -204,7 +211,7 @@ export function Inbox() {
 
       <div className="kpis">
         <button className="kpi kpi-pending" onClick={() => setFilter('pending')}>
-          <div className="kpi-label">Awaiting AI check</div>
+          <div className="kpi-label">Awaiting AI verification</div>
           <div className="kpi-value">{counts?.pending ?? 0}</div>
           <div className="kpi-hint">Uploaded, not yet verified</div>
         </button>

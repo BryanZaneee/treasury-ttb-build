@@ -368,13 +368,6 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 .push { margin-left: auto; }
 .grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
 
-/* Three columns on the determination view: specimen, findings, worklist. */
-.split-3 {
-  display: grid;
-  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr) minmax(220px, 260px);
-  gap: 20px;
-  align-items: start;
-}
 
 /* The batch page as one grid rather than two independent columns. Cards placed
    by area share a row, so "Step 2" and "No files handy?" line up because the
@@ -435,7 +428,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 }
 .queue-main {
   display: grid;
-  grid-template-columns: 30px 76px minmax(0, 1fr) 150px 118px 128px 26px;
+  grid-template-columns: 30px 76px minmax(0, 1fr) 150px 118px 172px 26px;
   gap: 14px;
   align-items: center;
   width: 100%;
@@ -453,7 +446,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 .queue-item.selected { background: #f2f7fb; }
 .queue-head-main {
   display: grid;
-  grid-template-columns: 30px 76px minmax(0, 1fr) 150px 118px 128px 26px;
+  grid-template-columns: 30px 76px minmax(0, 1fr) 150px 118px 172px 26px;
   gap: 14px;
   align-items: center;
   padding: 10px 16px 10px 0;
@@ -526,39 +519,52 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
   line-height: 1.55;
 }
 
-/* ---------------- record worklist ---------------- */
+/* ---------------- queue navigation ---------------- */
 
-.worklist { position: sticky; top: 16px; }
-.worklist-scroll { max-height: calc(100vh - 220px); overflow-y: auto; }
-.worklist-item {
+/* Previous / Next under the determination, in place of the list that used to
+   sit beside it: the navigation was the point, the list was only how it was
+   delivered, and seventeen rows of chrome competed with one determination. */
+.queue-nav {
   display: grid;
-  grid-template-columns: 11px minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--rule-softer);
-  border-left: 3px solid transparent;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-top: 16px;
+}
+.queue-nav-step {
+  display: block;
   text-decoration: none;
   color: inherit;
+  padding: 6px 10px;
+  border-radius: 3px;
+  min-width: 0;
 }
-.worklist-item:hover { background: #f7f9fc; color: inherit; }
-.worklist-item[aria-current='true'] {
-  background: var(--sunk);
-  border-left-color: var(--gold);
-}
-.worklist-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; }
-.worklist-brand {
+.queue-nav-step.right { text-align: right; }
+.queue-nav-step:hover { background: var(--sunk); color: inherit; }
+.queue-nav-step.is-end { opacity: 0.4; }
+.queue-nav-label { display: block; font-size: 13px; font-weight: 600; color: var(--link); }
+.queue-nav-step.is-end .queue-nav-label { color: var(--ink-5); }
+.queue-nav-brand {
   display: block;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  color: var(--ink-5);
+  margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.worklist-meta {
-  display: block;
+.queue-nav-place { text-align: center; white-space: nowrap; }
+.queue-nav-count {
   font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.queue-nav-filter {
   font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--ink-6);
   margin-top: 2px;
 }
@@ -582,23 +588,18 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 .label-frame-sm { aspect-ratio: 3 / 4; width: 150px; flex: none; padding: 8px; }
 
 
-@media (max-width: 1200px) {
-  /* The worklist drops below the findings before anything else reflows. */
-  .split-3 { grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); }
-  .split-3 > .worklist { grid-column: 1 / -1; position: static; max-height: none; }
-}
 @media (max-width: 1100px) {
   .kpis { grid-template-columns: repeat(2, 1fr); }
   }
 @media (max-width: 900px) {
-  .split, .split-right, .split-3 { grid-template-columns: minmax(0, 1fr); }
+  .split, .split-right { grid-template-columns: minmax(0, 1fr); }
   .grid-2 { grid-template-columns: minmax(0, 1fr); }
   .batch-grid {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: 'step1' 'run' 'step2' 'nofiles';
   }
   .queue-head { display: none; }
-  .queue-main { grid-template-columns: 30px 76px minmax(0, 1fr) 128px 26px; }
+  .queue-main { grid-template-columns: 30px 76px minmax(0, 1fr) 172px 26px; }
   .queue-main .hide-sm { display: none; }
 }
 @media (max-width: 720px) {

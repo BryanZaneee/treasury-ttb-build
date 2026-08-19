@@ -7,7 +7,7 @@ import { Pill } from '../components/Pill'
 import { kindOf } from '../lib/verdict'
 import { FIELD_LABEL, RESULT_COPY, fieldValues } from '../lib/copy'
 import { REVIEWER } from '../lib/session'
-import { Worklist } from '../components/Worklist'
+import { QueueNav } from '../components/QueueNav'
 import { useToast } from '../lib/toast'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
@@ -20,7 +20,10 @@ export function RecordDetail() {
   // The queue the reviewer came from. Deep-linking straight to a record with no
   // params falls back to the inbox's own default view.
   const [params] = useSearchParams()
-  const filter = params.get('filter') ?? 'attention'
+  // An explicit empty filter is the "All records" queue, which is different
+  // from arriving with no params at all - that is a deep link, and the inbox's
+  // own default view is the sensible queue for it.
+  const filter = params.has('filter') ? (params.get('filter') ?? '') : 'attention'
   const query = params.get('q') ?? ''
   const backToInbox = `/inbox${params.toString() ? `?${params}` : ''}`
   const client = useQueryClient()
@@ -115,7 +118,7 @@ export function RecordDetail() {
         </div>
       </div>
 
-      <div className="split-3">
+      <div className="split">
         <div className="stack">
           <div className="card card-pad">
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
@@ -360,9 +363,9 @@ export function RecordDetail() {
               </div>
             </div>
           )}
-        </div>
 
-        <Worklist currentId={id} filter={filter} query={query} />
+          <QueueNav currentId={id} filter={filter} query={query} />
+        </div>
       </div>
     </div>
   )

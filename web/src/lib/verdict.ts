@@ -5,7 +5,7 @@ export const PILL_TEXT: Record<string, string> = {
   match: 'Match',
   review: 'Needs review',
   fail: 'Fail',
-  pending: 'Awaiting AI',
+  pending: 'Awaiting AI verification',
 }
 
 export const DOT_COLOR: Record<string, string> = {
