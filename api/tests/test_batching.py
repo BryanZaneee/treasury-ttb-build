@@ -1,5 +1,7 @@
 """Filename pairing across all five buckets (PRD §5.5, acceptance test 14)."""
 
+import pytest
+
 import batching
 
 HEADER = "filename,brand_name,class_type,alcohol_content,net_contents,applicant"
@@ -111,3 +113,28 @@ def test_assigning_an_image_that_was_not_uploaded_is_rejected() -> None:
         assert "not uploaded" in str(exc)
     else:
         raise AssertionError("expected KeyError")
+
+
+def test_an_exported_records_csv_stages_as_a_batch() -> None:
+    """The mirror and the intake file name the same fields differently. A
+    reviewer exporting the store and uploading it as a batch is doing something
+    obvious; it used to fail with "missing required column(s)"."""
+    exported = (
+        b"id,received,applicant,filename,specimen,app_brand,app_class_type,"
+        b"app_alcohol_content,app_net_contents,app_producer,app_origin,"
+        b"app_warning_declared,verified,result\r\n"
+        b"COLA-1,2026-01-01,Abbey Row Brewing,abbey.png,abbey.png,Abbey Row,"
+        b"Belgian Style Dubbel,7.6%,330 mL,Abbey Row Brewing,,1,1,match\r\n"
+    )
+
+    rows = batching.parse_csv(exported)
+    assert rows[0]["brand_name"] == "Abbey Row"
+    assert rows[0]["alcohol_content"] == "7.6%"
+    assert rows[0]["government_warning"] == "1"
+    assert rows[0]["filename"] == "abbey.png"
+
+
+def test_a_csv_that_is_neither_header_is_still_rejected() -> None:
+    bad = b"name,abv\r\nAbbey Row,7.6%\r\n"
+    with pytest.raises(batching.BatchCsvError, match="missing required column"):
+        batching.parse_csv(bad)

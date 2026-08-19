@@ -34,6 +34,21 @@ INTAKE_COLUMNS = (
 )
 REQUIRED_COLUMNS = INTAKE_COLUMNS[:5]
 
+# The records mirror (csv_io.MIRROR_COLUMNS) names the same seven application
+# fields differently, because it is the database row and the intake file is the
+# applicant-facing form. A reviewer who exports the store, edits it, and uploads
+# it as a batch is doing something obvious; refusing it over a column name is
+# not. Extra mirror columns are ignored - only the required ones are checked.
+_MIRROR_ALIASES = {
+    "app_brand": "brand_name",
+    "app_class_type": "class_type",
+    "app_alcohol_content": "alcohol_content",
+    "app_net_contents": "net_contents",
+    "app_producer": "producer",
+    "app_origin": "country_of_origin",
+    "app_warning_declared": "government_warning",
+}
+
 
 class BatchCsvError(ValueError):
     """The uploaded CSV cannot be staged at all."""
@@ -60,16 +75,23 @@ def stem(name: str) -> str:
     return re.sub(r"[\s_-]+", "-", base).casefold()
 
 
+def _intake_name(column: str | None) -> str:
+    """An intake column name, whether the file was written by an applicant or
+    exported from the store."""
+    name = (column or "").strip().casefold()
+    return _MIRROR_ALIASES.get(name, name)
+
+
 def parse_csv(data: bytes) -> list[dict[str, str]]:
     text = data.decode("utf-8-sig", errors="replace")
     reader = csv.DictReader(io.StringIO(text))
     if reader.fieldnames is None:
         raise BatchCsvError("the file is empty")
-    header = {(f or "").strip().casefold() for f in reader.fieldnames}
+    header = {_intake_name(f) for f in reader.fieldnames}
     missing = [c for c in REQUIRED_COLUMNS if c not in header]
     if missing:
         raise BatchCsvError(f"missing required column(s): {', '.join(missing)}")
-    return [{(k or "").strip(): (v or "").strip() for k, v in row.items()} for row in reader]
+    return [{_intake_name(k): (v or "").strip() for k, v in row.items()} for row in reader]
 
 
 def pair(rows: list[dict[str, str]], image_names: list[str]) -> tuple[list[Row], list[str]]:

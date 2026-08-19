@@ -111,6 +111,10 @@ export function CheckBatch() {
               </a>
             </div>
             <p className="card-note">Required columns: {REQUIRED}</p>
+            <p className="card-note">
+              An exported records CSV works here too — its column names are recognised and
+              its extra columns ignored.
+            </p>
             <div className="grid-2" style={{ marginTop: 12 }}>
               <button className="dropzone" onClick={() => csvRef.current?.click()}>
                 <div className="dropzone-title">Choose CSV file</div>

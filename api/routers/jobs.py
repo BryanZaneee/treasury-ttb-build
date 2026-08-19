@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 import batching
+import csv_io
 import db
 from routers import batches, records
 
@@ -89,7 +90,9 @@ def _commit_batch(job: Job, batch_id: str) -> list[str]:
                 "app_net_contents": values.get("net_contents", ""),
                 "app_producer": values.get("producer") or None,
                 "app_origin": values.get("country_of_origin") or None,
-                "app_warning_declared": values.get("government_warning", "").lower() == "true",
+                # An exported mirror writes SQLite's 1/0 here, the blank template
+                # writes true/false. One truthiness rule for both (csv_io).
+                "app_warning_declared": csv_io.parse_bool(values.get("government_warning")),
                 "verified": False,
                 "result": None,
             }
