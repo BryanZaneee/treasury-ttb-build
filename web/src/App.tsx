@@ -1,5 +1,6 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { api } from './api/client'
 import type { Health, RecordsPage } from './api/client'
 import { Inbox } from './routes/Inbox'
@@ -7,10 +8,11 @@ import { CheckLabel } from './routes/CheckLabel'
 import { CheckBatch } from './routes/CheckBatch'
 import { RecordDetail } from './routes/RecordDetail'
 import { Export } from './routes/Export'
+import { SessionDialog } from './components/SessionDialog'
 import { REVIEWER } from './lib/session'
 
 export function App() {
-  const client = useQueryClient()
+  const [session, setSession] = useState(false)
 
   // The masthead badge counts what needs an agent, so it is the same number the
   // inbox leads with rather than a second definition of "outstanding".
@@ -49,9 +51,7 @@ export function App() {
           <nav className="nav" aria-label="Primary">
             <NavLink to="/inbox" className={({ isActive }) => (isActive ? 'active' : '')}>
               Review inbox
-              <span className={`nav-badge${attention > 0 ? '' : ' is-placeholder'}`}>
-              {attention > 0 ? attention : '0'}
-            </span>
+              {attention > 0 && <span className="nav-badge">{attention}</span>}
             </NavLink>
             <NavLink to="/check" className={({ isActive }) => (isActive ? 'active' : '')}>
               Check one label
@@ -65,22 +65,21 @@ export function App() {
           </nav>
 
           <button
-            className="masthead-refresh"
-            onClick={() => client.invalidateQueries()}
-            title="Refetch everything on this page"
+            className="agent"
+            onClick={() => setSession(true)}
+            aria-haspopup="dialog"
+            title="Session actions"
           >
-            <span aria-hidden="true">⟳</span> Refresh
-          </button>
-
-          <div className="agent">
             <div className="agent-avatar">{REVIEWER.initials}</div>
             <div>
               <div className="agent-name">{REVIEWER.name}</div>
               <div className="agent-role">{REVIEWER.role}</div>
             </div>
-          </div>
+          </button>
         </div>
       </header>
+
+      {session && <SessionDialog onClose={() => setSession(false)} />}
 
       {degraded && (
         <div className="strip-warn" role="status">

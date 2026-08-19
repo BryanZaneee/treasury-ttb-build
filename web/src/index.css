@@ -120,27 +120,16 @@ input, textarea, select { font-family: inherit; }
 .nav-badge {
   font-family: var(--mono); font-size: 11px; font-weight: 600;
   background: var(--badge); color: #fff; padding: 2px 6px; border-radius: 2px;
-  /* Sized for two digits from the first paint. The badge renders only once
-     its count query resolves, and .nav is right-anchored, so a badge that
-     appears - or gains a digit - slides every item after it. */
-  min-width: 24px; text-align: center;
 }
-.nav-badge.is-placeholder { visibility: hidden; }
 
-/* Reads come from a cache with no polling, so a store changed by another
-   reviewer - or by a reset - stays stale until something invalidates it. */
-.masthead-refresh {
-  display: flex; align-items: center; gap: 6px;
-  border: 1px solid #2b455e; background: none; color: #c6d3df;
-  padding: 8px 12px; font: inherit; font-size: 12.5px; font-weight: 600;
-  border-radius: 3px; min-height: 36px; cursor: pointer; white-space: nowrap;
-}
-.masthead-refresh:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
-
+/* The reviewer's own name opens the session actions - refresh and reset. */
 .agent {
+  border: none; background: none; color: inherit; font: inherit; text-align: left;
+  cursor: pointer; border-radius: 3px;
   display: flex; align-items: center; gap: 10px;
-  padding-left: 20px; border-left: 1px solid var(--mast-divider);
+  padding: 6px 10px 6px 20px; border-left: 1px solid var(--mast-divider);
 }
+.agent:hover { background: rgba(255, 255, 255, 0.08); }
 .agent-avatar {
   width: 32px; height: 32px; border-radius: 50%; background: var(--mast-avatar);
   color: var(--focus); display: flex; align-items: center; justify-content: center;
@@ -541,6 +530,9 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
   flex-direction: column;
   box-shadow: 0 20px 50px rgba(16, 40, 61, 0.28);
 }
+.dialog-sm { width: min(480px, 100%); }
+.session-action-title { font-size: 13.5px; font-weight: 700; color: var(--fail-fg); }
+
 .dialog-head { padding: 16px 20px; border-bottom: 1px solid var(--rule); }
 .dialog-body { padding: 16px 20px; overflow-y: auto; }
 .dialog-foot {
