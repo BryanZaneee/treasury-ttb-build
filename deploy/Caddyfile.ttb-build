@@ -13,6 +13,14 @@ redir /ttb-build /ttb-build/ permanent
 
 handle_path /ttb-build/* {
 	handle /api/* {
+		# The store is live data: a cached GET means the inbox keeps showing
+		# counts from whenever the edge last fetched, and worse, serves one
+		# visitor's records to another. This site sits behind Cloudflare with
+		# caching on, which cached /api/records for 27 minutes on first
+		# cutover, so the API says plainly that it must not be stored.
+		header Cache-Control "no-store, private"
+		header -ETag
+
 		reverse_proxy 127.0.0.1:8020 {
 			# Verification streams field results as they resolve; buffering
 			# would hold the whole response and defeat the point.
