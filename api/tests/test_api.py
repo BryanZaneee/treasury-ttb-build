@@ -3,6 +3,7 @@
 import time
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 import db
@@ -393,3 +394,44 @@ def test_fixtures_reset() -> None:
     body = resp.json()
     assert body["mode"] == "reset"
     assert body["reset_count"] == 25
+
+
+def test_verification_falls_back_to_ocr_when_the_vision_reader_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PRD §3.2 / acceptance test 11: the service never blocks on a reader.
+
+    The record must also record the reader that actually ran, not the one that
+    was configured - that is what lets the UI warn the reviewer that this
+    determination was read less reliably.
+    """
+    import config
+    import readers
+    from routers import records as records_router
+
+    record_id = _seed_and_get("old-tom-pass.png")
+    monkeypatch.setattr(config.settings, "reader_provider", "openai")
+
+    real = readers.get_reader
+
+    def flaky(provider: str | None = None, *args: object, **kwargs: object) -> object:
+        if provider == "openai":
+            raise RuntimeError("connection refused")
+        return real("fake")
+
+    monkeypatch.setattr(records_router, "get_reader", flaky)
+
+    resp = client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["result"] is not None, "a verdict is still returned"
+    assert body["reader_provider"] == "ocr", "records the reader that actually ran"
+    assert body["reader_model"] is None
+    assert "unavailable" in body["engine"] and "OCR" in body["engine"]
+
+
+def test_verification_records_the_configured_reader_when_it_works() -> None:
+    record_id = _seed_and_get("old-tom-pass.png")
+    body = client.post(f"/api/records/{record_id}/verify", headers=ACCESS).json()
+    assert body["reader_provider"] == "fake"
+    assert "fake reader" in body["engine"]

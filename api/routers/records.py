@@ -21,6 +21,7 @@ import db
 from config import settings
 from models import Application, FieldResult, LabelReading, Record
 from readers import get_reader
+from readers.prompts import VERSION as PROMPT_VERSION
 
 router = APIRouter(tags=["records"])
 
@@ -316,9 +317,11 @@ def verify_record(record_id: str) -> Record:
         # not the configured one.
         reader_provider=reader_used,
         reader_model=settings.reader_model if reader_used != "ocr" else None,
-        prompt_version=getattr(get_reader(settings.reader_provider), "prompt_version", None)
-        if settings.reader_provider in ("openai", "gemini")
-        else None,
+        # Only a vision reading is produced by a prompt, and it is the reader
+        # that actually ran that determines the version - building a second
+        # reader here just to read a constant was also a live call outside the
+        # fallback's try block, so a broken provider raised instead of degrading.
+        prompt_version=PROMPT_VERSION if reader_used == "openai" else None,
     )
     db.append_audit(
         record_id,
