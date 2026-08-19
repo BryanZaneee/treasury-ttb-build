@@ -7,8 +7,10 @@ import { Pill } from '../components/Pill'
 import { DOT_COLOR, kindOf } from '../lib/verdict'
 import { FIELD_LABEL, QUALITY_LABEL, engineLine } from '../lib/copy'
 import { matchesQuery } from '../lib/search'
+import { BulkDecisionDialog } from '../components/BulkDecisionDialog'
 import { useToast } from '../lib/toast'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
+import { REVIEWER } from '../lib/session'
 
 const FILTERS = [
   { key: 'attention', label: 'Needs attention' },
@@ -20,10 +22,15 @@ const FILTERS = [
 ] as const
 
 export function Inbox() {
-  const [filter, setFilter] = useState<string>('attention')
-  const [query, setQuery] = useState('')
+  const [filter, setFilterState] = useState<string>('attention')
+  const [query, setQueryState] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  // Selection is scoped to what the reviewer can currently see. Changing the
+  // filter or the search clears it, so a bulk action can never reach a record
+  // that has scrolled out of the view they chose it from.
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [confirming, setConfirming] = useState<null | 'accepted' | 'returned'>(null)
   const client = useQueryClient()
   const toast = useToast()
 
@@ -88,6 +95,68 @@ export function Inbox() {
     },
   })
 
+  const bulkVerify = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const started = await api<Job>('/jobs', {
+        method: 'POST',
+        body: { scope: 'ids', record_ids: ids, verify_now: true },
+      })
+      let state = started
+      while (state.state === 'running') {
+        await new Promise((r) => setTimeout(r, 350))
+        state = await api<Job>(`/jobs/${started.id}`)
+      }
+      return state
+    },
+    onSuccess: (job) => {
+      clearSelection()
+      invalidate()
+      toast({
+        kind: 'info',
+        title: `Verified ${job.completed} of ${job.total}`,
+        body: Object.entries(job.verdicts)
+          .map(([k, v]) => `${v} ${k}`)
+          .join(' · '),
+      })
+    },
+  })
+
+  const bulkDecide = useMutation({
+    mutationFn: async ({ decision, reason }: { decision: 'accepted' | 'returned'; reason: string }) => {
+      let applied = 0
+      let skipped = 0
+      // One PATCH per record: the override rule is enforced per record server
+      // side, and a record already decided answers 409 rather than reopening.
+      for (const record of selectedRows) {
+        try {
+          await api(`/records/${record.id}`, {
+            method: 'PATCH',
+            body: {
+              decision,
+              override: decision === 'accepted' && record.result !== 'match',
+              reviewer_name: REVIEWER.name,
+              reason: decision === 'returned' ? reason || null : null,
+            },
+          })
+          applied += 1
+        } catch {
+          skipped += 1
+        }
+      }
+      return { applied, skipped, decision }
+    },
+    onSuccess: ({ applied, skipped, decision }) => {
+      setConfirming(null)
+      clearSelection()
+      invalidate()
+      toast({
+        kind: skipped > 0 ? 'warn' : 'info',
+        title: `${applied} ${decision === 'accepted' ? 'accepted' : 'returned'}`,
+        body: skipped > 0 ? `${skipped} skipped — already closed, or rejected by the store.` : undefined,
+      })
+    },
+  })
+
   const counts = all.data?.counts
   const total = all.data?.records.length ?? 0
   const closed = counts?.closed ?? 0
@@ -98,6 +167,28 @@ export function Inbox() {
   if (filter) queueParams.set('filter', filter)
   if (query) queueParams.set('q', query)
   const queueSearch = queueParams.toString() ? `?${queueParams}` : ''
+
+  const visibleIds = rows.map((r) => r.id)
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id))
+  const selectedRows = rows.filter((r) => selected.has(r.id))
+
+  const clearSelection = () => setSelected(new Set())
+  const setFilter = (next: string) => {
+    clearSelection()
+    setFilterState(next)
+  }
+  const setQuery = (next: string) => {
+    clearSelection()
+    setQueryState(next)
+  }
+  const toggleOne = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(visibleIds))
 
   const countFor = (key: string) =>
     key === '' ? total : (counts?.[key as keyof typeof counts] ?? 0)
@@ -196,14 +287,57 @@ export function Inbox() {
       </div>
 
       <div className="card">
+        {selected.size > 0 && (
+          <div className="bulkbar">
+            <span className="bulkbar-count">
+              {selected.size} selected
+            </span>
+            <button
+              className="btn btn-quiet btn-sm"
+              onClick={() => bulkVerify.mutate([...selected])}
+              disabled={bulkVerify.isPending}
+            >
+              {bulkVerify.isPending && <span className="spinner spinner-dark" />}
+              Verify
+            </button>
+            <button
+              className="btn btn-quiet btn-sm"
+              onClick={() => setConfirming('accepted')}
+              disabled={bulkVerify.isPending}
+            >
+              Accept
+            </button>
+            <button
+              className="btn btn-quiet btn-sm"
+              onClick={() => setConfirming('returned')}
+              disabled={bulkVerify.isPending}
+            >
+              Return to applicant
+            </button>
+            <button className="btn btn-quiet btn-sm push" onClick={clearSelection}>
+              Clear
+            </button>
+          </div>
+        )}
         <div className="queue-head">
-          <div />
-          <div>Label</div>
-          <div>Application</div>
-          <div className="hide-sm">Applicant</div>
-          <div className="hide-sm">Received</div>
-          <div>Result</div>
-          <div />
+          <input
+            type="checkbox"
+            aria-label={allSelected ? 'Clear selection' : 'Select all visible records'}
+            checked={allSelected}
+            ref={(el) => {
+              if (el) el.indeterminate = selected.size > 0 && !allSelected
+            }}
+            onChange={toggleAll}
+          />
+          <div className="queue-head-main">
+            <div />
+            <div>Label</div>
+            <div>Application</div>
+            <div className="hide-sm">Applicant</div>
+            <div className="hide-sm">Received</div>
+            <div>Result</div>
+            <div />
+          </div>
         </div>
 
         {rows.map((r) => (
@@ -215,6 +349,8 @@ export function Inbox() {
             onToggle={() => setExpanded(expanded === r.id ? null : r.id)}
             onVerify={() => verify.mutate(r.id)}
             queueSearch={queueSearch}
+            checked={selected.has(r.id)}
+            onSelect={() => toggleOne(r.id)}
           />
         ))}
 
@@ -233,6 +369,16 @@ export function Inbox() {
           </div>
         )}
       </div>
+
+      {confirming && (
+        <BulkDecisionDialog
+          decision={confirming}
+          records={selectedRows}
+          pending={bulkDecide.isPending}
+          onCancel={() => setConfirming(null)}
+          onConfirm={(reason) => bulkDecide.mutate({ decision: confirming, reason })}
+        />
+      )}
     </div>
   )
 }
@@ -244,6 +390,8 @@ function QueueItem({
   onToggle,
   onVerify,
   queueSearch,
+  checked,
+  onSelect,
 }: {
   record: RecordRow
   open: boolean
@@ -251,6 +399,8 @@ function QueueItem({
   onToggle: () => void
   onVerify: () => void
   queueSearch: string
+  checked: boolean
+  onSelect: () => void
 }) {
   const kind = kindOf(record.result)
   const detail = useQuery({
@@ -269,8 +419,15 @@ function QueueItem({
     .join(' · ')
 
   return (
-    <div className="queue-item">
-      <button className="queue-row" onClick={onToggle} aria-expanded={open}>
+    <div className={`queue-item${checked ? ' selected' : ''}`}>
+      <div className="queue-row">
+        <input
+          type="checkbox"
+          checked={checked}
+          aria-label={`Select ${record.app_brand}, ${record.id}`}
+          onChange={onSelect}
+        />
+        <button className="queue-main" onClick={onToggle} aria-expanded={open}>
         <div
           className="dot"
           style={{ background: record.decision ? '#c6d0da' : DOT_COLOR[kind] }}
@@ -297,8 +454,9 @@ function QueueItem({
             </div>
           )}
         </div>
-        <div className={`caret${open ? ' open' : ''}`}>▾</div>
-      </button>
+          <div className={`caret${open ? ' open' : ''}`}>▾</div>
+        </button>
+      </div>
 
       {open && (
         <div className="queue-expand">
