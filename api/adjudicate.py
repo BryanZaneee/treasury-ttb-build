@@ -371,6 +371,13 @@ def adjudicate(
 
     Returns the field results and the rolled-up record verdict.
     """
+    # Not a label at all: there is nothing to compare, so no field rows are
+    # written and the roll-up is bypassed entirely. A per-field verdict here
+    # would read as "the applicant's brand name is wrong" when the real finding
+    # is that the wrong file was filed (PRD §3.2 extension).
+    if reading.not_a_label:
+        return [], "invalid"
+
     results: list[FieldResult] = []
 
     for key in FIELD_KEYS:

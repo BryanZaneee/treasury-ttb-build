@@ -89,7 +89,11 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   return (await response.json()) as T
 }
 
-export type Verdict = 'match' | 'review' | 'fail'
+/**
+ * `invalid` extends PRD §3.2's three-value enum: the vision reader flags a
+ * specimen that is not a label at all, which is not a label that failed.
+ */
+export type Verdict = 'match' | 'review' | 'fail' | 'invalid'
 
 export type Health = {
   store_readable: boolean | null

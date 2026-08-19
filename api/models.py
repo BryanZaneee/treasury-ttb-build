@@ -9,7 +9,11 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-Verdict = Literal["match", "review", "fail"]
+# "invalid" is an extension to PRD §3.2's three-value enum: a specimen that is
+# not a label at all cannot be adjudicated field by field, and calling it a
+# fail tells the reviewer the applicant's label is wrong rather than that the
+# wrong image was filed. Only the vision reader can raise it.
+Verdict = Literal["match", "review", "fail", "invalid"]
 Decision = Literal["accepted", "returned"] | None
 CaptureQuality = Literal[
     "normal",
@@ -63,6 +67,8 @@ class LabelReading(BaseModel):
     origin: FieldReading
     warning: WarningReading
     quality: CaptureQuality
+    # The image is very clearly not an alcohol beverage label (PRD §3.2 ext).
+    not_a_label: bool = False
 
 
 class FieldResult(BaseModel):

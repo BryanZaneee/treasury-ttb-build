@@ -5,6 +5,7 @@ export const PILL_TEXT: Record<string, string> = {
   match: 'Match',
   review: 'Needs review',
   fail: 'Fail',
+  invalid: 'Not a label',
   pending: 'Awaiting AI verification',
 }
 
@@ -12,6 +13,7 @@ export const DOT_COLOR: Record<string, string> = {
   match: 'var(--match-dot)',
   review: 'var(--review-dot)',
   fail: 'var(--fail-dot)',
+  invalid: 'var(--invalid-dot)',
   pending: 'var(--pending-dot)',
 }
 

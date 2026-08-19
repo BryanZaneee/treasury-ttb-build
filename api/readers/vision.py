@@ -207,4 +207,5 @@ class VisionReader:
                 header_bold=warning.get("headerBold"),
             ),
             quality=quality,
+            not_a_label=bool(payload.get("notALabel")),
         )

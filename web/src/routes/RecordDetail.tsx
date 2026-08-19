@@ -222,6 +222,19 @@ export function RecordDetail() {
                 </div>
               </div>
 
+              {data.result === 'invalid' ? (
+                /* No fields were adjudicated (PRD §3.2 ext), so the comparison
+                   table would be four column headers over nothing. */
+                <div className="empty">
+                  <div className="empty-title">Nothing to compare</div>
+                  <div className="empty-hint">
+                    The reader found no alcohol beverage label in this image, so no field
+                    was adjudicated. Return the record and ask the applicant for the label
+                    specimen.
+                  </div>
+                </div>
+              ) : (
+                <>
               <div className="fields-head">
                 <div>Item</div>
                 <div>Application says</div>
@@ -248,6 +261,8 @@ export function RecordDetail() {
                 </div>
                 )
               })}
+                </>
+              )}
 
               <div className="result-foot">
                 {closed ? (

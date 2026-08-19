@@ -205,7 +205,7 @@ def list_records(
             clauses.append("result = ?")
             params.append(result_filter)
         elif result_filter == "attention":
-            clauses.append("(result IN ('review', 'fail') AND decision IS NULL)")
+            clauses.append("(result IN ('review', 'fail', 'invalid') AND decision IS NULL)")
         if query:
             clauses.append(
                 "(id LIKE ? OR applicant LIKE ? OR app_brand LIKE ? OR filename LIKE ?)"
@@ -226,7 +226,7 @@ def filter_counts() -> dict[str, int]:
         row = conn.execute(
             """
             SELECT
-                SUM(CASE WHEN result IN ('review', 'fail') AND decision IS NULL
+                SUM(CASE WHEN result IN ('review', 'fail', 'invalid') AND decision IS NULL
                          THEN 1 ELSE 0 END) AS attention,
                 SUM(CASE WHEN verified = 0 THEN 1 ELSE 0 END) AS pending,
                 SUM(CASE WHEN result = 'review' THEN 1 ELSE 0 END) AS review,

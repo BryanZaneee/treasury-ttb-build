@@ -113,3 +113,21 @@ def test_degraded_capture_downgrades_only_a_confident_match() -> None:
     assert apply_quality("match", "normal", 0.55)[0] == "match"
     # A degraded capture never *improves* a field that already failed.
     assert apply_quality("fail", "angled", 0.55)[0] == "fail"
+
+
+def test_a_specimen_that_is_not_a_label_is_invalid_not_fail() -> None:
+    """PRD §3.2 extension. An image that is not a label cannot be adjudicated
+    field by field: `fail` would tell the reviewer the applicant's label is
+    wrong, when the finding is that the wrong file was filed."""
+    fixture = expectations()["old-tom-pass.png"]
+    app = _application(fixture)
+    reading = reader.read("old-tom-pass.png")
+
+    results, verdict = run("COLA-TEST", app, reading)
+    assert verdict == "match" and results, "guard the control case first"
+
+    results, verdict = run("COLA-TEST", app, reading.model_copy(update={"not_a_label": True}))
+    assert verdict == "invalid"
+    # No field rows: there is nothing to compare, and half-populated evidence
+    # against a photograph of something else is worse than none.
+    assert results == []
