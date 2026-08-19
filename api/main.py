@@ -3,12 +3,13 @@
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 import db
 from config import settings
-from routers import batches, jobs, records, store
+from routers import batches, dev, jobs, records, store
 
 # Mutating routes require ACCESS_TOKEN. Admin-only routes additionally require
 # ADMIN_TOKEN. Matched by (method, path-prefix) since path params vary.
@@ -19,6 +20,8 @@ _ACCESS_ROUTES = [
     ("POST", "/api/batches/stage"),
     ("POST", "/api/jobs"),
     ("POST", "/api/fixtures"),
+    # The dev bench can call a paid provider on every request.
+    ("POST", "/api/dev/bench"),
 ]
 _ADMIN_ROUTES = [
     ("POST", "/api/store/import"),
@@ -83,10 +86,18 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # In production Caddy serves the data volume directly (PRD §9) and these
+    # never reach the app. Locally there is no Caddy, so the API stands in.
+    images = db.data_dir() / "images"
+    images.mkdir(parents=True, exist_ok=True)
+    app.mount("/api/images", StaticFiles(directory=images), name="images")
+
     app.include_router(records.router, prefix="/api")
     app.include_router(batches.router, prefix="/api")
     app.include_router(jobs.router, prefix="/api")
     app.include_router(store.router, prefix="/api")
+    # Temporary: remove before the M6 cutover (see routers/dev.py).
+    app.include_router(dev.router, prefix="/api")
 
     @app.get("/api/health")
     def health() -> HealthResponse:
