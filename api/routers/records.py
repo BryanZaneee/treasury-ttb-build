@@ -132,19 +132,24 @@ def get_record(record_id: str) -> RecordDetail:
     )
 
 
-def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str]:
+def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, str]:
     """Read a specimen, falling back to local OCR when the reader fails.
 
     PRD §3.2: a reader that is unreachable, slow, or returns unparseable JSON
     degrades to the rules verdict, with the engine string recording the cause.
     The service never blocks on the reader (acceptance test 11).
+
+    Returns the reading, the engine string, and the reader that actually
+    produced it - which after a fallback is not the one configured, and is what
+    the UI uses to warn the reviewer that accuracy may be lower on a degraded
+    capture.
     """
     path = image_path if image_path.exists() else Path("fixtures") / Path(specimen).name
     provider = settings.reader_provider
 
     try:
         reading = get_reader(provider).read(specimen, path)
-        return reading, f"deterministic rules engine ({provider} reader)"
+        return reading, f"deterministic rules engine ({provider} reader)", provider
     except Exception as exc:  # noqa: BLE001 - any reader failure degrades, never 500s
         cause = type(exc).__name__ if not str(exc) else str(exc).split("\n")[0][:120]
 
@@ -156,7 +161,11 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str]:
         raise HTTPException(status_code=422, detail=f"no reader available: {exc}") from exc
     # An OCR-only reading never auto-closes (PRD §5.3); the engine string is
     # what tells the reviewer which reader actually read this label.
-    return reading, f"deterministic rules engine ({provider} unreachable, read by OCR)"
+    return (
+        reading,
+        f"deterministic rules engine ({provider} unavailable, read by local OCR)",
+        "ocr",
+    )
 
 
 def _application_from_row(row: sqlite3.Row) -> Application:
@@ -282,7 +291,9 @@ def verify_record(record_id: str) -> Record:
 
     specimen = row["specimen"] or row["filename"]
     started = time.perf_counter_ns()
-    reading, engine = read_specimen(specimen, db.data_dir() / "images" / Path(specimen).name)
+    reading, engine, reader_used = read_specimen(
+        specimen, db.data_dir() / "images" / Path(specimen).name
+    )
     read_done = time.perf_counter_ns()
 
     results, verdict = adjudicate.adjudicate(record_id, _application_from_row(row), reading)
@@ -301,8 +312,10 @@ def verify_record(record_id: str) -> Record:
         reader_ms=round((read_done - started) / 1_000_000),
         rules_ms=round((finished - read_done) / 1_000_000),
         elapsed_ms=round((finished - started) / 1_000_000),
-        reader_provider=settings.reader_provider,
-        reader_model=settings.reader_model,
+        # The reader that actually read the label, which after a fallback is
+        # not the configured one.
+        reader_provider=reader_used,
+        reader_model=settings.reader_model if reader_used != "ocr" else None,
         prompt_version=getattr(get_reader(settings.reader_provider), "prompt_version", None)
         if settings.reader_provider in ("openai", "gemini")
         else None,

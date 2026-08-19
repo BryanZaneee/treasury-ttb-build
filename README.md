@@ -44,8 +44,9 @@ Open <http://localhost:5173>. The inbox starts with 25 unverified applications; 
 
 | Variable | Purpose |
 | --- | --- |
-| `READER_PROVIDER` | `fake` \| `ocr` \| `openai` \| `gemini` — which reader verification uses |
-| `OPENAI_API_KEY` / `GEMINI_API_KEY` | Per-provider keys. The reader bench races several providers at once, so one shared key cannot serve them all. |
+| `READER_PROVIDER` | `openai` \| `ocr` \| `fake` — which reader verification uses |
+| `READER_MODEL` | Vision model, `gpt-4.1-mini` in production |
+| `OPENAI_API_KEY` | Vision reader key. Server-side only — never given a `VITE_` prefix. |
 | `ACCESS_TOKEN` / `ADMIN_TOKEN` | Shared bearer tokens. There are no user accounts (PRD §8). |
 | `VITE_ACCESS_TOKEN` / `VITE_ADMIN_TOKEN` | The same tokens, exposed to the browser bundle for local dev. **Never give the reader API key a `VITE_` prefix** — that would ship it to the client. |
 
@@ -61,15 +62,18 @@ Local OCR needs Tesseract: `brew install tesseract`.
 
 | Reader | Speed | Cost | What it is |
 | --- | --- | --- | --- |
+| `openai` | ~2–4 s | metered | `gpt-4.1-mini` vision. The production reader. |
+| `ocr` | ~600 ms | none | Local Tesseract, two page-segmentation passes. No network. Also the automatic fallback. |
 | `fake` | ~0 ms | none | Replays the fixture ground truth. The CI reader (PRD §5.4). |
-| `ocr` | ~600 ms | none | Local Tesseract, two page-segmentation passes. No network. |
-| `openai` | ~2–4 s | metered | OpenAI vision via the Chat Completions API. |
-| `gemini` | ~2–5 s | metered | Gemini via its OpenAI-compatible endpoint — same client, different base URL. |
 
 Rules own the verdict. A reader supplies observed values and may **downgrade** a verdict or
-attach a note; it may never improve one (PRD §3.2). When the configured reader is unreachable,
-verification falls back to local OCR and the engine string names the cause — the service never
-blocks on a reader.
+attach a note; it may never improve one (PRD §3.2).
+
+When the vision reader is unavailable, verification falls back to local OCR rather than
+failing — the service never blocks on a reader. Because OCR reads blurred, angled and
+low-contrast captures markedly less reliably, the reviewer is told: a toast is raised on the
+determination, the record carries a *Read by local OCR* chip, and the engine string names what
+actually read the label.
 
 ### Reader bench
 

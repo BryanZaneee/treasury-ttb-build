@@ -19,7 +19,6 @@ const DEFAULT_LANES: LaneConfig[] = [
   { id: 1, provider: 'fake', model: '', effort: '', on: true },
   { id: 2, provider: 'ocr', model: '', effort: '', on: true },
   { id: 3, provider: 'openai', model: 'gpt-4.1-mini', effort: 'low', on: false },
-  { id: 4, provider: 'gemini', model: 'gemini-3.7-flash', effort: 'low', on: false },
 ]
 
 const EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
@@ -81,17 +80,8 @@ export function Dev() {
     queryFn: () => api<string[]>('/dev/models?provider=openai'),
     retry: false,
   })
-  const geminiModels = useQuery({
-    queryKey: ['models', 'gemini'],
-    queryFn: () => api<string[]>('/dev/models?provider=gemini'),
-    retry: false,
-  })
   const modelsFor = (provider: string) =>
-    provider === 'openai'
-      ? (openaiModels.data ?? [])
-      : provider === 'gemini'
-        ? (geminiModels.data ?? [])
-        : []
+    provider === 'openai' ? (openaiModels.data ?? []) : []
 
   const chosen = specimens.data?.find((s) => s.filename === specimen)
   const update = (id: number, patch: Partial<LaneConfig>) =>

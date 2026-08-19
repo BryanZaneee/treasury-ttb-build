@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, imageUrl } from '../api/client'
 import type { RecordRow, SpecimenSummary } from '../api/client'
 import { QUALITY_LABEL } from '../lib/copy'
+import { useToast } from '../components/Toast'
+import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
 const BLANK = {
   brand: '',
@@ -23,6 +25,13 @@ export function CheckLabel() {
   const [applicant, setApplicant] = useState('')
   const [specimen, setSpecimen] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  const toast = useToast()
+  const health = useQuery({
+    queryKey: ['health'],
+    queryFn: () => api<{ provider: string }>('/health'),
+    staleTime: 60_000,
+  })
 
   const specimens = useQuery({
     queryKey: ['specimens'],
@@ -65,11 +74,14 @@ export function CheckLabel() {
       )
       form.set('specimen_key', specimen)
       const record = await api<RecordRow>('/records', { method: 'POST', form })
-      await api(`/records/${record.id}/verify`, { method: 'POST' })
-      return record
+      const verified = await api<RecordRow>(`/records/${record.id}/verify`, { method: 'POST' })
+      return verified
     },
     onSuccess: (record) => {
       client.invalidateQueries({ queryKey: ['records'] })
+      if (readByFallback(record, health.data?.provider)) {
+        toast({ kind: 'warn', title: FALLBACK_TITLE, body: FALLBACK_BODY })
+      }
       navigate(`/records/${record.id}`)
     },
     onError: (e) => setError(String(e)),

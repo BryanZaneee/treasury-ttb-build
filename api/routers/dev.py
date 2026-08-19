@@ -164,25 +164,20 @@ def list_providers() -> list[str]:
 def list_models(provider: str) -> list[str]:
     """Models the configured key can actually reach.
 
-    The PRD names `gpt-5.6-luna` and `gemini-3.7-flash`, but which models a key
-    is entitled to is an account fact, not a spec fact - so the bench asks the
-    provider rather than offering a model the request would 400 on.
+    The PRD names `gpt-5.6-luna`, but which models a key is entitled to is an
+    account fact, not a spec fact - so the bench asks the provider rather than
+    offering a model the request would 400 on.
     """
-    if provider not in ("openai", "gemini"):
+    if provider != "openai":
         return []
     from openai import OpenAI
 
     from config import api_key_for
-    from readers.vision import GEMINI_BASE_URL
 
     key = api_key_for(provider)
     if not key:
         raise HTTPException(status_code=422, detail=f"no API key configured for {provider}")
-    client = OpenAI(
-        api_key=key,
-        base_url=GEMINI_BASE_URL if provider == "gemini" else None,
-        timeout=20,
-    )
+    client = OpenAI(api_key=key, timeout=20)
     try:
         ids = [m.id.removeprefix("models/") for m in client.models.list()]
     except Exception as exc:

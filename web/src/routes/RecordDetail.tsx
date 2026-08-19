@@ -6,6 +6,8 @@ import type { RecordDetail as Detail } from '../api/client'
 import { Pill } from '../components/Pill'
 import { kindOf } from '../lib/verdict'
 import { FIELD_LABEL, QUALITY_LABEL, RESULT_COPY } from '../lib/copy'
+import { useToast } from '../components/Toast'
+import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
 /** Minimised state and the open record survive reload, per device (S10). */
 const MINIMISED_KEY = 'ttb.detail.minimised'
@@ -20,14 +22,25 @@ export function RecordDetail() {
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<null | 'accepted' | 'returned'>(null)
 
+  const toast = useToast()
+
   const record = useQuery({
     queryKey: ['record', id],
     queryFn: () => api<Detail>(`/records/${id}`),
   })
 
+  const health = useQuery({
+    queryKey: ['health'],
+    queryFn: () => api<{ provider: string }>('/health'),
+    staleTime: 60_000,
+  })
+
   const verify = useMutation({
-    mutationFn: () => api(`/records/${id}/verify`, { method: 'POST' }),
-    onSuccess: () => {
+    mutationFn: () => api<Detail>(`/records/${id}/verify`, { method: 'POST' }),
+    onSuccess: (updated) => {
+      if (readByFallback(updated, health.data?.provider)) {
+        toast({ kind: 'warn', title: FALLBACK_TITLE, body: FALLBACK_BODY })
+      }
       client.invalidateQueries({ queryKey: ['record', id] })
       client.invalidateQueries({ queryKey: ['records'] })
     },
@@ -121,6 +134,9 @@ export function RecordDetail() {
             <div className="row" style={{ gap: 8, marginTop: 12 }}>
               <span className="chip">{QUALITY_LABEL[data.quality ?? ''] ?? 'Not assessed'}</span>
               <span className="chip">{data.beverage}</span>
+              {readByFallback(data, health.data?.provider) && (
+                <span className="chip chip-warn">Read by local OCR</span>
+              )}
             </div>
           </div>
 

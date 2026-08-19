@@ -20,11 +20,9 @@ class Settings(BaseSettings):
     reader_model: str = "gpt-5.6-luna"
     reader_base_url: str = ""
     reader_api_key: str = ""
-    # Per-provider keys. The bench races several providers in one process, so a
-    # single READER_API_KEY cannot serve them all; these take precedence over it
-    # for their own provider and fall back to it when unset.
+    # Named per provider so the key a reader uses is unambiguous; falls back to
+    # READER_API_KEY when unset.
     openai_api_key: str = ""
-    gemini_api_key: str = ""
     reader_effort: str = "low"
     reader_service_tier: str = "standard"
     reader_timeout_s: int = 25
@@ -49,8 +47,5 @@ settings = Settings()
 
 def api_key_for(provider: str) -> str:
     """The key a given provider should authenticate with (PRD §5.2)."""
-    per_provider = {
-        "openai": settings.openai_api_key,
-        "gemini": settings.gemini_api_key,
-    }.get(provider, "")
+    per_provider = {"openai": settings.openai_api_key}.get(provider, "")
     return per_provider or settings.reader_api_key

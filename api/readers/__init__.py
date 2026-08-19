@@ -7,9 +7,9 @@ label can steer the adjudication (PRD §3.3).
 Three implementations, interchangeable by configuration:
 
   fake    replays fixtures/expectations.json - instant, free, used in CI
-  ocr     local Tesseract - ~600ms, free, no network
-  openai  } one OpenAI-compatible adapter; Gemini exposes a compatible
-  gemini  } endpoint, so only key, base URL and model string differ
+  ocr     local Tesseract - ~600ms, free, no network, and the fallback the
+          service degrades to when the vision reader cannot be reached
+  openai  gpt-4.1-mini vision, the production reader
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from typing import Protocol
 from config import api_key_for, settings
 from models import LabelReading
 
-PROVIDERS = ("fake", "ocr", "openai", "gemini")
+PROVIDERS = ("fake", "ocr", "openai")
 
 
 class Reader(Protocol):
@@ -46,7 +46,7 @@ def get_reader(
         from readers.ocr import OcrReader
 
         return OcrReader()
-    if provider in ("openai", "gemini"):
+    if provider == "openai":
         from readers.vision import VisionReader
 
         return VisionReader(

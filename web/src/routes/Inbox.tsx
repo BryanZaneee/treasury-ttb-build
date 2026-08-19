@@ -6,6 +6,8 @@ import type { Job, RecordRow, RecordsPage, FieldResult, RecordDetail } from '../
 import { Pill } from '../components/Pill'
 import { DOT_COLOR, kindOf } from '../lib/verdict'
 import { FIELD_LABEL, QUALITY_LABEL, engineLine } from '../lib/copy'
+import { useToast } from '../components/Toast'
+import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
 const FILTERS = [
   { key: 'attention', label: 'Needs attention' },
@@ -25,6 +27,13 @@ export function Inbox() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const client = useQueryClient()
+  const toast = useToast()
+
+  const health = useQuery({
+    queryKey: ['health'],
+    queryFn: () => api<{ provider: string }>('/health'),
+    staleTime: 60_000,
+  })
 
   const all = useQuery({
     queryKey: ['records', ''],
@@ -38,8 +47,13 @@ export function Inbox() {
   const invalidate = () => client.invalidateQueries({ queryKey: ['records'] })
 
   const verify = useMutation({
-    mutationFn: (id: string) => api(`/records/${id}/verify`, { method: 'POST' }),
+    mutationFn: (id: string) => api<RecordRow>(`/records/${id}/verify`, { method: 'POST' }),
     onMutate: (id: string) => setBusy(id),
+    onSuccess: (record) => {
+      if (readByFallback(record, health.data?.provider)) {
+        toast({ kind: 'warn', title: FALLBACK_TITLE, body: FALLBACK_BODY })
+      }
+    },
     onSettled: () => {
       setBusy(null)
       invalidate()
@@ -59,7 +73,21 @@ export function Inbox() {
       }
       return state
     },
-    onSuccess: invalidate,
+    onSuccess: async (job) => {
+      invalidate()
+      // One notice for the whole run, not one per record.
+      const page = await api<RecordsPage>('/records')
+      const degraded = page.records.filter((r) =>
+        readByFallback(r, health.data?.provider),
+      ).length
+      if (degraded > 0) {
+        toast({
+          kind: 'warn',
+          title: FALLBACK_TITLE,
+          body: `${degraded} of ${job.completed} labels were read by local OCR because the vision reader was unavailable. ${FALLBACK_BODY}`,
+        })
+      }
+    },
   })
 
   const counts = all.data?.counts

@@ -1,7 +1,8 @@
-"""OpenAI-compatible vision reader - serves both OpenAI and Gemini (PRD §5.2).
+"""OpenAI vision reader (PRD §5.2).
 
-Gemini exposes an OpenAI-compatible endpoint, so one client covers both
-providers; only the API key, base URL, and model string differ.
+Written against the OpenAI Chat Completions API. It stays a thin adapter on
+purpose: any OpenAI-compatible endpoint is a base-URL change, which is how a
+second provider would be added back if one is ever needed.
 
 ponytail: synchronous client. The routes that call it are sync `def`, so
 FastAPI already runs them in a threadpool. Move to AsyncOpenAI when M5's
@@ -25,12 +26,9 @@ from models import CaptureQuality, FieldReading, LabelReading, WarningReading
 from readers.prep import prepare
 from readers.prompts import PROMPT, SCHEMA, VERSION
 
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-
-# PRD §5.2: Gemini 3 rejects `minimal` and cannot disable reasoning, so effort
-# is clamped to a per-provider floor.
+# PRD §5.2 clamps configured effort to a per-provider floor.
 _EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-_EFFORT_FLOOR = {"gemini": "low", "openai": "none"}
+_EFFORT_FLOOR = {"openai": "none"}
 
 RETRIES = 2
 
@@ -118,8 +116,9 @@ class VisionReader:
         self.daily_call_cap = daily_call_cap
         if not api_key:
             raise ReaderError(f"{provider}: no API key configured")
-        url = base_url or (GEMINI_BASE_URL if provider == "gemini" else None)
-        self.client = OpenAI(api_key=api_key, base_url=url, timeout=timeout_s, max_retries=0)
+        self.client = OpenAI(
+            api_key=api_key, base_url=base_url or None, timeout=timeout_s, max_retries=0
+        )
         self.usage = Usage()
 
     def read(self, specimen: str, image_path: Path | None = None) -> LabelReading:
@@ -175,16 +174,10 @@ class VisionReader:
         """Provider-specific request knobs, as the live APIs actually accept
         them (PRD §5.2, verified against both providers).
 
-        Two corrections to the PRD's description, each found by calling the real
-        endpoint rather than trusting the spec:
-
-        1. Gemini's OpenAI-compatibility layer accepts `reasoning_effort`
-           directly. Sending `thinking_level` - the native Gemini name - is a
-           400 ("Unknown name \"thinking_level\""), whether passed as a keyword
-           or through extra_body.
-        2. OpenAI's `service_tier` does not accept "standard". The valid values
-           are auto, default, fast, flex and priority, so the PRD's default is
-           mapped onto `auto`.
+        One correction to the PRD, found by calling the real endpoint rather
+        than trusting the spec: `service_tier` does not accept "standard". The
+        valid values are auto, default, fast, flex and priority, so the PRD's
+        default is mapped onto `auto`.
         """
         kwargs: dict[str, Any] = {"service_tier": _SERVICE_TIER.get(
             self.service_tier, self.service_tier
@@ -193,7 +186,7 @@ class VisionReader:
         # a gpt-4.x model is a 400. Gate on the model name rather than probing.
         # ponytail: name-prefix check, swap for a capability lookup if either
         # provider ever ships one.
-        if self.provider == "gemini" or _REASONING_MODEL.match(self.model):
+        if _REASONING_MODEL.match(self.model):
             kwargs["reasoning_effort"] = self.effort
         return kwargs
 

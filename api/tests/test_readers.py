@@ -20,31 +20,19 @@ def _reader(provider: str, model: str = "m", effort: str = "low") -> VisionReade
 
 
 def test_effort_is_clamped_to_the_provider_floor() -> None:
-    """PRD §5.2 / acceptance test 16: Gemini rejects anything below `low`."""
-    assert clamp_effort("gemini", "minimal") == "low"
-    assert clamp_effort("gemini", "none") == "low"
-    assert clamp_effort("gemini", "high") == "high"
+    """PRD §5.2: configured effort is raised to the provider's floor."""
     assert clamp_effort("openai", "none") == "none"
     assert clamp_effort("openai", "medium") == "medium"
     # An unrecognised value falls to the floor rather than being forwarded.
-    assert clamp_effort("gemini", "nonsense") == "low"
-
-
-def test_gemini_uses_reasoning_effort_not_thinking_level() -> None:
-    """Regression: Gemini's OpenAI-compatibility layer 400s on `thinking_level`
-    ('Unknown name "thinking_level"'), by keyword or via extra_body."""
-    kwargs = _reader("gemini", "gemini-3.7-flash")._effort_kwargs()
-    assert "thinking_level" not in str(kwargs)
-    assert kwargs["reasoning_effort"] == "low"
+    assert clamp_effort("openai", "nonsense") == "none"
 
 
 def test_service_tier_standard_is_mapped_to_a_value_the_api_accepts() -> None:
     """Regression: PRD §5.2 calls the default tier "standard"; OpenAI accepts
     only auto, default, fast, flex and priority."""
-    for provider in ("openai", "gemini"):
-        kwargs = _reader(provider)._effort_kwargs()
-        assert kwargs["service_tier"] != "standard"
-        assert kwargs["service_tier"] == "auto"
+    kwargs = _reader("openai")._effort_kwargs()
+    assert kwargs["service_tier"] != "standard"
+    assert kwargs["service_tier"] == "auto"
 
 
 def test_reasoning_effort_is_withheld_from_non_reasoning_models() -> None:
@@ -59,15 +47,13 @@ def test_a_vision_reader_without_a_key_fails_fast() -> None:
         VisionReader(provider="openai", model="m", api_key="")
 
 
-def test_gemini_gets_the_compatibility_base_url() -> None:
-    assert "generativelanguage" in str(_reader("gemini").client.base_url)
-
-
 def test_registry_returns_the_configured_reader() -> None:
     assert isinstance(get_reader("fake"), FakeReader)
     assert isinstance(get_reader("ocr"), OcrReader)
     with pytest.raises(ValueError, match="unknown reader provider"):
         get_reader("nope")
+    with pytest.raises(ValueError, match="unknown reader provider"):
+        get_reader("gemini")
 
 
 @pytest.mark.parametrize("specimen", ["old-tom-pass.png", "saltmarsh-glare.jpg"])
