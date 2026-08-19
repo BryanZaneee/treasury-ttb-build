@@ -560,6 +560,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 }
 .worklist-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; }
 .worklist-brand {
+  display: block;
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
@@ -567,6 +568,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
   text-overflow: ellipsis;
 }
 .worklist-meta {
+  display: block;
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--ink-6);
