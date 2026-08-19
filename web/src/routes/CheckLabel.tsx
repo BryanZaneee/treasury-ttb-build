@@ -154,43 +154,52 @@ export function CheckLabel() {
       <div className="card card-pad">
         <div className="card-title">Label image</div>
 
-        {shown ? (
-          <div className="row" style={{ margin: '14px 0', alignItems: 'flex-start' }}>
-            <div className="label-frame label-frame-sm">
-              <img src={shown} alt={`Label image ${source}`} />
-            </div>
-            <div>
-              <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
-                {source}
+        {/* One fixed-height slot for both states. Picking a file used to swap a
+            ~90px dropzone for a 200px preview and push the form below it down
+            the page. */}
+        <div className="specimen-slot">
+          {shown ? (
+            <div className="row" style={{ alignItems: 'center', height: '100%' }}>
+              <div className="label-frame label-frame-sm">
+                <img src={shown} alt={`Label image ${source}`} />
               </div>
-              <p className="card-note">
-                {file ? 'Uploaded from this device.' : 'A sample label, for testing.'}
-              </p>
-              <button className="btn btn-quiet btn-sm" style={{ marginTop: 10 }} onClick={clearImage}>
-                Choose a different image
-              </button>
+              <div>
+                <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
+                  {source}
+                </div>
+                <p className="card-note">
+                  {file ? 'Uploaded from this device.' : 'A sample label, for testing.'}
+                </p>
+                <button
+                  className="btn btn-quiet btn-sm"
+                  style={{ marginTop: 10 }}
+                  onClick={clearImage}
+                >
+                  Choose a different image
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <button
-            className={`dropzone${dragging ? ' dragging' : ''}`}
-            style={{ margin: '14px 0', width: '100%' }}
-            onClick={() => fileRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault()
-              setDragging(true)
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault()
-              setDragging(false)
-              takeFile(e.dataTransfer.files?.[0])
-            }}
-          >
-            <div className="dropzone-title">Drop a label image, or choose a file</div>
-            <div className="dropzone-hint">PNG, JPEG or WebP · up to 12 MB</div>
-          </button>
-        )}
+          ) : (
+            <button
+              className={`dropzone${dragging ? ' dragging' : ''}`}
+              style={{ width: '100%', height: '100%' }}
+              onClick={() => fileRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragging(true)
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDragging(false)
+                takeFile(e.dataTransfer.files?.[0])
+              }}
+            >
+              <div className="dropzone-title">Drop a label image, or choose a file</div>
+              <div className="dropzone-hint">PNG, JPEG or WebP · up to 12 MB</div>
+            </button>
+          )}
+        </div>
 
         <input
           ref={fileRef}
