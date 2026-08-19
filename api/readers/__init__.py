@@ -57,5 +57,6 @@ def get_reader(
             effort=effort or settings.reader_effort,
             service_tier=settings.reader_service_tier,
             timeout_s=settings.reader_timeout_s,
+            daily_call_cap=settings.daily_vision_call_cap,
         )
     raise ValueError(f"unknown reader provider: {provider!r} (expected one of {PROVIDERS})")

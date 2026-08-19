@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     reader_timeout_s: int = 25
     reader_concurrency: int = 10
     daily_spend_cap_usd: float = 50
+    # Paid vision calls allowed per UTC day, enforced in the reader layer.
+    # 0 disables the backstop. See readers/vision.py for why calls, not dollars.
+    daily_vision_call_cap: int = 300
 
     access_token: str = ""
     admin_token: str = ""

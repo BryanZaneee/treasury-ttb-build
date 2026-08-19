@@ -7,7 +7,9 @@ export default defineConfig(({ mode }) => {
   // .env lives at the repo root (shared with the API, per PRD §9), not in web/.
   const envDir = '..'
   const env = loadEnv(mode, envDir, '')
-  const base = env.PUBLIC_BASE_PATH || '/'
+  // process.env wins so a deploy can build for a subpath without editing the
+  // shared .env, which would break the local dev server at the same time.
+  const base = process.env.PUBLIC_BASE_PATH || env.PUBLIC_BASE_PATH || '/'
   return {
     base,
     envDir,

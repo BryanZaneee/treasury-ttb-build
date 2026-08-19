@@ -15,6 +15,7 @@ import json
 import re
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,38 @@ MAX_LONG_EDGE_NOTE = "prepared image"
 
 class ReaderError(RuntimeError):
     """The reader could not produce a usable reading. Callers fall back to OCR."""
+
+
+class SpendCapReached(ReaderError):
+    """The daily paid-call ceiling is spent. Verification degrades to rules."""
+
+
+# Defence in depth against a runaway or abused deployment (PRD §8). The primary
+# control is a hard spend limit on each provider dashboard; this is the
+# in-service backstop, so a breach degrades to rules-only verdicts rather than
+# silently spending.
+#
+# The PRD specifies the cap in dollars, which needs a per-model price table to
+# enforce honestly. Counting paid calls needs no price list and cannot drift out
+# of date, so that is what is enforced here.
+# ponytail: in-process counter, resets on restart and is per-worker. Move to the
+# audit table if the cap ever has to hold across restarts or workers.
+_calls: dict[str, int] = {}
+
+
+def _charge_one_call(cap: int) -> None:
+    today = datetime.now(UTC).date().isoformat()
+    spent = _calls.get(today, 0)
+    if cap and spent >= cap:
+        raise SpendCapReached(
+            f"daily paid-call cap of {cap} reached; verification is rules-only "
+            "until UTC midnight"
+        )
+    _calls[today] = spent + 1
+
+
+def calls_today() -> int:
+    return _calls.get(datetime.now(UTC).date().isoformat(), 0)
 
 
 @dataclass
@@ -74,6 +107,7 @@ class VisionReader:
         effort: str = "low",
         service_tier: str = "standard",
         timeout_s: float = 25.0,
+        daily_call_cap: int = 0,
     ) -> None:
         self.provider = provider
         self.name = provider
@@ -81,6 +115,7 @@ class VisionReader:
         self.effort = clamp_effort(provider, effort)
         self.service_tier = service_tier
         self.prompt_version = VERSION
+        self.daily_call_cap = daily_call_cap
         if not api_key:
             raise ReaderError(f"{provider}: no API key configured")
         url = base_url or (GEMINI_BASE_URL if provider == "gemini" else None)
@@ -96,6 +131,8 @@ class VisionReader:
         for attempt in range(RETRIES + 1):
             try:
                 return self._extract(encoded)
+            except SpendCapReached:
+                raise
             except (APIError, ValueError, KeyError, json.JSONDecodeError) as exc:
                 last = exc
                 if attempt < RETRIES:
@@ -103,6 +140,7 @@ class VisionReader:
         raise ReaderError(f"{self.provider}/{self.model}: {last}") from last
 
     def _extract(self, encoded_jpeg: str) -> LabelReading:
+        _charge_one_call(self.daily_call_cap)
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[

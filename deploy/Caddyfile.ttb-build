@@ -1,0 +1,20 @@
+# Add inside the existing `bryanzane.com, www.bryanzane.com { ... }` block,
+# alongside the /llmbench and /com-voices subpath apps it already serves.
+#
+# handle_path strips the /ttb-build prefix, so the SPA sees paths at its own
+# root and the API sees /api/* exactly as it does locally.
+
+redir /ttb-build /ttb-build/ permanent
+
+handle_path /ttb-build/* {
+	@ttb_api path /api/*
+	reverse_proxy @ttb_api 127.0.0.1:8020 {
+		# Verification streams field results as they resolve; buffering would
+		# hold the whole response and defeat the point.
+		flush_interval -1
+	}
+
+	root * /var/www/ttb-build/web
+	try_files {path} /index.html
+	file_server
+}

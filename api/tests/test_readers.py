@@ -87,3 +87,21 @@ def test_fake_reader_conforms_to_the_reading_schema(specimen: str) -> None:
 def test_fake_reader_rejects_an_unknown_specimen() -> None:
     with pytest.raises(KeyError):
         FakeReader().read("not-a-fixture.png")
+
+
+def test_daily_call_cap_stops_paid_requests_and_does_not_retry() -> None:
+    """PRD §8: the in-service backstop degrades rather than spending. A cap
+    breach must not be retried - it cannot clear inside the retry window."""
+    from readers import vision
+
+    vision._calls.clear()
+    reader = VisionReader(provider="openai", model="m", api_key="k", daily_call_cap=2)
+    vision._charge_one_call(2)
+    vision._charge_one_call(2)
+    assert vision.calls_today() == 2
+    with pytest.raises(vision.SpendCapReached):
+        vision._charge_one_call(2)
+    # A zero cap disables the backstop entirely.
+    vision._charge_one_call(0)
+    assert reader.daily_call_cap == 2
+    vision._calls.clear()
