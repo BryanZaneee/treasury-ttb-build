@@ -37,7 +37,7 @@ def test_create_record_requires_token() -> None:
     assert resp.status_code == 401
 
 
-def test_create_record_stub() -> None:
+def test_create_record_against_a_bundled_specimen() -> None:
     resp = client.post(
         "/api/records",
         headers=ACCESS,
@@ -48,6 +48,7 @@ def test_create_record_stub() -> None:
                 '{"brand": "Old Tom", "class_type": "Bourbon", "abv": "45%", '
                 '"net": "750 mL"}'
             ),
+            "specimen_key": "old-tom-pass.png",
         },
         files={},
     )
@@ -58,7 +59,7 @@ def test_create_record_stub() -> None:
     assert body["result"] is None
 
 
-def _create_record() -> str:
+def _create_record(specimen: str = "old-tom-pass.png") -> str:
     resp = client.post(
         "/api/records",
         headers=ACCESS,
@@ -69,6 +70,7 @@ def _create_record() -> str:
                 '{"brand": "Old Tom", "class_type": "Bourbon", "abv": "45%", '
                 '"net": "750 mL"}'
             ),
+            "specimen_key": specimen,
         },
         files={},
     )
@@ -114,7 +116,7 @@ def _seed_and_get(filename: str) -> str:
 
 
 def test_verify_unknown_specimen_is_rejected() -> None:
-    record_id = _create_record()
+    record_id = _create_record(specimen="not-a-fixture.png")
     resp = client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
     assert resp.status_code == 422
 
@@ -497,3 +499,111 @@ def test_bulk_verify_requires_ids() -> None:
     job = _await_job(resp.json()["id"])
     assert job["state"] == "error"
     assert "record_ids" in (job["error"] or "")
+
+
+def _png(colour: str = "red") -> bytes:
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (40, 60), colour).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _upload(name: str, data: bytes, applicant: str = "Acme Distilling") -> object:
+    return client.post(
+        "/api/records",
+        headers=ACCESS,
+        data={
+            "applicant": applicant,
+            "beverage": "spirits",
+            "application": (
+                '{"brand": "Old Tom", "class_type": "Bourbon", "abv": "45%", "net": "750 mL"}'
+            ),
+        },
+        files={"image": (name, data, "image/png")},
+    )
+
+
+def test_uploading_a_label_stores_it_content_addressed() -> None:
+    resp = _upload("my label.png", _png())
+    assert resp.status_code == 201  # type: ignore[attr-defined]
+    body = resp.json()  # type: ignore[attr-defined]
+    assert body["filename"] == "my label.png", "the original name is kept for display"
+    assert body["specimen"].endswith(".png")
+    assert len(body["specimen"]) == 68, "sha256 hex plus extension"
+    assert (db.data_dir() / "images" / body["specimen"]).exists()
+
+
+def test_two_uploads_sharing_a_name_do_not_overwrite_each_other() -> None:
+    first = _upload("label.png", _png("red")).json()  # type: ignore[attr-defined]
+    second = _upload("label.png", _png("blue")).json()  # type: ignore[attr-defined]
+    assert first["specimen"] != second["specimen"]
+    assert (db.data_dir() / "images" / first["specimen"]).exists()
+    assert (db.data_dir() / "images" / second["specimen"]).exists()
+
+
+def test_an_upload_cannot_overwrite_a_bundled_fixture() -> None:
+    seed.seed_store()
+    original = (db.data_dir() / "images" / "old-tom-pass.png").read_bytes()
+    _upload("old-tom-pass.png", _png("blue"))
+    assert (db.data_dir() / "images" / "old-tom-pass.png").read_bytes() == original
+
+
+def test_a_non_image_upload_is_refused() -> None:
+    resp = _upload("label.png", b"not an image at all")
+    assert resp.status_code == 422  # type: ignore[attr-defined]
+    assert "PNG" in resp.json()["detail"]  # type: ignore[attr-defined]
+
+
+def test_sending_both_an_image_and_a_specimen_key_is_refused() -> None:
+    """They resolve to different specimens, and the handler used to silently
+    prefer the sample while still writing the upload to disk."""
+    resp = client.post(
+        "/api/records",
+        headers=ACCESS,
+        data={
+            "applicant": "Acme",
+            "beverage": "spirits",
+            "application": (
+                '{"brand": "Old Tom", "class_type": "Bourbon", "abv": "45%", "net": "750 mL"}'
+            ),
+            "specimen_key": "old-tom-pass.png",
+        },
+        files={"image": ("label.png", _png(), "image/png")},
+    )
+    assert resp.status_code == 422
+    assert "not both" in resp.json()["detail"]
+
+
+def test_a_record_needs_a_specimen() -> None:
+    resp = client.post(
+        "/api/records",
+        headers=ACCESS,
+        data={
+            "applicant": "Acme",
+            "beverage": "spirits",
+            "application": (
+                '{"brand": "Old Tom", "class_type": "Bourbon", "abv": "45%", "net": "750 mL"}'
+            ),
+        },
+        files={},
+    )
+    assert resp.status_code == 422
+
+
+def test_an_uploaded_label_is_what_verify_resolves() -> None:
+    """The record must point at the uploaded bytes, not at a fixture.
+
+    read_specimen falls back to `fixtures/<specimen>` when the stored path is
+    missing, so a specimen key that could collide with a fixture name would let
+    an upload be verified against somebody else's label.
+    """
+    from pathlib import Path
+
+    body = _upload("old-tom-pass.png", _png("blue")).json()  # type: ignore[attr-defined]
+    stored = db.data_dir() / "images" / body["specimen"]
+    assert stored.exists(), "verify resolves this path first"
+    assert not (Path("fixtures") / body["specimen"]).exists(), "and cannot fall back to a fixture"
+    assert body["specimen"] != "old-tom-pass.png"

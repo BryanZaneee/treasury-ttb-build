@@ -16,6 +16,7 @@ from pydantic import BaseModel
 import batching
 import db
 import seed
+import uploads
 from batching import BatchCsvError
 
 router = APIRouter(tags=["batches"])
@@ -95,7 +96,7 @@ def stage_batch(
     # the next fixture reset clears.
     names = []
     for image in images:
-        name = (image.filename or "").rsplit("/", 1)[-1]
+        name = uploads.safe_basename(image.filename or "")
         if not name:
             continue
         (db.data_dir() / "images" / name).write_bytes(image.file.read())

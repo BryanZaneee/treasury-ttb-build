@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 import adjudicate
 import db
+import uploads
 from config import settings
 from models import Application, FieldResult, LabelReading, Record
 from readers import get_reader
@@ -91,15 +92,34 @@ def create_record(
     image: UploadFile | None = None,
 ) -> Record:
     app = Application.model_validate_json(application)
+
+    # One source for the specimen, or the record would carry an image it never
+    # reads: `specimen` used to prefer specimen_key, so a request with both
+    # wrote the upload to disk and then verified the sample instead.
+    uploaded = image if image is not None and image.filename else None
+    if uploaded is not None and specimen_key:
+        raise HTTPException(
+            status_code=422,
+            detail="send an uploaded image or a specimen_key, not both",
+        )
+    if uploaded is None and not specimen_key:
+        raise HTTPException(status_code=422, detail="an image or a specimen_key is required")
+
     record_id = db.next_record_id()
-    filename = (image.filename if image else None) or specimen_key or ""
+    filename = uploads.safe_basename(uploaded.filename or "") if uploaded else specimen_key or ""
+    specimen = specimen_key or ""
+    if uploaded is not None:
+        try:
+            specimen = uploads.store(uploaded.file.read(), db.data_dir() / "images")
+        except uploads.UploadError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     record: dict[str, Any] = {
         "id": record_id,
         "received": datetime.now(UTC).isoformat(),
         "applicant": applicant,
         "beverage": beverage,
         "filename": filename,
-        "specimen": specimen_key or filename,
+        "specimen": specimen,
         "quality": None,
         "app_brand": app.brand,
         "app_class_type": app.class_type,
@@ -111,10 +131,6 @@ def create_record(
         "verified": False,
         "result": None,
     }
-    if image is not None:
-        image_bytes = image.file.read()
-        # Client-supplied filename: keep the basename only, never a path.
-        (db.data_dir() / "images" / Path(filename).name).write_bytes(image_bytes)
     db.insert_record(record)
     row = db.get_record(record_id)
     assert row is not None  # just inserted, must exist
