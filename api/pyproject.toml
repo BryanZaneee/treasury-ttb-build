@@ -5,8 +5,11 @@ description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.141.1",
+    "openai>=3.3.0",
+    "pillow>=12.3.0",
     "pydantic>=2",
     "pydantic-settings>=2.15.0",
+    "pytesseract>=0.3.13",
     "python-multipart>=0.0.32",
     "uvicorn[standard]>=0.52.4",
 ]
@@ -34,3 +37,9 @@ ignore = ["B008", "RUF012"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+
+# pytesseract ships no type stubs. Scoped to that one module rather than
+# loosening strict mode globally.
+[[tool.mypy.overrides]]
+module = "pytesseract.*"
+ignore_missing_imports = true
