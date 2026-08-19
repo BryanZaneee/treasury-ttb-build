@@ -1,16 +1,17 @@
 """Fixture and store-import endpoints (PRD §5.1)."""
 
-from typing import Literal
+from typing import Any, Literal
 
-from fastapi import APIRouter, File, Header, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 import batching
+import csv_io
 import db
 import seed
 from config import settings
-from csv_io import CsvImportError, from_csv
+from csv_io import CsvImportError, from_csv, parse_bool, unpack_field_results
 from routers.batches import StagedBatch, stage_sample_batch
 
 router = APIRouter(tags=["store"])
@@ -30,6 +31,7 @@ class FixturesResponse(BaseModel):
 class StoreImportResponse(BaseModel):
     imported: int = 0
     skipped: int = 0
+    errors: list[str] = []
 
 
 def _require_admin(authorization: str | None) -> None:
@@ -42,9 +44,10 @@ def _require_admin(authorization: str | None) -> None:
 def export_records_csv() -> Response:
     """The CSV mirror (PRD §4.2). Caddy serves this straight off the data volume
     in production; locally there is no Caddy, so the API stands in."""
-    db.write_mirror()
+    # Generated here rather than read back off disk: the mirror file is written
+    # by a debounced background timer, so reading it races that writer.
     return Response(
-        content=(db.data_dir() / "records.csv").read_bytes(),
+        content=csv_io.to_csv(db.mirror_rows()),
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="records.csv"'},
     )
@@ -80,18 +83,34 @@ def fixtures(
 
 
 @router.post("/store/import", response_model=StoreImportResponse)
-def import_store(csv_file: UploadFile = File(...)) -> StoreImportResponse:
+def import_store(
+    csv_file: UploadFile = File(...),
+    mode: Literal["merge", "replace"] = Form("merge"),
+) -> StoreImportResponse:
+    """Restore records from a CSV mirror (PRD §5.1, S11).
+
+    Merge upserts by id, so re-importing an export is idempotent rather than a
+    primary-key violation. Replace wipes first, which is what makes
+    `export -> wipe -> import -> export` byte-identical. Both snapshot first.
+    """
     data = csv_file.file.read()
     try:
         rows = from_csv(data)
     except CsvImportError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    db.snapshot(reason="import")
-    imported = 0
-    for row in rows:
-        record_id = row.get("id") or f"imported-{imported}"
-        db.insert_record(
+    records: list[dict[str, Any]] = []
+    field_results: list[dict[str, Any]] = []
+    errors: list[str] = []
+
+    for index, row in enumerate(rows, start=1):
+        record_id = (row.get("id") or "").strip()
+        if not record_id:
+            # A generated id collides with the next import's generated id, so a
+            # row without one is an error the operator can act on, not a guess.
+            errors.append(f"row {index}: no id")
+            continue
+        records.append(
             {
                 "id": record_id,
                 "received": row.get("received") or "",
@@ -106,10 +125,10 @@ def import_store(csv_file: UploadFile = File(...)) -> StoreImportResponse:
                 "app_net_contents": row.get("app_net_contents") or "",
                 "app_producer": row.get("app_producer"),
                 "app_origin": row.get("app_origin"),
-                "app_warning_declared": row.get("app_warning_declared") == "True",
-                "verified": row.get("verified") == "True",
+                "app_warning_declared": parse_bool(row.get("app_warning_declared")),
+                "verified": parse_bool(row.get("verified")),
                 "result": row.get("result"),
-                "elapsed_ms": row.get("elapsed_ms"),
+                "elapsed_ms": _as_int(row.get("elapsed_ms")),
                 "engine": row.get("engine"),
                 "decision": row.get("decision"),
                 "decided_by": row.get("decided_by"),
@@ -117,5 +136,26 @@ def import_store(csv_file: UploadFile = File(...)) -> StoreImportResponse:
                 "note": row.get("note"),
             }
         )
-        imported += 1
-    return StoreImportResponse(imported=imported, skipped=0)
+        field_results.extend(
+            unpack_field_results(
+                record_id, row.get("field_results") or "", row.get("field_notes") or ""
+            )
+        )
+
+    db.snapshot(reason=f"import-{mode}")
+    if mode == "replace":
+        db.wipe()
+    db.upsert_records(records)
+    for record_id in {r["record_id"] for r in field_results}:
+        db.clear_field_results(record_id)
+    db.upsert_field_results_many(field_results)
+    db.append_audit(
+        None, "import", {"mode": mode, "imported": len(records), "skipped": len(errors)}
+    )
+    return StoreImportResponse(imported=len(records), skipped=len(errors), errors=errors)
+
+
+def _as_int(value: object) -> int | None:
+    """CSV numbers arrive as strings; an INTEGER column should get an int."""
+    text = str(value or "").strip()
+    return int(text) if text.lstrip("-").isdigit() else None

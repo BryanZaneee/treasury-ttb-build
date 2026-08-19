@@ -156,6 +156,30 @@ def clear_field_results(record_id: str) -> None:
     schedule_mirror_write()
 
 
+def upsert_records(rows: list[dict[str, Any]]) -> None:
+    """Insert or update many records in ONE transaction.
+
+    Import used to open a transaction per row, so a failure halfway left the
+    store partly overwritten with no way to tell how far it got. Either the
+    whole file lands or none of it does.
+    """
+    if not rows:
+        return
+    with transaction() as conn:
+        for row in rows:
+            columns = [c for c in RECORD_COLUMNS if c in row]
+            placeholders = ", ".join("?" for _ in columns)
+            updates = ", ".join(f"{c}=excluded.{c}" for c in columns if c != "id")
+            conn.execute(
+                f"""
+                INSERT INTO records ({", ".join(columns)}) VALUES ({placeholders})
+                ON CONFLICT (id) DO UPDATE SET {updates}
+                """,
+                [row[c] for c in columns],
+            )
+    schedule_mirror_write()
+
+
 def get_record(record_id: str) -> sqlite3.Row | None:
     conn = connect()
     try:
@@ -226,6 +250,27 @@ def upsert_field_results(record_id: str, results: list[dict[str, Any]]) -> None:
             conn.execute(
                 f"""
                 INSERT INTO field_results ({', '.join(columns)}) VALUES ({placeholders})
+                ON CONFLICT (record_id, field_key) DO UPDATE SET {updates}
+                """,
+                [row[c] for c in columns],
+            )
+    schedule_mirror_write()
+
+
+def upsert_field_results_many(rows: list[dict[str, Any]]) -> None:
+    """Field results for many records in one transaction, for import."""
+    if not rows:
+        return
+    with transaction() as conn:
+        for row in rows:
+            columns = [c for c in FIELD_RESULT_COLUMNS if c in row]
+            placeholders = ", ".join("?" for _ in columns)
+            updates = ", ".join(
+                f"{c}=excluded.{c}" for c in columns if c not in ("record_id", "field_key")
+            )
+            conn.execute(
+                f"""
+                INSERT INTO field_results ({", ".join(columns)}) VALUES ({placeholders})
                 ON CONFLICT (record_id, field_key) DO UPDATE SET {updates}
                 """,
                 [row[c] for c in columns],

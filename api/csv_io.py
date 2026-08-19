@@ -47,6 +47,50 @@ class CsvImportError(Exception):
         super().__init__(message)
 
 
+_TRUE = {"1", "true", "yes", "y", "t"}
+
+
+def parse_bool(value: object) -> bool:
+    """A CSV boolean, however it was written.
+
+    The exporter writes SQLite's 1/0, a hand-authored file writes true/false,
+    and Python's str(True) writes True. Import used to compare against the last
+    of those only, so every exported record round-tripped as unverified.
+    """
+    return str(value or "").strip().casefold() in _TRUE
+
+
+def unpack_field_results(record_id: str, packed: str, notes: str) -> list[dict[str, Any]]:
+    """Rebuild field_results rows from the mirror's packed cells (PRD §4.2).
+
+    The mirror carries verdict and note only, so this restores what the
+    determination view reads. `reader_value`, `ocr_value`, `agreed` and
+    `confidence` are not in the CSV and do not come back - they are per-reader
+    evidence, not the determination.
+    """
+    note_by_key = {}
+    for chunk in (notes or "").split("|"):
+        key, sep, text = chunk.partition(":")
+        if sep and key.strip():
+            note_by_key[key.strip()] = text.strip()
+
+    rows: list[dict[str, Any]] = []
+    for chunk in (packed or "").split("|"):
+        key, sep, verdict = chunk.partition(":")
+        key, verdict = key.strip(), verdict.strip()
+        if not sep or not key or not verdict:
+            continue
+        rows.append(
+            {
+                "record_id": record_id,
+                "field_key": key,
+                "verdict": verdict,
+                "note": note_by_key.get(key),
+            }
+        )
+    return rows
+
+
 def from_csv(data: bytes) -> list[dict[str, Any]]:
     text = data.decode("utf-8-sig")  # tolerates a BOM
     reader = csv.DictReader(io.StringIO(text))

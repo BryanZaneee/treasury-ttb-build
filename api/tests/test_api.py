@@ -382,7 +382,94 @@ def test_store_import() -> None:
         files={"csv_file": ("records.csv", csv_bytes, "text/csv")},
     )
     assert resp.status_code == 200
-    assert resp.json() == {"imported": 1, "skipped": 0}
+    assert resp.json() == {"imported": 1, "skipped": 0, "errors": []}
+
+
+def _export() -> bytes:
+    resp = client.get("/api/export/records.csv")
+    assert resp.status_code == 200
+    return resp.content
+
+
+def _import(data: bytes, mode: str = "merge") -> dict[str, Any]:
+    resp = client.post(
+        "/api/store/import",
+        headers=ADMIN,
+        data={"mode": mode},
+        files={"csv_file": ("records.csv", data, "text/csv")},
+    )
+    assert resp.status_code == 200, resp.text
+    return dict(resp.json())
+
+
+def test_export_import_export_is_byte_identical() -> None:
+    """Acceptance test 10, against a store that has actually been verified.
+
+    The old import compared booleans to the string "True" while the exporter
+    writes SQLite's 1/0, so every verified record came back unverified, and
+    field results were parsed and then dropped entirely.
+    """
+    seed.seed_store()
+    job = client.post("/api/jobs", headers=ACCESS, json={"scope": "pending"}).json()
+    _await_job(job["id"])
+
+    before = _export()
+    assert b"brand:match" in before, "the export carries packed field results"
+
+    summary = _import(before, mode="replace")
+    assert summary["imported"] == 25
+    assert summary["skipped"] == 0
+
+    assert _export() == before
+
+
+def test_import_restores_verdicts_and_field_results() -> None:
+    seed.seed_store()
+    record_id = _seed_and_get("old-tom-pass.png")
+    client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
+    exported = _export()
+
+    client.post("/api/fixtures", headers=ADMIN, json={"mode": "reset"})
+    _import(exported, mode="replace")
+
+    detail = client.get(f"/api/records/{record_id}").json()
+    assert detail["verified"] is True, "booleans survive the round trip"
+    assert detail["result"] == "match"
+    assert {f["field_key"] for f in detail["field_results"]} == {
+        "brand", "classType", "abv", "net", "producer", "warning",
+    }
+    assert all(f["verdict"] == "match" for f in detail["field_results"])
+
+
+def test_importing_the_same_file_twice_is_idempotent() -> None:
+    """Re-importing an export used to raise a primary-key violation on the
+    first row and escape as a 500, after committing some rows."""
+    seed.seed_store()
+    exported = _export()
+    first = _import(exported)
+    second = _import(exported)
+    assert first == second
+    assert len(client.get("/api/records").json()["records"]) == 25
+
+
+def test_import_reports_rows_it_could_not_take() -> None:
+    csv_bytes = (
+        b"id,app_brand\n"
+        b"rec-1,Old Tom\n"
+        b",No Id Here\n"
+    )
+    summary = _import(csv_bytes)
+    assert summary["imported"] == 1
+    assert summary["skipped"] == 1
+    assert "row 2" in summary["errors"][0]
+
+
+def test_replace_mode_leaves_only_what_the_file_contained() -> None:
+    seed.seed_store()
+    csv_bytes = b"id,app_brand,app_class_type,app_alcohol_content,app_net_contents\nrec-1,Old Tom,Bourbon,45%,750 mL\n"
+    _import(csv_bytes, mode="replace")
+    records = client.get("/api/records").json()["records"]
+    assert [r["id"] for r in records] == ["rec-1"]
 
 
 def test_fixtures_reset_requires_admin() -> None:
