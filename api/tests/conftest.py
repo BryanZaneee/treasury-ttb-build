@@ -9,6 +9,8 @@ import pytest
 
 _TEST_DATA_DIR = tempfile.mkdtemp(prefix="ttb-test-data-")
 os.environ["DATA_DIR"] = _TEST_DATA_DIR
+# CI reads with the fixture replayer: no network, no spend (PRD §5.4).
+os.environ["READER_PROVIDER"] = "fake"
 os.environ.setdefault("ACCESS_TOKEN", "test-access-token")
 os.environ.setdefault("ADMIN_TOKEN", "test-admin-token")
 

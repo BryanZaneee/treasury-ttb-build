@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 import csv_io
+from adjudicate import FIELD_KEYS as FIELD_ORDER
 from config import settings
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
@@ -131,6 +132,30 @@ def insert_record(row: dict[str, Any]) -> None:
     schedule_mirror_write()
 
 
+def update_record(record_id: str, **columns: Any) -> None:
+    """Patch named columns on one record. Unknown column names are rejected
+    rather than silently dropped - a typo here would lose a verdict."""
+    unknown = set(columns) - set(RECORD_COLUMNS)
+    if unknown:
+        raise ValueError(f"unknown record columns: {sorted(unknown)}")
+    if not columns:
+        return
+    assignments = ", ".join(f"{c} = ?" for c in columns)
+    with transaction() as conn:
+        conn.execute(
+            f"UPDATE records SET {assignments} WHERE id = ?",
+            [*columns.values(), record_id],
+        )
+    schedule_mirror_write()
+
+
+def clear_field_results(record_id: str) -> None:
+    """Editing an application invalidates its prior verdict (PRD §5.1)."""
+    with transaction() as conn:
+        conn.execute("DELETE FROM field_results WHERE record_id = ?", (record_id,))
+    schedule_mirror_write()
+
+
 def get_record(record_id: str) -> sqlite3.Row | None:
     conn = connect()
     try:
@@ -209,14 +234,32 @@ def upsert_field_results(record_id: str, results: list[dict[str, Any]]) -> None:
 
 
 def get_field_results(record_id: str) -> list[sqlite3.Row]:
+    """Ordered as PRD §3.1 lists the fields, not alphabetically - the
+    determination view reads top to bottom the way the table is written."""
     conn = connect()
     try:
-        return conn.execute(
-            "SELECT * FROM field_results WHERE record_id = ? ORDER BY field_key",
-            (record_id,),
+        rows = conn.execute(
+            "SELECT * FROM field_results WHERE record_id = ?", (record_id,)
         ).fetchall()
     finally:
         conn.close()
+    order = {key: i for i, key in enumerate(FIELD_ORDER)}
+    return sorted(rows, key=lambda r: order.get(r["field_key"], len(order)))
+
+
+def next_record_id() -> str:
+    """COLA-YYYY-NNNN, continuing the highest number already in the store."""
+    conn = connect()
+    try:
+        rows = conn.execute("SELECT id FROM records WHERE id LIKE 'COLA-%'").fetchall()
+    finally:
+        conn.close()
+    highest = 4099
+    for row in rows:
+        parts = row["id"].split("-")
+        if len(parts) == 3 and parts[2].isdigit():
+            highest = max(highest, int(parts[2]))
+    return f"COLA-{datetime.now(UTC).year}-{highest + 1}"
 
 
 def wipe() -> None:

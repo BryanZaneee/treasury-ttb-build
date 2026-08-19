@@ -25,6 +25,7 @@
     },
     "quality": "normal",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -61,6 +62,7 @@
     },
     "quality": "normal",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "review",
       "classType": "match",
@@ -97,6 +99,7 @@
     },
     "quality": "normal",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -133,6 +136,7 @@
     },
     "quality": "normal",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -169,6 +173,7 @@
     },
     "quality": "normal",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -205,6 +210,7 @@
     },
     "quality": "normal",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -242,6 +248,7 @@
     },
     "quality": "blurry",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -280,6 +287,7 @@
     "illegible": [
       "net"
     ],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -318,6 +326,7 @@
     "illegible": [
       "brand"
     ],
+    "degraded": [],
     "field_verdicts": {
       "brand": "fail",
       "classType": "match",
@@ -354,6 +363,7 @@
     },
     "quality": "angled",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -391,6 +401,7 @@
     },
     "quality": "normal",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -427,6 +438,7 @@
     },
     "quality": "normal",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -466,6 +478,7 @@
       "abv",
       "warning"
     ],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -504,6 +517,7 @@
     "illegible": [
       "abv"
     ],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -542,6 +556,7 @@
     "illegible": [
       "classType"
     ],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "fail",
@@ -578,6 +593,7 @@
     },
     "quality": "normal",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -617,6 +633,7 @@
     "illegible": [
       "warning"
     ],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -655,6 +672,7 @@
     "illegible": [
       "producer"
     ],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -693,6 +711,7 @@
     "illegible": [
       "warning"
     ],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -729,6 +748,9 @@
     },
     "quality": "angled",
     "illegible": [],
+    "degraded": [
+      "net"
+    ],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -766,6 +788,7 @@
     },
     "quality": "blurry",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -802,6 +825,7 @@
     },
     "quality": "normal",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -841,6 +865,7 @@
     "illegible": [
       "brand"
     ],
+    "degraded": [],
     "field_verdicts": {
       "brand": "fail",
       "classType": "match",
@@ -879,6 +904,7 @@
     "illegible": [
       "net"
     ],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",
@@ -915,6 +941,7 @@
     },
     "quality": "normal",
     "illegible": [],
+    "degraded": [],
     "field_verdicts": {
       "brand": "match",
       "classType": "match",

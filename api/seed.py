@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import csv
 import shutil
-import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -25,7 +24,7 @@ def read_applications() -> list[dict[str, Any]]:
         return list(csv.DictReader(f))
 
 
-def _copy_images() -> None:
+def copy_fixture_images() -> None:
     images_dir = db.data_dir() / "images"
     for row in read_applications():
         src = FIXTURES_DIR / row["filename"]
@@ -40,7 +39,7 @@ def seed_store() -> int:
     for app in applications:
         db.insert_record(
             {
-                "id": f"COLA-{uuid.uuid4().hex[:8].upper()}",
+                "id": db.next_record_id(),
                 "received": received,
                 "applicant": app["applicant"],
                 "beverage": app["class_type"],
@@ -58,7 +57,7 @@ def seed_store() -> int:
                 "result": None,
             }
         )
-    _copy_images()
+    copy_fixture_images()
     return len(applications)
 
 
