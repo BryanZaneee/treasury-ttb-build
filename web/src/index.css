@@ -393,18 +393,6 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 .area-step2 { grid-area: step2; }
 .area-run { grid-area: run; }
 .area-nofiles { grid-area: nofiles; }
-.sample-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
-.sample {
-  display: flex; gap: 9px; align-items: flex-start; text-align: left;
-  border: 1px solid var(--rule); background: var(--paper); border-radius: 4px; padding: 10px;
-  min-height: 0; font: inherit; color: inherit;
-}
-.sample:hover { border-color: #9fb4c8; background: var(--paper); }
-.sample[aria-pressed='true'] { border: 2px solid var(--link); background: #f7fafd; padding: 9px; }
-.sample-thumb { width: 34px; height: 46px; border: 1px solid var(--rule); background: #faf7f0; flex: none; overflow: hidden; }
-.sample-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.sample-title { display: block; font-size: 12.5px; font-weight: 700; color: var(--ink); line-height: 1.25; }
-.sample-hint { display: block; font-size: 11px; color: var(--ink-5); margin-top: 3px; line-height: 1.35; }
 .dropzone {
   border: 1px dashed var(--field); border-radius: 4px; background: var(--sunk-2);
   padding: 26px; text-align: center;
@@ -575,22 +563,24 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
   margin-top: 2px;
 }
 
-/* ---------------- sample specimens ---------------- */
-
-.sample-tag {
-  display: inline-block;
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  background: var(--review-bg);
-  border: 1px solid var(--review-bd);
-  color: var(--review-fg);
-  padding: 1px 4px;
-  border-radius: 2px;
-  margin-bottom: 3px;
+/* A fixed frame for the label, so the page stops resizing as a reviewer works
+   through the queue: card height was previously driven by each label's aspect
+   ratio. `contain` rather than `cover` because the panel exists to be read, and
+   the government warning is the smallest type on the label and the first thing
+   a crop would take. */
+.label-frame {
+  aspect-ratio: 3 / 4;
+  background: #efeadd;
+  border: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  overflow: hidden;
 }
+.label-frame img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.label-frame-sm { aspect-ratio: 3 / 4; width: 150px; flex: none; padding: 8px; }
+
 
 @media (max-width: 1200px) {
   /* The worklist drops below the findings before anything else reflows. */
@@ -599,8 +589,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 }
 @media (max-width: 1100px) {
   .kpis { grid-template-columns: repeat(2, 1fr); }
-  .sample-grid { grid-template-columns: repeat(3, 1fr); }
-}
+  }
 @media (max-width: 900px) {
   .split, .split-right, .split-3 { grid-template-columns: minmax(0, 1fr); }
   .grid-2 { grid-template-columns: minmax(0, 1fr); }
@@ -615,8 +604,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 @media (max-width: 720px) {
   main { padding: 18px 14px 56px; }
   .kpis { grid-template-columns: 1fr; }
-  .sample-grid { grid-template-columns: repeat(2, 1fr); }
-}
+  }
 
 /* ---------------- toasts ---------------- */
 
@@ -663,3 +651,6 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 .chip-warn { background: var(--review-bg); border-color: var(--review-bd); color: var(--review-fg); }
 .btn.disabled { opacity: 0.4; pointer-events: none; }
+.dropzone { width: 100%; font: inherit; color: inherit; min-height: 0; cursor: pointer; }
+.dropzone:hover { background: #f3f6f9; }
+.dropzone.dragging { border-color: var(--link); border-style: solid; background: #f0f6fb; }

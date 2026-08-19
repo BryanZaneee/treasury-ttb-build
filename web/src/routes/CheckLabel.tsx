@@ -1,9 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, imageUrl } from '../api/client'
 import type { RecordRow, SpecimenSummary } from '../api/client'
-import { QUALITY_LABEL } from '../lib/copy'
 import { useToast } from '../lib/toast'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
@@ -17,16 +16,30 @@ const BLANK = {
   warning: true,
 }
 
-/** S1/S2: file one application against a specimen, prefilled from a named sample. */
+const ACCEPTED = 'image/png,image/jpeg,image/webp'
+
+/**
+ * S1/S2: file one application against one label.
+ *
+ * A specimen is either an uploaded file or a bundled sample, never both — the
+ * API refuses a request carrying each, because the two resolve to different
+ * images and a record that carries one and verifies the other is worse than an
+ * error.
+ */
 export function CheckLabel() {
   const navigate = useNavigate()
   const client = useQueryClient()
+  const toast = useToast()
+
   const [application, setApplication] = useState({ ...BLANK })
   const [applicant, setApplicant] = useState('')
-  const [specimen, setSpecimen] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<string>('')
+  const [sample, setSample] = useState('')
+  const [dragging, setDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
-  const toast = useToast()
   const health = useQuery({
     queryKey: ['health'],
     queryFn: () => api<{ provider: string }>('/health'),
@@ -38,7 +51,6 @@ export function CheckLabel() {
     queryFn: () => api<SpecimenSummary[]>('/specimens'),
   })
   const named = (specimens.data ?? []).filter((s) => s.title)
-  const chosen = specimens.data?.find((s) => s.filename === specimen)
 
   const prefill = useMutation({
     mutationFn: (filename: string) =>
@@ -59,6 +71,38 @@ export function CheckLabel() {
     },
   })
 
+  const takeFile = (chosen: File | undefined) => {
+    if (!chosen) return
+    setSample('')
+    setFile(chosen)
+    setError(null)
+    // Revoke the previous object URL rather than leaking one per pick.
+    setPreview((old) => {
+      if (old) URL.revokeObjectURL(old)
+      return URL.createObjectURL(chosen)
+    })
+  }
+
+  const takeSample = (filename: string) => {
+    setSample(filename)
+    setFile(null)
+    setPreview((old) => {
+      if (old) URL.revokeObjectURL(old)
+      return ''
+    })
+    if (filename) prefill.mutate(filename)
+  }
+
+  const clearImage = () => {
+    setFile(null)
+    setSample('')
+    setPreview((old) => {
+      if (old) URL.revokeObjectURL(old)
+      return ''
+    })
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
   const submit = useMutation({
     mutationFn: async () => {
       const form = new FormData()
@@ -72,10 +116,11 @@ export function CheckLabel() {
           origin: application.origin || null,
         }),
       )
-      form.set('specimen_key', specimen)
+      if (file) form.set('image', file)
+      else form.set('specimen_key', sample)
+
       const record = await api<RecordRow>('/records', { method: 'POST', form })
-      const verified = await api<RecordRow>(`/records/${record.id}/verify`, { method: 'POST' })
-      return verified
+      return api<RecordRow>(`/records/${record.id}/verify`, { method: 'POST' })
     },
     onSuccess: (record) => {
       client.invalidateQueries({ queryKey: ['records'] })
@@ -90,10 +135,8 @@ export function CheckLabel() {
   const set = (key: keyof typeof BLANK, value: string | boolean) =>
     setApplication((prev) => ({ ...prev, [key]: value }))
 
-  const pick = (filename: string) => {
-    setSpecimen(filename)
-    prefill.mutate(filename)
-  }
+  const source = file ? file.name : sample
+  const shown = file ? preview : sample ? imageUrl(sample) : ''
 
   return (
     <div>
@@ -102,80 +145,76 @@ export function CheckLabel() {
           <div className="eyebrow">Step 1 of 2</div>
           <h1>Check one label</h1>
           <p className="lede">
-            Select a label specimen, enter the application data as filed, and submit for
+            Upload a label image, enter the application data as filed, and submit for
             verification. A new record is written to the review queue.
           </p>
         </div>
       </div>
 
       <div className="card card-pad">
-        <div className="card-title">Label specimen · bundled test specimens</div>
-        <p className="card-note">
-          <strong>These are synthetic samples for testing, not real applications.</strong> The
-          brands are fictional and no real trade dress is reproduced. Between them they cover
-          clean artwork and the degraded captures agents receive in the field, and each one
-          reproduces a documented verdict.
-        </p>
+        <div className="card-title">Label image</div>
 
-        {specimen ? (
+        {shown ? (
           <div className="row" style={{ margin: '14px 0', alignItems: 'flex-start' }}>
-            <div
-              style={{
-                width: 150,
-                border: '1px solid var(--rule)',
-                background: '#faf7f0',
-                flex: 'none',
-              }}
-            >
-              <img
-                src={imageUrl(specimen)}
-                alt={`Specimen ${specimen}`}
-                style={{ width: '100%', display: 'block' }}
-              />
+            <div className="label-frame label-frame-sm">
+              <img src={shown} alt={`Label image ${source}`} />
             </div>
             <div>
               <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
-                {specimen}
+                {source}
               </div>
-              <div className="row" style={{ gap: 8, marginTop: 8 }}>
-                <span className="chip">{QUALITY_LABEL[chosen?.quality ?? ''] ?? 'Clean capture'}</span>
-                <span className="chip">Expects {chosen?.expected_verdict}</span>
-              </div>
-              <button
-                className="btn btn-quiet btn-sm"
-                style={{ marginTop: 10 }}
-                onClick={() => setSpecimen('')}
-              >
-                Choose a different specimen
+              <p className="card-note">
+                {file ? 'Uploaded from this device.' : 'A sample label, for testing.'}
+              </p>
+              <button className="btn btn-quiet btn-sm" style={{ marginTop: 10 }} onClick={clearImage}>
+                Choose a different image
               </button>
             </div>
           </div>
         ) : (
-          <div className="dropzone" style={{ margin: '14px 0' }}>
-            <div className="dropzone-title">Select a bundled test specimen</div>
-            <div className="dropzone-hint">Synthetic samples · no specimen selected</div>
-          </div>
+          <button
+            className={`dropzone${dragging ? ' dragging' : ''}`}
+            style={{ margin: '14px 0', width: '100%' }}
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragging(true)
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragging(false)
+              takeFile(e.dataTransfer.files?.[0])
+            }}
+          >
+            <div className="dropzone-title">Drop a label image, or choose a file</div>
+            <div className="dropzone-hint">PNG, JPEG or WebP · up to 12 MB</div>
+          </button>
         )}
 
-        <div className="sample-grid">
-          {named.map((s) => (
-            <button
-              key={s.filename}
-              className="sample"
-              aria-pressed={specimen === s.filename}
-              onClick={() => pick(s.filename)}
-            >
-              <span className="sample-thumb">
-                <img src={imageUrl(s.filename)} alt="" />
-              </span>
-              <span>
-                <span className="sample-tag">Sample</span>
-                <span className="sample-title">{s.title}</span>
-                <span className="sample-hint">{s.hint}</span>
-              </span>
-            </button>
-          ))}
-        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept={ACCEPTED}
+          hidden
+          onChange={(e) => takeFile(e.target.files?.[0])}
+        />
+
+        <label className="field" style={{ maxWidth: 460, marginBottom: 0 }}>
+          <span className="field-label">Or use a sample label for testing</span>
+          <select value={sample} onChange={(e) => takeSample(e.target.value)}>
+            <option value="">No sample selected</option>
+            {named.map((s) => (
+              <option key={s.filename} value={s.filename}>
+                {s.title} — {s.hint}
+              </option>
+            ))}
+          </select>
+          <span className="card-note">
+            Synthetic labels with fictional brands. Each one reproduces a documented verdict, and
+            picking one fills the form below with the application it was filed against.
+          </span>
+        </label>
       </div>
 
       <div className="split-right" style={{ marginTop: 16 }}>
@@ -227,32 +266,24 @@ export function CheckLabel() {
         <div className="card card-pad">
           <div className="card-title">Submit</div>
           <p className="card-note">
-            {specimen
-              ? `Specimen ${specimen} (${(QUALITY_LABEL[chosen?.quality ?? ''] ?? 'clean capture').toLowerCase()}). Results are filed to the review inbox and persisted to the record store.`
-              : 'Select a specimen above to continue.'}
+            {source
+              ? `${source} will be verified and filed to the review inbox.`
+              : 'Add a label image above to continue.'}
           </p>
           {error && (
             <div className="banner-error" style={{ marginTop: 12 }}>
               {error}
             </div>
           )}
-          <div className="stack" style={{ gap: 10, marginTop: 14 }}>
-            <button
-              className="btn btn-wide"
-              onClick={() => submit.mutate()}
-              disabled={submit.isPending || !specimen || !application.brand}
-            >
-              {submit.isPending && <span className="spinner" />}
-              Submit for verification
-            </button>
-            <button
-              className="btn btn-quiet btn-wide"
-              disabled={!specimen || prefill.isPending}
-              onClick={() => specimen && prefill.mutate(specimen)}
-            >
-              Prefill from specimen sample data
-            </button>
-          </div>
+          <button
+            className="btn btn-wide"
+            style={{ marginTop: 14 }}
+            onClick={() => submit.mutate()}
+            disabled={submit.isPending || !source || !application.brand}
+          >
+            {submit.isPending && <span className="spinner" />}
+            Submit for verification
+          </button>
         </div>
       </div>
     </div>

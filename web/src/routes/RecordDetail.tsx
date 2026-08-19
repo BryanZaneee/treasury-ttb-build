@@ -119,16 +119,15 @@ export function RecordDetail() {
         <div className="stack">
           <div className="card card-pad">
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-              <div className="card-title">Label specimen</div>
+              <div className="card-title">Label image</div>
               <div className="mono" style={{ fontSize: 11, color: 'var(--ink-6)' }}>
                 {data.filename}
               </div>
             </div>
-            <div style={{ background: '#efeadd', border: '1px solid var(--rule)', padding: 18 }}>
+            <div className="label-frame">
               <img
                 src={imageUrl(data.specimen || data.filename)}
-                alt={`Label specimen for ${data.app_brand}`}
-                style={{ width: '100%', display: 'block' }}
+                alt={`Label image for ${data.app_brand}`}
               />
             </div>
             {readByFallback(data, health.data?.provider) && (
