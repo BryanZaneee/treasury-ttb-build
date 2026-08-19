@@ -12,5 +12,15 @@ export default defineConfig(({ mode }) => {
     base,
     envDir,
     plugins: [react()],
+    // Dev only: the production topology puts Caddy in front and routes /api to
+    // the API container (PRD §9), so this proxy stands in for that locally.
+    server: {
+      proxy: {
+        '/api': {
+          target: env.DEV_API_URL || 'http://127.0.0.1:8000',
+          changeOrigin: true,
+        },
+      },
+    },
   }
 })

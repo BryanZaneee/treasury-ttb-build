@@ -1,8 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { expect, test } from 'vitest'
 
-// Placeholder: real component tests land alongside the M4 reviewer UI.
-describe('vitest wiring', () => {
-  it('runs', () => {
-    expect(true).toBe(true)
-  })
+// Placeholder: component tests land with the M4 sign-off pass.
+test('wiring', () => {
+  expect(true).toBe(true)
 })
