@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, freshUrl } from '../api/client'
-import type { RecordsPage } from '../api/client'
+import type { Health, RecordsPage } from '../api/client'
 
 /**
  * Export and store administration. The store is read as a normal web page — CSV
@@ -21,10 +21,7 @@ export function Export() {
 
   const health = useQuery({
     queryKey: ['health'],
-    queryFn: () =>
-      api<{ provider: string; model: string; store_readable: boolean; images_writable: boolean }>(
-        '/health',
-      ),
+    queryFn: () => api<Health>('/health'),
   })
 
   const reset = useMutation({

@@ -1,7 +1,7 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from './api/client'
-import type { RecordsPage } from './api/client'
+import type { Health, RecordsPage } from './api/client'
 import { Inbox } from './routes/Inbox'
 import { CheckLabel } from './routes/CheckLabel'
 import { CheckBatch } from './routes/CheckBatch'
@@ -17,6 +17,20 @@ export function App() {
     queryFn: () => api<RecordsPage>('/records'),
   })
   const attention = counts.data?.counts.attention ?? 0
+
+  // A process started against a stale READER_PROVIDER read every label with the
+  // OCR fallback for an afternoon and nothing on screen said so. Verdict
+  // quality depends on which reader ran, so a degraded one is masthead news.
+  const health = useQuery({
+    queryKey: ['health'],
+    queryFn: () => api<Health>('/health'),
+    staleTime: 60_000,
+  })
+  const degraded =
+    health.data != null &&
+    (health.data.provider === 'fake' ||
+      health.data.provider === 'ocr' ||
+      health.data.reader_reachable === false)
 
   return (
     <div className="app">
@@ -55,6 +69,16 @@ export function App() {
           </div>
         </div>
       </header>
+
+      {degraded && (
+        <div className="strip-warn" role="status">
+          <strong>Verification is not using the vision reader.</strong>{' '}
+          {health.data?.provider === 'openai'
+            ? `The ${health.data.model} reader could not be initialised, so labels are read by local OCR.`
+            : `READER_PROVIDER is set to ${health.data?.provider}, so labels are not read by a vision model.`}{' '}
+          Accuracy is lower on blurred, angled and low-contrast captures.
+        </div>
+      )}
 
       <main>
         <Routes>

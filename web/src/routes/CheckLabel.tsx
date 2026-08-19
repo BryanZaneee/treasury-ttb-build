@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, imageUrl } from '../api/client'
-import type { RecordRow, SpecimenSummary } from '../api/client'
+import type { Health, RecordRow, SpecimenSummary } from '../api/client'
 import { useToast } from '../lib/toast'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
@@ -42,7 +42,7 @@ export function CheckLabel() {
 
   const health = useQuery({
     queryKey: ['health'],
-    queryFn: () => api<{ provider: string }>('/health'),
+    queryFn: () => api<Health>('/health'),
     staleTime: 60_000,
   })
 

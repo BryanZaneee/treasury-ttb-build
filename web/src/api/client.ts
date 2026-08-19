@@ -91,6 +91,17 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
 
 export type Verdict = 'match' | 'review' | 'fail'
 
+export type Health = {
+  store_readable: boolean | null
+  images_writable: boolean | null
+  reader_reachable: boolean | null
+  prompt_version: string | null
+  provider: string
+  model: string
+  spend_today_usd: number | null
+  calls_today: number
+}
+
 export type RecordRow = {
   id: string
   received: string

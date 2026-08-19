@@ -9,6 +9,7 @@ it could never pass.
 
 import sqlite3
 import time
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -22,6 +23,7 @@ import uploads
 from config import settings
 from models import Application, FieldResult, LabelReading, Record
 from readers import get_reader
+from readers.prep import prepare
 from readers.prompts import VERSION as PROMPT_VERSION
 
 router = APIRouter(tags=["records"])
@@ -149,24 +151,35 @@ def get_record(record_id: str) -> RecordDetail:
     )
 
 
-def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, str]:
+def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, str, int]:
     """Read a specimen, falling back to local OCR when the reader fails.
 
     PRD §3.2: a reader that is unreachable, slow, or returns unparseable JSON
     degrades to the rules verdict, with the engine string recording the cause.
     The service never blocks on the reader (acceptance test 11).
 
-    Returns the reading, the engine string, and the reader that actually
-    produced it - which after a fallback is not the one configured, and is what
-    the UI uses to warn the reviewer that accuracy may be lower on a degraded
-    capture.
+    Returns the reading, the engine string, the reader that actually produced
+    it - which after a fallback is not the one configured, and is what the UI
+    uses to warn the reviewer that accuracy may be lower on a degraded capture -
+    and the image-preparation time in milliseconds.
     """
     path = image_path if image_path.exists() else Path("fixtures") / Path(specimen).name
     provider = settings.reader_provider
 
+    # Every reader prepares the same image through the same cached function, so
+    # timing it here measures the prep stage once and leaves the reader's own
+    # call a cache hit (PRD §5.4). Reporting it as 0 was a placeholder that
+    # outlived the reader layer it was waiting on.
+    prep_started = time.perf_counter_ns()
+    with suppress(Exception):
+        # An unreadable file is the reader's error to raise, with its own
+        # fallback path; warming the cache is not where it should surface.
+        prepare(path)
+    prep_ms = round((time.perf_counter_ns() - prep_started) / 1_000_000)
+
     try:
         reading = get_reader(provider).read(specimen, path)
-        return reading, f"deterministic rules engine ({provider} reader)", provider
+        return reading, f"deterministic rules engine ({provider} reader)", provider, prep_ms
     except Exception as exc:  # noqa: BLE001 - any reader failure degrades, never 500s
         cause = type(exc).__name__ if not str(exc) else str(exc).split("\n")[0][:120]
 
@@ -182,6 +195,7 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
         reading,
         f"deterministic rules engine ({provider} unavailable, read by local OCR)",
         "ocr",
+        prep_ms,
     )
 
 
@@ -308,7 +322,7 @@ def verify_record(record_id: str) -> Record:
 
     specimen = row["specimen"] or row["filename"]
     started = time.perf_counter_ns()
-    reading, engine, reader_used = read_specimen(
+    reading, engine, reader_used, prep_ms = read_specimen(
         specimen, db.data_dir() / "images" / Path(specimen).name
     )
     read_done = time.perf_counter_ns()
@@ -323,10 +337,10 @@ def verify_record(record_id: str) -> Record:
         result=verdict,
         quality=reading.quality,
         engine=engine,
-        # Image preparation lands with the reader layer in M3; there is no prep
-        # stage to measure yet, so reporting 0 is honest rather than invented.
-        prep_ms=0,
-        reader_ms=round((read_done - started) / 1_000_000),
+        prep_ms=prep_ms,
+        # Prep runs inside the reader call, so it is subtracted out rather than
+        # double-counted across the two stages.
+        reader_ms=max(0, round((read_done - started) / 1_000_000) - prep_ms),
         rules_ms=round((finished - read_done) / 1_000_000),
         elapsed_ms=round((finished - started) / 1_000_000),
         # The reader that actually read the label, which after a fallback is

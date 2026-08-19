@@ -9,6 +9,9 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 
 import db
 from config import settings
+from readers import get_reader
+from readers.prompts import VERSION as PROMPT_VERSION
+from readers.vision import calls_today
 from routers import batches, jobs, records, specimens, store
 
 # Mutating routes require ACCESS_TOKEN. Admin-only routes additionally require
@@ -68,6 +71,8 @@ class HealthResponse(BaseModel):
     provider: str
     model: str
     spend_today_usd: float | None
+    # Paid vision calls made since UTC midnight, against daily_vision_call_cap.
+    calls_today: int = 0
 
 
 def create_app() -> FastAPI:
@@ -98,8 +103,6 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     def health() -> HealthResponse:
-        # Reader reachability and prompt version are M3 concerns - no reader
-        # exists yet, so those fields stay honest placeholders until then.
         # Deliberately blind: a health endpoint must report "unhealthy" for
         # any storage failure, not just the ones we anticipated.
         try:
@@ -111,14 +114,32 @@ def create_app() -> FastAPI:
             images_writable = db.data_dir().joinpath("images").is_dir()
         except Exception:  # noqa: BLE001
             images_writable = False
+
+        # Can the configured reader even be built? No network is involved -
+        # VisionReader raises on a missing key at construction. This exists
+        # because a process started against a stale READER_PROVIDER read every
+        # label with the OCR fallback for an afternoon and nothing said so:
+        # settings are parsed at import, so the running value is the only
+        # value that matters and it has to be observable.
+        try:
+            get_reader()
+            reader_reachable: bool | None = True
+        except Exception:  # noqa: BLE001
+            reader_reachable = False
+
         return HealthResponse(
             store_readable=store_readable,
             images_writable=images_writable,
-            reader_reachable=None,
-            prompt_version=None,
+            reader_reachable=reader_reachable,
+            # Only a vision reading is produced by a prompt.
+            prompt_version=PROMPT_VERSION if settings.reader_provider == "openai" else None,
             provider=settings.reader_provider,
             model=settings.reader_model,
+            # PRD §5.1 asks for dollars, which needs a per-model price table to
+            # report honestly; the enforced backstop counts calls (see
+            # readers/vision.py), so that is what is reported.
             spend_today_usd=None,
+            calls_today=calls_today(),
         )
 
     return app

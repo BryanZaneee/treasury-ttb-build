@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image, ImageFilter, ImageOps, ImageStat
@@ -45,6 +46,13 @@ class Prepared:
         return self.sharpness >= SHARP_FLOOR
 
 
+# Preparation is deterministic per file, and stored specimens are
+# content-addressed, so the same path never means two different images. Caching
+# it lets the caller time this stage on its own (PRD §5.4 per-stage timings)
+# without the reader paying for a second pass.
+# ponytail: bounded LRU holding decoded images; drop maxsize if memory ever
+# matters more than the repeat verify.
+@lru_cache(maxsize=32)
 def prepare(path: Path) -> Prepared:
     """EXIF-rotate, downscale the longest edge, encode JPEG, score sharpness."""
     with Image.open(path) as raw:

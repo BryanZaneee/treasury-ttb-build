@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api, imageUrl } from '../api/client'
-import type { RecordDetail as Detail } from '../api/client'
+import type { Health, RecordDetail as Detail } from '../api/client'
 import { Pill } from '../components/Pill'
 import { kindOf } from '../lib/verdict'
 import { FIELD_LABEL, RESULT_COPY, fieldValues } from '../lib/copy'
@@ -41,7 +41,7 @@ export function RecordDetail() {
 
   const health = useQuery({
     queryKey: ['health'],
-    queryFn: () => api<{ provider: string }>('/health'),
+    queryFn: () => api<Health>('/health'),
     staleTime: 60_000,
   })
 
