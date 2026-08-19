@@ -49,7 +49,9 @@ export function App() {
           <nav className="nav" aria-label="Primary">
             <NavLink to="/inbox" className={({ isActive }) => (isActive ? 'active' : '')}>
               Review inbox
-              {attention > 0 && <span className="nav-badge">{attention}</span>}
+              <span className={`nav-badge${attention > 0 ? '' : ' is-placeholder'}`}>
+              {attention > 0 ? attention : '0'}
+            </span>
             </NavLink>
             <NavLink to="/check" className={({ isActive }) => (isActive ? 'active' : '')}>
               Check one label

@@ -57,6 +57,12 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
+/* The masthead and main are both `max-width: 1280px; margin: 0 auto`, so a
+   scrollbar that comes and goes moves every centred thing on the page. The
+   inbox and the single-label form scroll; the batch and export pages do not,
+   and stepping between them slid the whole navigation sideways. Reserve the
+   gutter and the page stops moving. */
+html { scrollbar-gutter: stable; }
 body {
   background: var(--desk);
   font-family: 'Public Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -114,7 +120,12 @@ input, textarea, select { font-family: inherit; }
 .nav-badge {
   font-family: var(--mono); font-size: 11px; font-weight: 600;
   background: var(--badge); color: #fff; padding: 2px 6px; border-radius: 2px;
+  /* Sized for two digits from the first paint. The badge renders only once
+     its count query resolves, and .nav is right-anchored, so a badge that
+     appears - or gains a digit - slides every item after it. */
+  min-width: 24px; text-align: center;
 }
+.nav-badge.is-placeholder { visibility: hidden; }
 
 /* Reads come from a cache with no polling, so a store changed by another
    reviewer - or by a reset - stays stale until something invalidates it. */
