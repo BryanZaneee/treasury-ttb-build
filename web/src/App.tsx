@@ -67,6 +67,9 @@ export function App() {
           {/* Older links kept working rather than 404ing. */}
           <Route path="/settings" element={<Navigate to="/export" replace />} />
           <Route path="/store" element={<Navigate to="/export" replace />} />
+          {/* Anything else — including the retired /dev bench — lands in the
+              inbox rather than rendering an empty page. */}
+          <Route path="*" element={<Navigate to="/inbox" replace />} />
         </Routes>
       </main>
     </div>
