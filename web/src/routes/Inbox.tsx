@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, apiUrl, imageUrl } from '../api/client'
 import type { Job, RecordRow, RecordsPage, FieldResult, RecordDetail } from '../api/client'
