@@ -351,13 +351,7 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
   padding: 16px 20px; display: grid; gap: 18px;
   align-items: center; border-bottom: 1px solid var(--rule);
 }
-/* A: Previous | verdict | Next. B: a neutral nav strip over a verdict band.
-   C: verdict left, the pair right.
-   ponytail: three variants behind a toggle so one can be chosen by looking at
-   it. Delete the two that lose, and their rules here. */
-.qn-a { grid-template-columns: 1fr minmax(0, 300px) 1fr; }
-.qn-b { grid-template-columns: 1fr auto 1fr; background: var(--sunk-2); }
-.qn-b-verdict { grid-template-columns: minmax(0, 1fr); }
+/* Verdict left, Previous / Next right. */
 .qn-c { grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; }
 /* DOM order is always [previous, centre, next] so the tab order matches the
    reading order; C only moves them visually. */
@@ -366,16 +360,8 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 .qn-c .queue-nav-step.right { order: 2; }
 
 .result-verdict { margin-bottom: 6px; }
-.qn-b-verdict .result-verdict { margin-bottom: 0; }
 .qn-c .result-verdict { margin-bottom: 4px; }
 
-/* Engine provenance below the determination rather than beside the verdict,
-   per the design handoff: it explains how the verdict was reached, which is a
-   question a reviewer asks after reading it, not instead of. */
-.result-engine-line {
-  padding: 12px 20px; font-size: 11px; color: var(--ink-4);
-  border-top: 1px solid var(--rule-softer); background: var(--paper);
-}
 .result-head-match { background: var(--match-head); border-bottom-color: var(--match-head-bd); }
 .result-head-review { background: var(--review-head); border-bottom-color: var(--review-head-bd); }
 .result-head-fail { background: var(--fail-head); border-bottom-color: var(--fail-head-bd); }
@@ -599,20 +585,6 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 }
 .queue-nav-place { text-align: center; min-width: 0; }
 .result-head .queue-nav-place { white-space: normal; }
-.queue-nav-count {
-  white-space: nowrap;
-  font-family: var(--mono);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink-2);
-}
-.queue-nav-filter {
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-6);
-  margin-top: 2px;
-}
 
 /* A fixed frame for the label, so the page stops resizing as a reviewer works
    through the queue: card height was previously driven by each label's aspect

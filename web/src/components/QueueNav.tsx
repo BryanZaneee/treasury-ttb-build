@@ -12,15 +12,6 @@ import { matchesQuery } from '../lib/search'
  * while loading: it carries the verdict in `children`.
  */
 
-const FILTER_LABEL: Record<string, string> = {
-  attention: 'Needs attention',
-  pending: 'Awaiting AI verification',
-  review: 'Review',
-  fail: 'Fail',
-  closed: 'Closed',
-  '': 'All records',
-}
-
 function useQueuePlace(currentId: string, filter: string, query: string) {
   const records = useQuery({
     queryKey: ['records', filter],
@@ -38,7 +29,6 @@ function useQueuePlace(currentId: string, filter: string, query: string) {
   return {
     index,
     total: rows.length,
-    label: FILTER_LABEL[filter] ?? 'Queue',
     previous: index > 0 ? rows[index - 1] : null,
     next: index >= 0 && index < rows.length - 1 ? rows[index + 1] : null,
     search,
@@ -68,13 +58,7 @@ export function QueueNav({
         direction="back"
       />
 
-      <div className="queue-nav-place">
-        {children}
-        <div className="queue-nav-count">
-          {place.index < 0 ? 'Not in this queue' : `${place.index + 1} of ${place.total}`}
-        </div>
-        <div className="queue-nav-filter">{place.label}</div>
-      </div>
+      <div className="queue-nav-place">{children}</div>
 
       <Step
         to={place.next && `/records/${place.next.id}${place.search}`}

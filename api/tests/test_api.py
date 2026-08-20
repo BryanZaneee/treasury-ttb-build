@@ -913,3 +913,40 @@ def test_an_ocr_only_reading_never_auto_closes(monkeypatch: pytest.MonkeyPatch) 
     assert body["reader_provider"] == "ocr"
     assert body["result"] == "match", "the fake reading still matches"
     assert body["decision"] is None, "but an OCR-only reading must not close itself"
+
+
+def test_filing_with_verify_now_adjudicates_without_a_second_request() -> None:
+    """A reviewer who files and immediately moves on must still get a verdict.
+
+    Filing and verifying used to be two round trips from the browser, so
+    navigating away in between left a record nobody would ever verify.
+    """
+    seed.copy_fixture_images()
+    resp = client.post(
+        "/api/records",
+        headers=ACCESS,
+        data={
+            "applicant": "Acme Distilling",
+            "beverage": "spirits",
+            "application": (
+                '{"brand": "Old Tom Distillery", '
+                '"class_type": "Kentucky Straight Bourbon Whiskey", '
+                '"abv": "45%", "net": "750 mL", '
+                '"producer": "Old Tom Distillery, Bardstown, KY", "warning": true}'
+            ),
+            "specimen_key": "old-tom-pass.jpg",
+            "verify_now": "true",
+        },
+        files={},
+    )
+    assert resp.status_code == 201
+    record_id = resp.json()["id"]
+
+    # No verify call is made here on purpose - that is the whole point.
+    for _ in range(100):
+        body = client.get(f"/api/records/{record_id}").json()
+        if body["verified"]:
+            break
+        time.sleep(0.05)
+    assert body["verified"] is True
+    assert body["result"] == "match"

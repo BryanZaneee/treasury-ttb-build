@@ -91,6 +91,7 @@ def create_record(
     beverage: str = Form(...),
     application: str = Form(..., description="JSON-encoded Application"),
     specimen_key: str | None = Form(None),
+    verify_now: bool = Form(False),
     image: UploadFile | None = None,
 ) -> Record:
     app = Application.model_validate_json(application)
@@ -135,7 +136,16 @@ def create_record(
     # PRD §5.2: extraction begins on upload, not on Verify. By the time the
     # reviewer presses Verify the reading is cached and adjudication is a
     # rules-engine call, which is what makes the §8 latency target reachable.
-    db.run_in_background(_warm_extraction, specimen)
+    #
+    # verify_now goes further and adjudicates here too. Filing and verifying
+    # used to be two round trips from the browser, so a reviewer who moved on
+    # after the first left a record that would never be verified by anyone.
+    # Once this request lands the determination happens whatever the client
+    # does next.
+    if verify_now:
+        db.run_in_background(_verify_on_arrival, record_id)
+    else:
+        db.run_in_background(_warm_extraction, specimen)
     row = db.get_record(record_id)
     assert row is not None  # just inserted, must exist
     return _row_to_record(row)
@@ -144,6 +154,16 @@ def create_record(
 def _warm_extraction(specimen: str) -> None:
     with suppress(Exception):
         read_specimen(specimen, db.data_dir() / "images" / Path(specimen).name)
+
+
+def _verify_on_arrival(record_id: str) -> None:
+    """Adjudicate a freshly filed record. Failures leave it pending, which is
+    the state the inbox already knows how to show and a reviewer can retry."""
+    try:
+        verify_record(record_id)
+    except Exception as exc:  # noqa: BLE001 - a filing must not fail on this
+        logs.count("verify_on_arrival_errors")
+        logs.event("verify_on_arrival_failed", record_id=record_id, detail=str(exc)[:200])
 
 
 @router.get("/records/{record_id}", response_model=RecordDetail)

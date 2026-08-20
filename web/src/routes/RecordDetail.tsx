@@ -14,20 +14,6 @@ import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 /** Minimised state and the open record survive reload, per device (S10). */
 const MINIMISED_KEY = 'ttb.detail.minimised'
 
-/**
- * ponytail: three arrangements of the determination header, side by side behind
- * a toggle so one can be chosen by looking at it rather than by describing it.
- * Temporary — once a layout is picked, delete the other two, this key, and the
- * segmented control that drives them.
- */
-const LAYOUT_KEY = 'ttb.detail.layout'
-type Layout = 'a' | 'b' | 'c'
-const LAYOUTS: { key: Layout; label: string }[] = [
-  { key: 'a', label: 'A · verdict centred' },
-  { key: 'b', label: 'B · verdict below' },
-  { key: 'c', label: 'C · verdict left' },
-]
-
 export function RecordDetail() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
@@ -45,9 +31,6 @@ export function RecordDetail() {
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<null | 'accepted' | 'returned'>(null)
-  const [layout, setLayoutState] = useState<Layout>(
-    () => (localStorage.getItem(LAYOUT_KEY) as Layout | null) ?? 'a',
-  )
 
   const toast = useToast()
 
@@ -103,24 +86,10 @@ export function RecordDetail() {
   const kind = kindOf(data.result)
   const disagreeing = data.field_results.filter((f) => f.verdict !== 'match')
   const closed = data.decision != null
-  // Sub-second verifications are the point of extracting on upload, so they are
-  // reported in milliseconds rather than rounded away to "0.00s".
-  const elapsed =
-    data.elapsed_ms == null
-      ? null
-      : data.elapsed_ms < 1000
-        ? `${data.elapsed_ms} ms`
-        : `${(data.elapsed_ms / 1000).toFixed(2)} s`
-
   const toggle = () => {
     const next = !minimised
     setMinimised(next)
     localStorage.setItem(MINIMISED_KEY, next ? '1' : '0')
-  }
-
-  const setLayout = (next: Layout) => {
-    setLayoutState(next)
-    localStorage.setItem(LAYOUT_KEY, next)
   }
 
   const verdictBlock = (
@@ -130,22 +99,16 @@ export function RecordDetail() {
     </div>
   )
 
-  const header =
-    layout === 'b' ? (
-      <>
-        <QueueNav currentId={id} filter={filter} query={query} className="result-head qn-b" />
-        <div className={`result-head result-head-${kind} qn-b-verdict`}>{verdictBlock}</div>
-      </>
-    ) : (
-      <QueueNav
-        currentId={id}
-        filter={filter}
-        query={query}
-        className={`result-head result-head-${kind} qn-${layout}`}
-      >
-        {verdictBlock}
-      </QueueNav>
-    )
+  const header = (
+    <QueueNav
+      currentId={id}
+      filter={filter}
+      query={query}
+      className={`result-head result-head-${kind} qn-c`}
+    >
+      {verdictBlock}
+    </QueueNav>
+  )
 
   return (
     <div>
@@ -161,18 +124,6 @@ export function RecordDetail() {
         <div>
           <div className="eyebrow">Review findings</div>
           <h1>Application versus label</h1>
-        </div>
-        {/* ponytail: temporary layout comparison, see LAYOUT_KEY. */}
-        <div className="segmented push" role="group" aria-label="Header layout">
-          {LAYOUTS.map((l) => (
-            <button
-              key={l.key}
-              aria-pressed={layout === l.key}
-              onClick={() => setLayout(l.key)}
-            >
-              {l.label}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -299,12 +250,6 @@ export function RecordDetail() {
               })}
                 </>
               )}
-
-              <div className="result-engine-line mono">
-                {data.engine} · checked in {elapsed ?? '—'} · prep {data.prep_ms ?? '—'} ·
-                reader {data.reader_ms ?? '—'} · rules {data.rules_ms ?? '—'} ms
-                {data.prompt_version ? ` · prompt ${data.prompt_version}` : ''}
-              </div>
 
               <div className="result-foot">
                 {closed ? (

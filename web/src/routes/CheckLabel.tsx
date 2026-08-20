@@ -204,6 +204,17 @@ export function CheckLabel() {
     })
   }
 
+  /** Poll until the server has adjudicated, then return the full detail. */
+  const waitForVerdict = async (id: string): Promise<RecordDetail> => {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const detail = await api<RecordDetail>(`/records/${id}`)
+      if (detail.verified) return detail
+      await new Promise((r) => setTimeout(r, 300))
+    }
+    // Still pending after 18s: the record exists and the inbox will show it.
+    return api<RecordDetail>(`/records/${id}`)
+  }
+
   const submit = useMutation({
     mutationFn: async () => {
       const form = new FormData()
@@ -219,12 +230,15 @@ export function CheckLabel() {
       )
       if (file) form.set('image', file)
       else form.set('specimen_key', sample)
+      // Filing and verifying in one request. As two, a reviewer who moved on
+      // between them left a record nobody would ever verify.
+      form.set('verify_now', 'true')
 
       const record = await api<RecordRow>('/records', { method: 'POST', form })
-      await api<RecordRow>(`/records/${record.id}/verify`, { method: 'POST' })
-      // The detail, not the verify response: the toast names the disagreeing
-      // fields before it will record an override, and those are in it.
-      return api<RecordDetail>(`/records/${record.id}`)
+      // The determination is already running server-side; this only waits for
+      // it so the toast can name the disagreeing fields. Navigating away
+      // abandons the wait, not the verification.
+      return waitForVerdict(record.id)
     },
     onSuccess: (record) => {
       client.invalidateQueries({ queryKey: ['records'] })
