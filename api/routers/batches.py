@@ -7,12 +7,13 @@ commits it (`POST /api/jobs`).
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass
 from typing import Literal
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 import batching
 import db
@@ -51,17 +52,34 @@ class StagedBatch(BaseModel):
     blocks_commit: bool = False
 
 
-# Staged batches live until they are committed or the process restarts. Nothing
-# is written to the store at stage time, so losing one costs a re-upload.
-# ponytail: process-local dict; move to a table if staging ever needs to survive
-# a restart or span two workers.
+# Staged batches are held as JSON documents rather than in a process dict: PRD
+# §5 runs two workers, and a batch staged on one has to be committable by the
+# other. Nothing lands in `records` until commit, so losing one costs a
+# re-upload.
 @dataclass
 class Staged:
     rows: list[batching.Row]
     images: list[str]
 
 
-STAGED: dict[str, Staged] = {}
+_ROWS = TypeAdapter(list[batching.Row])
+
+
+def get_staged(batch_id: str) -> Staged | None:
+    body = db.doc_get("batch", batch_id)
+    if body is None:
+        return None
+    raw = json.loads(body)
+    return Staged(rows=_ROWS.validate_python(raw["rows"]), images=raw["images"])
+
+
+def put_staged(batch_id: str, staged: Staged) -> Staged:
+    db.doc_put(
+        "batch",
+        batch_id,
+        json.dumps({"rows": _ROWS.dump_python(staged.rows, mode="json"), "images": staged.images}),
+    )
+    return staged
 
 
 def to_response(batch_id: str, staged: Staged) -> StagedBatch:
@@ -112,8 +130,7 @@ def stage_batch(
 
     paired, _ = batching.pair(rows, names)
     batch_id = f"batch-{uuid.uuid4().hex[:8]}"
-    STAGED[batch_id] = Staged(rows=paired, images=names)
-    return to_response(batch_id, STAGED[batch_id])
+    return to_response(batch_id, put_staged(batch_id, Staged(rows=paired, images=names)))
 
 
 class AssignRequest(BaseModel):
@@ -122,7 +139,7 @@ class AssignRequest(BaseModel):
 
 @router.post("/batches/{batch_id}/rows/{row_no}/image", response_model=StagedBatch)
 def assign_image(batch_id: str, row_no: int, body: AssignRequest) -> StagedBatch:
-    staged = STAGED.get(batch_id)
+    staged = get_staged(batch_id)
     if staged is None:
         raise HTTPException(status_code=404, detail=f"unknown batch {batch_id!r}")
     try:
@@ -131,7 +148,9 @@ def assign_image(batch_id: str, row_no: int, body: AssignRequest) -> StagedBatch
         raise HTTPException(status_code=404, detail=str(exc).strip("\"'")) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return to_response(batch_id, staged)
+    # `assign` mutates the rows in place, so the staged document has to be
+    # written back - it is no longer the same object the next request loads.
+    return to_response(batch_id, put_staged(batch_id, staged))
 
 
 def stage_sample_batch() -> StagedBatch:
@@ -141,5 +160,4 @@ def stage_sample_batch() -> StagedBatch:
     names = [r["filename"] for r in rows]
     paired, _ = batching.pair(rows, names)
     batch_id = f"sample-{uuid.uuid4().hex[:8]}"
-    STAGED[batch_id] = Staged(rows=paired, images=names)
-    return to_response(batch_id, STAGED[batch_id])
+    return to_response(batch_id, put_staged(batch_id, Staged(rows=paired, images=names)))

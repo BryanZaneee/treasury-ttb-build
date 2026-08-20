@@ -47,16 +47,24 @@ class Job(BaseModel):
     error: str | None = None
 
 
-# ponytail: process-local job table, same ceiling as batches.STAGED. A restart
-# loses in-flight progress; the records themselves are already durable.
-JOBS: dict[str, Job] = {}
-_LOCK = threading.Lock()
+# Job progress is a JSON document rather than a process dict: PRD §5 runs two
+# workers, and the reviewer polling /jobs/{id} will not reliably reach the one
+# running the job. A restart still loses in-flight progress; the records
+# themselves are already durable.
+def save_job(job: Job) -> Job:
+    db.doc_put("job", job.id, job.model_dump_json())
+    return job
+
+
+def load_job(job_id: str) -> Job | None:
+    body = db.doc_get("job", job_id)
+    return Job.model_validate_json(body) if body is not None else None
 
 
 def _commit_batch(job: Job, batch_id: str) -> list[str]:
     """File every non-ambiguous staged row. Ambiguous rows block the whole
     commit (PRD §5.5); missing-image rows file and are simply not verifiable."""
-    entry = batches.STAGED.get(batch_id)
+    entry = batches.get_staged(batch_id)
     if entry is None:
         raise KeyError(f"unknown batch {batch_id!r}")
 
@@ -149,30 +157,32 @@ def _run(job: Job, body: JobCreateRequest) -> None:
             return
 
         job.total = len(record_ids)
+        save_job(job)
         for record_id in record_ids:
             _verify_one(job, record_id)
             job.completed += 1
+            # Persist per record: this is what the reviewer's progress bar and
+            # the SSE stream read, and they may be served by another worker.
+            save_job(job)
         job.state = "done"
     except Exception as exc:  # noqa: BLE001
         job.state = "error"
         job.error = str(exc)[:300]
     finally:
         job.events.append({"event": "done", "state": job.state})
+        save_job(job)
 
 
 @router.post("/jobs", response_model=Job)
 def create_job(body: JobCreateRequest) -> Job:
-    job = Job(id=f"job-{uuid.uuid4().hex[:8]}", scope=body.scope)
-    with _LOCK:
-        JOBS[job.id] = job
-    thread = threading.Thread(target=_run, args=(job, body), daemon=True)
-    thread.start()
+    job = save_job(Job(id=f"job-{uuid.uuid4().hex[:8]}", scope=body.scope))
+    db.run_in_background(_run, job, body)
     return job
 
 
 @router.get("/jobs/{job_id}", response_model=Job)
 def get_job(job_id: str) -> Job:
-    job = JOBS.get(job_id)
+    job = load_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
     return job
@@ -180,13 +190,15 @@ def get_job(job_id: str) -> Job:
 
 @router.get("/jobs/{job_id}/events")
 def job_events(job_id: str) -> StreamingResponse:
-    if job_id not in JOBS:
+    if load_job(job_id) is None:
         raise HTTPException(status_code=404, detail="job not found")
 
     def stream() -> Any:
         sent = 0
         while True:
-            job = JOBS[job_id]
+            job = load_job(job_id)
+            if job is None:
+                return
             while sent < len(job.events):
                 event = job.events[sent]
                 sent += 1

@@ -304,6 +304,35 @@ def run_in_background(fn: Any, *args: Any) -> None:
     thread.start()
 
 
+def doc_put(kind: str, key: str, body: str) -> None:
+    """Store one JSON document, visible to every worker.
+
+    ponytail: the whole document is rewritten on each update, so a job's event
+    list is re-serialised once per record. Fine at PRD §8's 300-record batch;
+    append events to their own table if a batch ever gets much larger.
+    """
+    with transaction() as conn:
+        conn.execute(
+            """
+            INSERT INTO documents (kind, key, body, updated_at) VALUES (?, ?, ?, ?)
+            ON CONFLICT (kind, key) DO UPDATE SET
+                body = excluded.body, updated_at = excluded.updated_at
+            """,
+            (kind, key, body, datetime.now(UTC).isoformat()),
+        )
+
+
+def doc_get(kind: str, key: str) -> str | None:
+    conn = connect()
+    try:
+        row = conn.execute(
+            "SELECT body FROM documents WHERE kind = ? AND key = ?", (kind, key)
+        ).fetchone()
+        return str(row["body"]) if row is not None else None
+    finally:
+        conn.close()
+
+
 def extraction_cache_get(key: str) -> dict[str, Any] | None:
     conn = connect()
     try:
