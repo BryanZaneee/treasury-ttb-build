@@ -5,7 +5,7 @@ extracts the same seven fields from the label specimen, and a **deterministic ru
 adjudicates the two field by field into `match` / `review` / `fail`. Every determination is
 written to an auditable system of record.
 
-The authoritative spec is [`design_handoff_label_verification/PRD.md`](design_handoff_label_verification/PRD.md).
+The authoritative spec is [`docs/PRD.md`](docs/PRD.md).
 Its §6.2 carries the approved design tokens — colours, type and copy are normative.
 
 **All data in this deployment is synthetic.** The 25 label specimens are generated, the brands
@@ -130,7 +130,7 @@ have consumed the time the rules engine needed.
 
 ### Write the PRD, then treat it as the source of truth
 
-`design_handoff_label_verification/PRD.md` fixes the domain model, the persistence schema, the
+`docs/PRD.md` fixes the domain model, the persistence schema, the
 API surface, the routes and design tokens, the fixture set, the non-functional requirements, and
 an M0 to M7 roadmap where every milestone carries its own exit criteria. Behaviour is not
 invented at the keyboard: if the PRD settles a question, the code follows it and the comment
@@ -226,7 +226,7 @@ string names what actually read the label.
 | `web/src/routes/` | Inbox, CheckLabel, CheckBatch, RecordDetail, Export |
 | `data/` | Runtime store: SQLite database, uploaded images, snapshots, CSV mirror. Gitignored. |
 | `deploy/` | Caddyfile, systemd unit and the deploy script for the VPS |
-| `design_handoff_label_verification/` | The normative PRD and the fixture manifest |
+| `docs/` | The normative PRD and the fixture manifest |
 
 ---
 

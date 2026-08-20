@@ -1,5 +1,5 @@
 """Generate api/fixtures/expectations.json and api/fixtures/applications.csv
-from design_handoff_label_verification/fixtures-manifest.csv.
+from docs/fixtures-manifest.csv.
 
 Ground truth per row is hand-derived by applying PRD §3.2's match/review/fail
 rules to the manifest's `intended_defect` column.
@@ -393,7 +393,7 @@ assert len({r["filename"] for r in ROWS}) == 25, "duplicate filename"
 manifest_filenames = {
     row["filename"]
     for row in csv.DictReader(
-        (FIXTURES_DIR.parent.parent / "design_handoff_label_verification" / "fixtures-manifest.csv")
+        (FIXTURES_DIR.parent.parent / "docs" / "fixtures-manifest.csv")
         .read_text()
         .splitlines()
     )
