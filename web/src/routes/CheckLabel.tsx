@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, imageUrl } from '../api/client'
@@ -22,6 +22,55 @@ const BLANK = {
 
 const ACCEPTED = 'image/png,image/jpeg,image/webp'
 
+/** A part-typed application survives leaving the page and reloading it, the
+    way the staged batch does. The image rides along as a data URL when it is
+    small enough to; browser storage is a few MB, and a 12 MB photo is not
+    worth losing the typed fields over. */
+const DRAFT_KEY = 'ttb.label-draft'
+const DRAFT_IMAGE_LIMIT = 2_000_000
+
+type Draft = {
+  application: typeof BLANK
+  applicant: string
+  sample: string
+  filename: string
+  preview: string
+}
+
+function readDraft(): Draft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    return raw ? (JSON.parse(raw) as Draft) : null
+  } catch {
+    return null
+  }
+}
+
+function writeDraft(draft: Draft): void {
+  // An oversized image is dropped rather than losing the whole draft, and a
+  // quota error must never escape into a keystroke handler.
+  const slim = draft.preview.length > DRAFT_IMAGE_LIMIT ? { ...draft, preview: '' } : draft
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(slim))
+  } catch {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...slim, preview: '' }))
+    } catch {
+      /* storage is unavailable; the draft is simply not kept */
+    }
+  }
+}
+
+/** The file itself cannot be stored, so a reload restores the picture but not
+    the upload. Reading it back as a File is what lets the form submit. */
+function fileFromDataUrl(dataUrl: string, name: string): File | null {
+  const [head, body] = dataUrl.split(',')
+  if (!head || !body) return null
+  const type = head.match(/^data:([^;]+)/)?.[1] ?? 'image/jpeg'
+  const bytes = Uint8Array.from(atob(body), (c) => c.charCodeAt(0))
+  return new File([bytes], name, { type })
+}
+
 /** A determination reads differently depending on what it says. */
 const TOAST_KIND: Record<string, Toast['kind']> = {
   match: 'success',
@@ -44,11 +93,14 @@ export function CheckLabel() {
   const client = useQueryClient()
   const toast = useToast()
 
-  const [application, setApplication] = useState({ ...BLANK })
-  const [applicant, setApplicant] = useState('')
-  const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<string>('')
-  const [sample, setSample] = useState('')
+  const [saved] = useState(readDraft)
+  const [application, setApplication] = useState(() => saved?.application ?? { ...BLANK })
+  const [applicant, setApplicant] = useState(() => saved?.applicant ?? '')
+  const [file, setFile] = useState<File | null>(() =>
+    saved?.preview && saved.filename ? fileFromDataUrl(saved.preview, saved.filename) : null,
+  )
+  const [preview, setPreview] = useState<string>(() => saved?.preview ?? '')
+  const [sample, setSample] = useState(() => saved?.sample ?? '')
   const [dragging, setDragging] = useState(false)
   const [zoomed, setZoomed] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -85,29 +137,30 @@ export function CheckLabel() {
     },
   })
 
-  // Object URLs are created and revoked here, not inside a setPreview updater:
-  // React runs an updater eagerly, again on render, and twice more under
-  // StrictMode, so a side effect in one leaks URLs and can revoke the very URL
-  // the img is showing - which is what left the preview broken.
+  // A data URL, not URL.createObjectURL: the site's Content-Security-Policy
+  // allows `img-src 'self' data:` and not `blob:`, so an object URL renders in
+  // dev and is blocked in production - which is what left the preview broken on
+  // the deployed site. A data URL is also a string, so the draft can keep it.
   const takeFile = (chosen: File | undefined) => {
     if (!chosen) return
-    if (preview) URL.revokeObjectURL(preview)
     setSample('')
     setFile(chosen)
     setError(null)
-    setPreview(URL.createObjectURL(chosen))
+    const reader = new FileReader()
+    reader.onload = () => setPreview(String(reader.result ?? ''))
+    reader.onerror = () => setError('That image could not be read. Try another file.')
+    reader.readAsDataURL(chosen)
   }
 
   const takeSample = (filename: string) => {
-    if (preview) URL.revokeObjectURL(preview)
     setSample(filename)
     setFile(null)
     setPreview('')
+    if (fileRef.current) fileRef.current.value = ''
     if (filename) prefill.mutate(filename)
   }
 
   const clearImage = () => {
-    if (preview) URL.revokeObjectURL(preview)
     setFile(null)
     setSample('')
     setPreview('')
@@ -250,6 +303,7 @@ export function CheckLabel() {
       setApplication({ ...BLANK })
       setApplicant('')
       clearImage()
+      localStorage.removeItem(DRAFT_KEY)
     },
     onError: (e) => setError(String(e)),
   })
@@ -258,6 +312,13 @@ export function CheckLabel() {
     setApplication((prev) => ({ ...prev, [key]: value }))
 
   const source = file ? file.name : sample
+
+  // Written on every change rather than on unmount: a reviewer who closes the
+  // tab mid-form has not unmounted anything.
+  useEffect(() => {
+    writeDraft({ application, applicant, sample, filename: file?.name ?? '', preview })
+  }, [application, applicant, sample, file, preview])
+
   const shown = file ? preview : sample ? imageUrl(sample) : ''
 
   return (
@@ -273,51 +334,6 @@ export function CheckLabel() {
         </div>
       </div>
 
-      {/* Once a specimen is chosen it moves to the sticky panel beside the
-          form, where it is big enough to transcribe the application from. */}
-      {!shown && (
-        <div className="card card-pad">
-          <div className="card-title">Label image</div>
-
-          <div className="specimen-slot">
-            <button
-              className={`dropzone${dragging ? ' dragging' : ''}`}
-              style={{ width: '100%', height: '100%' }}
-              onClick={() => fileRef.current?.click()}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setDragging(true)
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(e) => {
-                e.preventDefault()
-                setDragging(false)
-                takeFile(e.dataTransfer.files?.[0])
-              }}
-            >
-              <div className="dropzone-title">Drop a label image, or choose a file</div>
-              <div className="dropzone-hint">PNG, JPEG or WebP · up to 12 MB</div>
-            </button>
-          </div>
-
-          <label className="field" style={{ maxWidth: 460, marginBottom: 0 }}>
-            <span className="field-label">Or use a sample label for testing</span>
-            <select value={sample} onChange={(e) => takeSample(e.target.value)}>
-              <option value="">No sample selected</option>
-              {named.map((s) => (
-                <option key={s.filename} value={s.filename}>
-                  {s.title} — {s.hint}
-                </option>
-              ))}
-            </select>
-            <span className="card-note">
-              Synthetic labels with fictional brands. Each one reproduces a documented verdict,
-              and picking one fills the form below with the application it was filed against.
-            </span>
-          </label>
-        </div>
-      )}
-
       <input
         ref={fileRef}
         type="file"
@@ -329,7 +345,7 @@ export function CheckLabel() {
         }}
       />
 
-      <div className={shown ? 'split-right' : ''} style={{ marginTop: 16 }}>
+      <div className="split-right" style={{ marginTop: 16 }}>
         <div className="card card-pad">
           <div className="card-title">Application data as filed</div>
           <div style={{ marginTop: 12 }}>
@@ -339,18 +355,20 @@ export function CheckLabel() {
                 type="text"
                 value={applicant}
                 onChange={(e) => setApplicant(e.target.value)}
-                placeholder="Filing entity"
+                placeholder="Harbor Mist Brewing Co."
               />
             </label>
             <div className="grid-2">
               {(
                 [
-                  ['brand', 'Brand name', ''],
-                  ['class_type', 'Class / type', ''],
-                  ['abv', 'Alcohol content', ''],
-                  ['net', 'Net contents', ''],
-                  ['producer', 'Bottler / producer (optional)', 'Not declared'],
-                  ['origin', 'Country of origin (optional)', 'Not declared'],
+                  // Placeholders, not values: a reviewer transcribing a label
+                  // needs to see the shape each field is expected in.
+                  ['brand', 'Brand name', 'Harbor Mist'],
+                  ['class_type', 'Class / type', 'India Pale Ale'],
+                  ['abv', 'Alcohol content', '6.8% Alc./Vol.'],
+                  ['net', 'Net contents', '12 FL OZ'],
+                  ['producer', 'Bottler / producer (optional)', 'Harbor Mist Brewing, Portland, OR'],
+                  ['origin', 'Country of origin (optional)', 'United States'],
                 ] as const
               ).map(([key, label, placeholder]) => (
                 <label className="field" key={key}>
@@ -394,27 +412,63 @@ export function CheckLabel() {
           </div>
         </div>
 
-        {shown && (
-          <div className="card card-pad specimen-side">
-            <div className="card-title">Label image</div>
-            <button
-              className="label-frame label-frame-zoom"
-              onClick={() => setZoomed(true)}
-              aria-label={`Enlarge ${source}`}
-            >
-              <img src={shown} alt={`Label image ${source}`} />
-            </button>
-            <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, marginTop: 10 }}>
-              {source}
-            </div>
-            <p className="card-note">
-              {file ? 'Uploaded from this device.' : 'A sample label, for testing.'}
-            </p>
-            <button className="btn btn-quiet btn-sm" onClick={clearImage}>
-              Choose a different image
-            </button>
-          </div>
-        )}
+        {/* Always beside the form, empty or not: the specimen is what the
+            application is transcribed from, and a layout that only appears
+            once an image is chosen moves the form out from under the cursor. */}
+        <div className="card card-pad specimen-side">
+          <div className="card-title">Label image</div>
+          {shown ? (
+            <>
+              <button
+                className="label-frame label-frame-zoom"
+                onClick={() => setZoomed(true)}
+                aria-label={`Enlarge ${source}`}
+              >
+                <img src={shown} alt={`Label image ${source}`} />
+              </button>
+              <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, marginTop: 10 }}>
+                {source}
+              </div>
+              <p className="card-note">
+                {file ? 'Uploaded from this device.' : 'A sample label, for testing.'}
+              </p>
+              <button className="btn btn-quiet btn-sm" onClick={clearImage}>
+                Choose a different image
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className={`dropzone${dragging ? ' dragging' : ''}`}
+                onClick={() => fileRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setDragging(true)
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setDragging(false)
+                  takeFile(e.dataTransfer.files?.[0])
+                }}
+              >
+                <div className="dropzone-title">Drop a label image, or choose a file</div>
+                <div className="dropzone-hint">PNG, JPEG or WebP · up to 12 MB</div>
+              </button>
+              <label className="field" style={{ marginTop: 14, marginBottom: 0 }}>
+                <span className="field-label">Or use a sample label</span>
+                <select value={sample} onChange={(e) => takeSample(e.target.value)}>
+                  <option value="">No sample selected</option>
+                  {named.map((s) => (
+                    <option key={s.filename} value={s.filename}>
+                      {s.title} — expected: {PILL_TEXT[kindOf(s.expected_verdict)]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+        </div>
       </div>
 
       {zoomed && shown && (
