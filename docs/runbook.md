@@ -147,11 +147,36 @@ import and reset and pruned to 30 days. They are on the same disk as the databas
 cover "someone imported the wrong CSV", not "the box is gone". The off-box backup covers
 the second case.
 
+### Restoring records without touching the box
+
+For "we need last week's records back", not "the disk is gone", there is a CSV path that
+needs no shell. In the app: **Export → Download a restorable backup**, then **Restore from a
+backup** to read one back. Both are admin-token gated, and the restore snapshots first.
+
+The file matters. `/export/backup.csv` is the full mirror (PRD §4.2) and is what
+`POST /api/store/import` reads. `/export/records.csv` — the **Export records as CSV** button —
+is the reviewer's take-away and drops columns, so it will be rejected as an import.
+
+```bash
+# The same thing without the browser.
+curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+  http://127.0.0.1:8020/api/export/backup.csv > backup.csv
+
+curl -X POST http://127.0.0.1:8020/api/store/import \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -F 'csv_file=@backup.csv' -F 'mode=replace'
+```
+
+`mode=merge` upserts by `id`, so re-importing an export is idempotent. `mode=replace` wipes
+first, which is what makes export → wipe → import → export byte-identical (S11).
+
 ---
 
 ## Resetting to the demo fixtures
 
-Destructive: it replaces every record with the 25 bundled examples. It snapshots first.
+Destructive: it replaces every record with the 13-record example set — part-worked on purpose,
+so every inbox filter has something in it. All 25 fixtures stage as a batch instead, from
+**Batch upload → Load the sample batch**. It snapshots first.
 Needs the admin token, and the UI confirms behind the reviewer's own name.
 
 ```bash

@@ -56,7 +56,7 @@ training, audits closed records — the operations gated behind the admin token.
 | S1 | Check one label: upload a specimen, type the application fields, verify. | Record created, extraction starts on upload, verdict returned, detail view opens on the field comparison. |
 | S2 | Prefill the single-label form from a named sample (matching, casing difference, missing warning, title-case warning, reworded warning, ABV mismatch, unit mismatch, illegible field). | Every sample selectable and reproduces its documented verdict. |
 | S3 | Batch upload: application CSV + folder of label images, paired on `filename`. | Staged preview reports all five pairing buckets (§5.5); commit files every non-ambiguous row. |
-| S4 | Load the bundled sample batch in one click. | 24 fixture applications stage with images resolved. |
+| S4 | Load the bundled sample batch in one click. | The 25 fixture applications stage, images resolved — bar the three rows deliberately left in the other pairing states (§5.5). |
 | S5 | Inbox filtered by needs attention / awaiting AI / review / fail / closed, with search over ID, applicant, brand, filename. | Filter counts match the store; search is case- and punctuation-insensitive. |
 | S6 | Open an unverified application, fill missing fields, press Verify. | Row shows busy state, resolves to pass/review/fail without page reload; field results stream as they resolve. |
 | S7 | Verify every pending record in one action. | Progress per record; one failure does not abort the rest; job summary reports estimated spend. |
@@ -64,7 +64,7 @@ training, audits closed records — the operations gated behind the admin token.
 | S9 | Return a record to the applicant with an editable reason. | Reason persists and appears in the export; the record is not reopenable (§12). |
 | S10 | Minimise the detail panel and return to it later on this device. | Collapsed/expanded state and open record survive reload. |
 | S11 | Export the store as CSV; import a CSV back; download a blank template. | Round-trip lossless: seed → export → wipe → import → export is byte-identical. |
-| S12 | Reset the store to the bundled example set. | Reset requires the admin token, is confirmed in the UI, snapshots the prior store, restores 24 fixtures. |
+| S12 | Reset the store to the bundled example set. | Reset requires the admin token, is confirmed in the UI, snapshots the prior store, restores the example set. |
 | S13 | Read the store as a normal web page — never raw CSV. | CSV appears only as a file download; every on-screen view is rendered UI. |
 
 ---
@@ -257,7 +257,7 @@ api/
   adjudicate.py       normalisation, per-field comparison, roll-up, notes
   batching.py         filename pairing, staged-preview construction
   jobs.py             bounded worker pool, per-record status, SSE progress
-  seed.py             build the 24-record example store from fixtures/
+  seed.py             build the example store from fixtures/
   readers/
     __init__.py       Reader protocol, registry, get_reader(config)
     vision.py         OpenAI-compatible client — serves both OpenAI and Gemini
@@ -296,7 +296,7 @@ the application.
 | `POST /api/batches/stage` | Multipart CSV + images. Parses, pairs images by filename (§5.5), returns a staged preview with per-row errors. Nothing is written. |
 | `POST /api/jobs` | `{scope: "pending" \| "batch", batch_id?, verify_now?}`. Commits a staged batch and/or enqueues verification. Returns a job id. |
 | `GET /api/jobs/{id}/events` | Server-sent events: `progress`, `record`, `done`, `error`. |
-| `POST /api/fixtures` | `{mode: "stage" \| "reset"}`. Stage the sample batch, or snapshot and reseed the 24-record example store. Admin token required for `reset`. |
+| `POST /api/fixtures` | `{mode: "stage" \| "reset"}`. Stage the sample batch, or snapshot and reseed the example store. Admin token required for `reset`. |
 | `POST /api/store/import` | Replace or merge by `id`, after snapshotting. Admin token required. |
 | `GET /api/health` | Store readable, images writable, reader reachable, prompt version, provider, model, spend today. |
 
@@ -693,7 +693,7 @@ resets never touch production.
 7. Glare over net contents, pixelated brand, heavy blur → that field fails as illegible while other fields still resolve.
 8. Accept on a fail verdict → confirmation lists each disagreeing field; cancel changes nothing; confirm stores override flag and reviewer name.
 9. Batch of 25 with one unmatched image → 24 verify, 1 files as image-missing, no row lost.
-10. Export → import → export produces identical bytes; reset restores 24 fixtures after snapshotting.
+10. Export → import → export produces identical bytes; reset restores the example set after snapshotting.
 11. Vision provider unreachable → verification still returns rules verdicts from OCR values and the engine string names the fallback; the record does not auto-close.
 12. Reload mid-review → open record and minimised panel state restored.
 13. A specimen carrying injected instruction text in its artwork produces its expected rules verdict; the injected content appears nowhere in the determination.

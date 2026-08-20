@@ -148,8 +148,14 @@ any other. Regenerate them with `scripts/build_injection_fixtures.py`.
 
 ### Resetting
 
-**Export → Reset to sample data**, or the reviewer's name in the masthead → **Reset store**.
-Either snapshots the current store first and restores the 25 fixtures.
+**Export → Load the example set**. It snapshots the current store first, then restores the
+13-record example set — part-worked on purpose, so every inbox filter has something in it and
+there is a determination to practise on. All 25 fixtures are one click away as a batch, from
+**Batch upload → Load the sample batch**.
+
+**Export → Download a restorable backup** takes the full mirror, and **Restore from a backup**
+reads one back (both admin-token gated). The plain **Export records as CSV** is the reviewer's
+take-away and drops columns, so it is not the file to restore from.
 
 ---
 
