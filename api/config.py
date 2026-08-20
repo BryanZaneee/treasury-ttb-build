@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     admin_token: str = ""
 
     auto_approve_matches: bool = False
+    # PRD §8: a fraction of otherwise-eligible records goes to a human anyway,
+    # so an auto-close policy is always being spot-checked by someone.
+    qa_sample_rate: float = 0.05
 
     data_dir: str = str(_ROOT_ENV.parent / "data")
     public_base_path: str = ""

@@ -853,3 +853,63 @@ def test_a_fallback_reading_is_never_cached(monkeypatch: pytest.MonkeyPatch) -> 
     cached = conn.execute("SELECT COUNT(*) FROM extraction_cache").fetchone()[0]
     conn.close()
     assert cached == 0, "the OCR fallback reading must not be cached under openai"
+
+
+def test_a_clean_match_auto_closes_only_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PRD §5.3 / §8: off by default, and an operator has to turn it on."""
+    record_id = _seed_and_get("old-tom-pass.jpg")
+    assert settings.auto_approve_matches is False, "the default must stay off"
+
+    body = client.post(f"/api/records/{record_id}/verify", headers=ACCESS).json()
+    assert body["result"] == "match"
+    assert body["decision"] is None, "a match must not close itself while the toggle is off"
+
+    db.wipe()
+    seed.seed_store()
+    record_id = _seed_and_get("old-tom-pass.jpg")
+    monkeypatch.setattr(settings, "auto_approve_matches", True)
+    monkeypatch.setattr(settings, "qa_sample_rate", 0.0)  # never sample, so this is deterministic
+    body = client.post(f"/api/records/{record_id}/verify", headers=ACCESS).json()
+    assert body["decision"] == "accepted"
+    assert body["decided_by"] == "Automatic"
+
+    conn = sqlite3.connect(db.db_path())
+    events = [r[0] for r in conn.execute("SELECT event FROM audit WHERE record_id = ?", (record_id,))]
+    conn.close()
+    assert "auto_closed" in events, "§8 requires an audit row for every auto-close"
+
+
+def test_a_failing_record_never_auto_closes(monkeypatch: pytest.MonkeyPatch) -> None:
+    record_id = _seed_and_get("harbor-mist-nowarning.jpg")
+    monkeypatch.setattr(settings, "auto_approve_matches", True)
+    monkeypatch.setattr(settings, "qa_sample_rate", 0.0)
+    body = client.post(f"/api/records/{record_id}/verify", headers=ACCESS).json()
+    assert body["result"] == "fail"
+    assert body["decision"] is None
+
+
+def test_an_ocr_only_reading_never_auto_closes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A single degraded reader is not grounds for an unattended approval."""
+    import config
+    import readers
+    from routers import records as records_router
+
+    record_id = _seed_and_get("old-tom-pass.jpg")
+    monkeypatch.setattr(config.settings, "reader_provider", "openai")
+    monkeypatch.setattr(settings, "auto_approve_matches", True)
+    monkeypatch.setattr(settings, "qa_sample_rate", 0.0)
+
+    real = readers.get_reader
+
+    def flaky(provider: str | None = None, *args: object, **kwargs: object) -> object:
+        if provider == "openai":
+            raise RuntimeError("connection refused")
+        return real("fake")
+
+    monkeypatch.setattr(readers, "get_reader", flaky)
+    monkeypatch.setattr(records_router, "get_reader", flaky)
+
+    body = client.post(f"/api/records/{record_id}/verify", headers=ACCESS).json()
+    assert body["reader_provider"] == "ocr"
+    assert body["result"] == "match", "the fake reading still matches"
+    assert body["decision"] is None, "but an OCR-only reading must not close itself"

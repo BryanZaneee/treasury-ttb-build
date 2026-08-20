@@ -81,6 +81,7 @@ own.
 | `ACCESS_TOKEN` / `ADMIN_TOKEN` | Shared bearer tokens. There are no user accounts (PRD §8). |
 | `VITE_ACCESS_TOKEN` / `VITE_ADMIN_TOKEN` | The same two tokens, exposed to the browser bundle for local dev. |
 | `AUTO_APPROVE_MATCHES` | Whether clean matches close themselves. Defaults to off (PRD §5.3). |
+| `QA_SAMPLE_RATE` | Fraction of auto-close-eligible records sent to a human anyway. Default 0.05. |
 | `DATA_DIR` | Where the SQLite store, images and snapshots live. |
 | `PUBLIC_BASE_PATH` | Subpath the app is served under in production. Empty locally. |
 

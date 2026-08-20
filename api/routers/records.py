@@ -1,13 +1,14 @@
 """Records endpoints (PRD §5.1).
 
-Verify runs the M2 rules engine against a reader's label reading; the real
-vision providers and the always-on OCR second reader land in M3 behind the
-same `readers.Reader` protocol. Auto-close is deliberately absent: its
-eligibility test (PRD §5.3) requires two readers agreeing, so with one reader
-it could never pass.
+Verify runs the rules engine against a reader's label reading, behind the
+`readers.Reader` protocol. OCR is a fallback for when the vision reader is
+unreachable, not the always-on second reader §5.3 describes, so the auto-close
+gate here drops that spec's reader-agreement clause and keeps every other one -
+see `_auto_close_eligible`.
 """
 
 import hashlib
+import random
 import sqlite3
 import time
 from contextlib import suppress
@@ -229,6 +230,26 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
     )
 
 
+def _auto_close_eligible(verdict: str, quality: str | None, reader_used: str) -> bool:
+    """Whether a verified record may close itself (PRD §5.3, §8).
+
+    Deviation from §5.3, deliberate: the spec's gate also requires the vision
+    reader and OCR to agree on every field, which this service cannot answer
+    because OCR is a fallback rather than an always-on second reader. Every
+    other clause is enforced, and the whole thing stays behind
+    AUTO_APPROVE_MATCHES, which is off unless an operator turns it on.
+    """
+    if not settings.auto_approve_matches or verdict != "match" or quality != "normal":
+        return False
+    # A record read only by the degraded fallback is one reader, and a
+    # single-reader reading never auto-closes.
+    if reader_used == "ocr":
+        return False
+    # §8: sample a fraction of eligible records into human review regardless,
+    # so the policy is always being checked by somebody.
+    return random.random() >= settings.qa_sample_rate
+
+
 def _application_from_row(row: sqlite3.Row) -> Application:
     return Application(
         brand=row["app_brand"],
@@ -391,6 +412,21 @@ def verify_record(record_id: str) -> Record:
             "fields": {r.field_key: r.verdict for r in results},
         },
     )
+
+    if _auto_close_eligible(verdict, reading.quality, reader_used):
+        db.update_record(
+            record_id,
+            decision="accepted",
+            decided_by="Automatic",
+            decided_at=datetime.now(UTC).isoformat(),
+        )
+        # §8 requires an audit row per auto-close: an unattended decision has
+        # to be as reviewable afterwards as a reviewer's own.
+        db.append_audit(
+            record_id,
+            "auto_closed",
+            {"result": verdict, "quality": reading.quality, "reader": reader_used},
+        )
 
     updated = db.get_record(record_id)
     assert updated is not None
