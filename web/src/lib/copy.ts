@@ -30,7 +30,7 @@ export const RESULT_COPY: Record<string, string> = {
   review: 'Same content, different presentation. An agent should confirm before closing.',
   fail: 'One or more fields differ in content, are missing, or could not be read.',
   invalid:
-    'The image filed is not an alcohol beverage label. Nothing was adjudicated — ask the applicant for the label specimen.',
+    'The image filed is not an alcohol beverage label. Nothing was adjudicated — ask the applicant for the label image.',
   pending: 'Not yet verified.',
 }
 

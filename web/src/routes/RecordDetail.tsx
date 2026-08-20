@@ -86,6 +86,11 @@ export function RecordDetail() {
 
   const kind = kindOf(data.result)
   const disagreeing = data.field_results.filter((f) => f.verdict !== 'match')
+  // Not derived from the field list: an `invalid` specimen is adjudicated as a
+  // whole and writes no field rows at all (PRD §3.2 extension), so a flag taken
+  // from `disagreeing.length` would send override:false and be refused by the
+  // store with an empty list of fields to explain why.
+  const needsOverride = data.result !== 'match'
   const closed = data.decision != null
   const toggle = () => {
     const next = !minimised
@@ -227,7 +232,7 @@ export function RecordDetail() {
                   <div className="empty-hint">
                     The reader found no alcohol beverage label in this image, so no field
                     was adjudicated. Return the record and ask the applicant for the label
-                    specimen.
+                    artwork.
                   </div>
                 </div>
               ) : (
@@ -291,19 +296,29 @@ export function RecordDetail() {
                 ) : (
                   <div style={{ width: '100%' }}>
                     {error && <div className="banner-error">{error}</div>}
-                    {confirming === 'accepted' && disagreeing.length > 0 && (
+                    {confirming === 'accepted' && needsOverride && (
                       <div className="banner">
                         <div className="banner-mark" aria-hidden="true">
                           !
                         </div>
                         <div className="banner-text">
-                          <strong>This record did not pass.</strong> Accepting it overrides{' '}
-                          {disagreeing.length} disagreeing field
-                          {disagreeing.length === 1 ? '' : 's'}:{' '}
-                          {disagreeing
-                            .map((f) => FIELD_LABEL[f.field_key] ?? f.field_key)
-                            .join(', ')}
-                          . Your name, the timestamp and the override flag are recorded.
+                          <strong>This record did not pass.</strong>{' '}
+                          {disagreeing.length > 0 ? (
+                            <>
+                              Accepting it overrides {disagreeing.length} disagreeing field
+                              {disagreeing.length === 1 ? '' : 's'}:{' '}
+                              {disagreeing
+                                .map((f) => FIELD_LABEL[f.field_key] ?? f.field_key)
+                                .join(', ')}
+                              .
+                            </>
+                          ) : (
+                            <>
+                              This image was not read as a label at all, so no field was compared.
+                              Accepting it approves the application on your judgement alone.
+                            </>
+                          )}{' '}
+                          Your name, the timestamp and the override flag are recorded.
                         </div>
                       </div>
                     )}
@@ -329,7 +344,7 @@ export function RecordDetail() {
                         onClick={() =>
                           decide.mutate({
                             decision: confirming,
-                            override: confirming === 'accepted' && disagreeing.length > 0,
+                            override: confirming === 'accepted' && needsOverride,
                             reviewer_name: REVIEWER.name,
                             reason: confirming === 'returned' ? reason : null,
                           })
@@ -370,7 +385,7 @@ export function RecordDetail() {
               <div className="placeholder-title">Not yet verified</div>
               <div className="placeholder-hint">
                 Confirm the application data on the left, then run AI verification. The service
-                reads the label specimen and compares every required field against the
+                reads the label image and compares every required field against the
                 application of record.
               </div>
             </div>

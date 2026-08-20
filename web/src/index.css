@@ -288,7 +288,22 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
   border: 1px solid var(--field); background: var(--paper); color: var(--ink-4);
   font-size: 11px; font-weight: 700; cursor: help; user-select: none;
 }
+.help-dot { position: relative; }
 .help-dot:hover, .help-dot:focus-visible { color: var(--ink-2); border-color: var(--ink-4); }
+/* The explanation, as a bubble on the dot itself. A native `title` needs a
+   second of hover to appear, which is long enough to miss. */
+.help-dot::after {
+  content: attr(data-tip);
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 30;
+  width: max-content; max-width: 320px;
+  padding: 10px 12px; border: 1px solid var(--rule); border-radius: 3px;
+  background: var(--ink); color: #fff;
+  font-size: 12px; font-weight: 400; line-height: 1.5; letter-spacing: 0;
+  text-align: left; text-transform: none;
+  box-shadow: 0 4px 14px rgba(16, 40, 61, 0.18);
+  opacity: 0; visibility: hidden; transition: opacity 0.12s ease;
+}
+.help-dot:hover::after, .help-dot:focus-visible::after { opacity: 1; visibility: visible; }
 
 /* ---------------- queue table ---------------- */
 
@@ -416,7 +431,13 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 /* ---------------- layout helpers ---------------- */
 
 .split { display: grid; grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); gap: 20px; align-items: start; }
-.split-right { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: 20px; align-items: start; }
+.split-right {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 20px;
+  /* Stretch, not start: the specimen panel ends flush with the form it is
+     transcribed into rather than running past the bottom of it. */
+  align-items: stretch;
+}
 .stack { display: flex; flex-direction: column; gap: 16px; }
 .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .push { margin-left: auto; }
@@ -655,10 +676,12 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 .label-frame img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 .label-frame-sm { aspect-ratio: 3 / 4; width: 84px; flex: none; padding: 6px; }
 
-/* Sticky, so the label stays readable while the reviewer works down the form -
-   the fields are transcribed from it. */
-.specimen-side { position: sticky; top: 20px; }
-.specimen-side .label-frame { width: 100%; }
+/* The label stays readable while the reviewer works down the form - the fields
+   are transcribed from it - and the frame takes whatever height is left rather
+   than dictating the card's. */
+.specimen-side { display: flex; flex-direction: column; }
+.specimen-side .label-frame { width: 100%; aspect-ratio: auto; flex: 1; min-height: 220px; }
+.specimen-side .dropzone { flex: 1; display: flex; flex-direction: column; justify-content: center; }
 
 .specimen-slot { height: 132px; margin: 14px 0; display: flex; align-items: stretch; }
 .specimen-slot > * { flex: 1; min-width: 0; }
@@ -800,6 +823,11 @@ tr.staged-selected > td { background: var(--sunk-2); }
 .staged-table .bulkbar-check { width: 44px; }
 /* The image the row is paired with, marked in the picker. */
 .thumb-current { outline: 2px solid var(--navy); outline-offset: 1px; }
+.picker-group {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-5); margin: 14px 0 8px;
+}
+.picker-group:first-child { margin-top: 0; }
 .staged-drop-row {
   display: grid; grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px; font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid var(--rule-soft);

@@ -214,6 +214,7 @@ export function CheckBatch() {
 
   const committable = batch ? batch.rows.filter((r) => r.bucket !== 'ambiguous').length : 0
   const rowNumbers = batch?.rows.map((r) => r.row) ?? []
+  const blocking = batch?.rows.filter((r) => r.bucket === 'ambiguous') ?? []
   const allSelected = rowNumbers.length > 0 && rowNumbers.every((n) => selected.has(n))
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(rowNumbers))
   const toggleOne = (row: number) =>
@@ -323,10 +324,17 @@ export function CheckBatch() {
               </div>
             ) : (
               <>
+                {/* Names the rows, not the rule: "any row is ambiguous" leaves the
+                    reviewer to find which one. */}
                 {batch.blocks_commit && (
                   <div className="banner-error" style={{ marginTop: 12 }}>
-                    Commit is blocked while any row is ambiguous. Two uploaded files normalise
-                    to the same name — open the row's Image picker and choose the right one.
+                    <strong>
+                      Upload is blocked by row{blocking.length === 1 ? '' : 's'}{' '}
+                      {blocking.map((r) => r.row).join(', ')}.
+                    </strong>{' '}
+                    More than one uploaded file matches{' '}
+                    {blocking.length === 1 ? 'that row' : 'each of those rows'}. Open the Image
+                    picker and choose which one belongs to it.
                   </div>
                 )}
                 <div className="scroll-x" style={{ marginTop: 12 }}>

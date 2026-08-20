@@ -34,6 +34,7 @@ export function Inbox() {
   const [query, setQueryState] = useState(() => entry.get('q') ?? '')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   // Selection is scoped to what the reviewer can currently see. Changing the
   // filter or the search clears it, so a bulk action can never reach a record
   // that has scrolled out of the view they chose it from.
@@ -279,9 +280,9 @@ export function Inbox() {
           aria-label="Search brand, applicant, or COLA ID"
           style={{ flex: 1, minWidth: 150 }}
         />
-        <a className="btn btn-quiet" href={freshUrl('/export/records.csv')} download>
+        <button className="btn btn-quiet" onClick={() => setExporting(true)}>
           Export CSV
-        </a>
+        </button>
       </div>
 
       <div className="card">
@@ -378,6 +379,41 @@ export function Inbox() {
           </div>
         )}
       </div>
+
+      {exporting && (
+        <div className="dialog-backdrop" role="presentation" onClick={() => setExporting(false)}>
+          <div
+            className="dialog dialog-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="export-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="dialog-head">
+              <h2 id="export-title">Export the review inbox</h2>
+              <p className="card-note">
+                Downloads every application in the store as it stands right now — all {total},
+                not only the {rows.length} this filter is showing. Each row carries the
+                application as filed, the result, any fields that did not match, and the
+                decision.
+              </p>
+            </div>
+            <div className="dialog-foot">
+              <a
+                className="btn"
+                href={freshUrl('/export/records.csv')}
+                download
+                onClick={() => setExporting(false)}
+              >
+                Download CSV
+              </a>
+              <button className="btn btn-quiet" onClick={() => setExporting(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirming && (
         <BulkDecisionDialog
@@ -538,7 +574,7 @@ function QueueItem({
             >
               <div style={{ fontSize: 13.5, color: 'var(--ink-3)', maxWidth: 560, lineHeight: 1.55 }}>
                 This application has not been checked. Run verification to read the label
-                specimen and compare every required field against the application of record.
+                label image and compare every required field against the application of record.
               </div>
               <button className="btn push" onClick={onVerify} disabled={busy}>
                 {busy && <span className="spinner" />}

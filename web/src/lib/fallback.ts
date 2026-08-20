@@ -12,4 +12,4 @@ export const FALLBACK_TITLE = 'Read by local OCR — accuracy may be lower'
 export const FALLBACK_BODY =
   'The vision reader was unavailable, so the label was read by local OCR. ' +
   'Blurred, angled or low-contrast captures read less reliably this way. ' +
-  'Confirm the fields against the specimen before closing the record.'
+  'Confirm the fields against the label before closing the record.'

@@ -10,7 +10,7 @@ import type { Health, RecordsPage } from '../api/client'
  */
 export function Export() {
   const client = useQueryClient()
-  const [confirming, setConfirming] = useState(false)
+  const [confirming, setConfirming] = useState<null | 'reset' | 'empty'>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [showStore, setShowStore] = useState(false)
 
@@ -25,16 +25,18 @@ export function Export() {
   })
 
   const reset = useMutation({
-    mutationFn: () =>
+    mutationFn: (mode: 'reset' | 'empty') =>
       api<{ reset_count: number }>('/fixtures', {
         method: 'POST',
-        body: { mode: 'reset' },
+        body: { mode },
         admin: true,
       }),
-    onSuccess: (data) => {
-      setConfirming(false)
+    onSuccess: (data, mode) => {
+      setConfirming(null)
       setMessage(
-        `Store reset — ${data.reset_count} fixtures restored. The prior store was snapshotted first.`,
+        mode === 'empty'
+          ? 'Every record was removed. A copy of the old store was saved first.'
+          : `The example set is loaded — ${data.reset_count} applications to work through. A copy of the old store was saved first.`,
       )
       client.invalidateQueries({ queryKey: ['records'] })
     },
@@ -54,15 +56,15 @@ export function Export() {
 
       <div className="grid-2" style={{ gap: 20 }}>
         <div className="card card-pad">
-          <div style={{ fontSize: 15, fontWeight: 700 }}>Record store</div>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>Applications on file</div>
           <p className="card-note">
-            Applications, extractions and determinations persist to a SQLite system of record
-            with an append-only audit log. {rows.length} records persisted · a CSV mirror is
-            regenerated after every mutation.
+            {rows.length} application{rows.length === 1 ? '' : 's'} have been filed. Every
+            determination is kept with the reviewer who made it, so the record of what was
+            decided outlives the session it was decided in.
           </p>
           <p className="card-note">
-            To file applications from a spreadsheet, upload the CSV and its specimens on Check a
-            batch — it stages every row for review before anything is written.
+            To file a spreadsheet of applications, upload it with its label images on Batch
+            upload — nothing is written until you have checked the pairing.
           </p>
           <div className="stack" style={{ gap: 10, marginTop: 14 }}>
             <a className="btn btn-wide" href={freshUrl('/export/records.csv')} download>
@@ -71,57 +73,39 @@ export function Export() {
             <button className="btn btn-quiet btn-wide" onClick={() => setShowStore((v) => !v)}>
               {showStore ? 'Hide record table' : 'View record table'}
             </button>
-            {confirming ? (
-              <div className="row">
-                <button
-                  className="btn btn-danger"
-                  onClick={() => reset.mutate()}
-                  disabled={reset.isPending}
-                >
-                  {reset.isPending && <span className="spinner spinner-dark" />}
-                  Confirm reset
-                </button>
-                <button className="btn btn-quiet" onClick={() => setConfirming(false)}>
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button className="btn btn-danger btn-wide" onClick={() => setConfirming(true)}>
-                Reset to sample data
-              </button>
-            )}
+            <button className="btn btn-quiet btn-wide" onClick={() => setConfirming('reset')}>
+              Load the example set
+            </button>
+            <button className="btn btn-danger btn-wide" onClick={() => setConfirming('empty')}>
+              Remove all records
+            </button>
           </div>
-          {confirming && (
-            <p className="card-note">
-              This snapshots the current store, wipes it, and restores the 25 bundled fixtures.
-              Requires the admin token.
-            </p>
-          )}
           {message && <p className="card-note">{message}</p>}
         </div>
 
         <div className="card card-pad">
           <div className="row">
-            <div style={{ fontSize: 15, fontWeight: 700 }}>Verification engine</div>
-            {/* Native title tooltip rather than a popover component — hover and
-                focus both surface it, and it needs no JS. */}
+            <div style={{ fontSize: 15, fontWeight: 700 }}>How a label is checked</div>
+            {/* The bubble is CSS on the element itself: a native `title` needs a
+                second of hover to appear and is easy to miss entirely. */}
             <span
               className="help-dot push"
               tabIndex={0}
               role="note"
-              title={
-                'The AI reads the label image and reports the seven fields it sees. ' +
-                'It never decides the outcome: a deterministic rules engine compares ' +
-                'those readings to the filed application and issues the verdict. The ' +
-                'reader can only downgrade a verdict or add a note, never improve one.'
+              data-tip={
+                'The AI reads the label picture and writes down the seven things it can see. ' +
+                'It does not decide the outcome. Each of those readings is then compared, by ' +
+                'a fixed set of checks, against what the applicant filed. The AI can flag a ' +
+                'problem or add a note; it can never clear one.'
               }
             >
               ?
             </span>
           </div>
           <p className="card-note">
-            A deterministic rules engine produces the verdict of record. The vision reader
-            supplies observed values and may downgrade a verdict, never improve one.
+            The AI reads the label and reports what it can see. The result is then decided by a
+            fixed set of checks against the application as filed — the AI can raise a problem,
+            never clear one.
           </p>
           <div className="readout">
             <div>
@@ -142,25 +126,78 @@ export function Export() {
             </div>
           </div>
           <ul className="bullets">
+            <li>Most labels come back in a few seconds.</li>
             <li>
-              Target turnaround is under five seconds per label; elapsed time is recorded on
-              every determination.
+              A field is checked on its own: wrong content fails, while wording or unit
+              differences are sent for review rather than refused outright.
             </li>
             <li>
-              Verdicts are field-scoped: content differences fail, formatting and unit
-              differences route to review.
+              A blurred or glared photo lowers confidence, so an otherwise clean label is sent
+              for review rather than passed.
             </li>
             <li>
-              Degraded captures lower extraction confidence and downgrade otherwise clean
-              matches to review.
-            </li>
-            <li>
-              Illegible fields fail with a request for replacement artwork rather than a silent
-              guess.
+              A field nobody could read is failed with a request for better artwork, never
+              guessed at.
             </li>
           </ul>
         </div>
       </div>
+
+      {confirming && (
+        <div className="dialog-backdrop" role="presentation" onClick={() => setConfirming(null)}>
+          <div
+            className="dialog dialog-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="dialog-head">
+              <h2 id="reset-title">
+                {confirming === 'empty' ? 'Remove all records' : 'Load the example set'}
+              </h2>
+            </div>
+            <div className="dialog-body">
+              <div className="banner">
+                <div className="banner-mark" aria-hidden="true">
+                  !
+                </div>
+                <div className="banner-text">
+                  {confirming === 'empty' ? (
+                    <>
+                      Every application and label image on file is removed, leaving an empty
+                      inbox for your own data.
+                    </>
+                  ) : (
+                    <>
+                      Everything on file is replaced with six example applications to practise
+                      on — two still to check, one accepted, one in review, one failed, one sent
+                      back.
+                    </>
+                  )}{' '}
+                  A copy of the current store is saved first.
+                </div>
+              </div>
+              <p className="card-note">
+                {rows.length} application{rows.length === 1 ? '' : 's'} will be replaced.
+              </p>
+            </div>
+            <div className="dialog-foot">
+              <button
+                className={confirming === 'empty' ? 'btn btn-danger' : 'btn'}
+                onClick={() => reset.mutate(confirming)}
+                disabled={reset.isPending}
+              >
+                {reset.isPending && <span className="spinner" />}
+                {confirming === 'empty' ? 'Yes, remove everything' : 'Yes, load the example set'}
+              </button>
+              <button className="btn btn-quiet" onClick={() => setConfirming(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showStore && (
         <div className="card" style={{ marginTop: 20 }}>

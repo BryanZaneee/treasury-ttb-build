@@ -147,8 +147,8 @@ def pair(rows: list[dict[str, str]], image_names: list[str]) -> tuple[list[Row],
             staged_row.bucket = "ambiguous"
             staged_row.candidate_filenames = sorted(candidates)
             staged_row.errors.append(
-                f"{len(candidates)} images normalise to the same name; "
-                "rename or remove all but one before committing"
+                f"{len(candidates)} uploads match this name; "
+                "pick the right one in the Image picker"
             )
         else:
             staged_row.errors.append("no image supplied for this row")
