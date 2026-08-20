@@ -11,6 +11,7 @@ import json
 import shutil
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -81,6 +82,50 @@ def put_staged(batch_id: str, staged: Staged) -> Staged:
         json.dumps({"rows": _ROWS.dump_python(staged.rows, mode="json"), "images": staged.images}),
     )
     return staged
+
+
+def _loads(body: str) -> Staged:
+    raw = json.loads(body)
+    return Staged(rows=_ROWS.validate_python(raw["rows"]), images=raw["images"])
+
+
+def _dumps(staged: Staged) -> str:
+    return json.dumps(
+        {"rows": _ROWS.dump_python(staged.rows, mode="json"), "images": staged.images}
+    )
+
+
+def claim_rows(batch_id: str, only: list[int] | None) -> tuple[list[batching.Row], list[int]]:
+    """Take the rows about to be filed out of the staged document, atomically.
+
+    Reading the document, filing its rows and writing back the remainder is a
+    read-modify-write, and two workers running it against the same batch - a
+    double-clicked commit, or a retry - would each file the full set. Claiming
+    under one exclusive transaction means the loser finds nothing left to file
+    instead of writing a second copy of every record.
+
+    Returns the claimed rows, or the blocking ambiguous row numbers (PRD §5.5);
+    in the blocking case nothing is claimed and the document is untouched.
+    """
+    with db.exclusive() as conn:
+        row = conn.execute(
+            "SELECT body FROM documents WHERE kind = 'batch' AND key = ?", (batch_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"unknown batch {batch_id!r}")
+        staged = _loads(str(row["body"]))
+        chosen = [r for r in staged.rows if only is None or r.row in set(only)]
+        blocking = batching.unresolved(chosen)
+        if blocking or not chosen:
+            return [], blocking
+
+        filed = {r.row for r in chosen}
+        staged.rows = [r for r in staged.rows if r.row not in filed]
+        conn.execute(
+            "UPDATE documents SET body = ?, updated_at = ? WHERE kind = 'batch' AND key = ?",
+            (_dumps(staged), datetime.now(UTC).isoformat(), batch_id),
+        )
+        return chosen, []
 
 
 def to_response(batch_id: str, staged: Staged) -> StagedBatch:

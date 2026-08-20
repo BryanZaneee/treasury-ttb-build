@@ -74,6 +74,29 @@ def transaction() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+@contextmanager
+def exclusive() -> Iterator[sqlite3.Connection]:
+    """A transaction that takes the write lock *before* it reads.
+
+    `transaction()` begins deferred, so sqlite3 opens the transaction on the
+    first write - a read-modify-write through it can interleave with another
+    worker's and both can act on the same snapshot. BEGIN IMMEDIATE serialises
+    the whole sequence, which is what claiming staged batch rows needs: PRD §9
+    runs more than one worker, and filing the same row twice writes two records.
+    """
+    conn = connect()
+    conn.isolation_level = None
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        yield conn
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+
+
 def init_db() -> None:
     """Apply any migration not yet recorded in schema_version, in order."""
     conn = connect()
@@ -209,9 +232,7 @@ def get_record(record_id: str) -> sqlite3.Row | None:
         conn.close()
 
 
-def list_records(
-    result_filter: str | None = None, query: str | None = None
-) -> list[sqlite3.Row]:
+def list_records(result_filter: str | None = None) -> list[sqlite3.Row]:
     conn = connect()
     try:
         sql = "SELECT * FROM records"
@@ -226,12 +247,6 @@ def list_records(
             params.append(result_filter)
         elif result_filter == "attention":
             clauses.append("(result IN ('review', 'fail', 'invalid') AND decision IS NULL)")
-        if query:
-            clauses.append(
-                "(id LIKE ? OR applicant LIKE ? OR app_brand LIKE ? OR filename LIKE ?)"
-            )
-            like = f"%{query}%"
-            params.extend([like, like, like, like])
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY received DESC"
@@ -251,11 +266,15 @@ def filter_counts() -> dict[str, int]:
                 SUM(CASE WHEN verified = 0 THEN 1 ELSE 0 END) AS pending,
                 SUM(CASE WHEN result = 'review' THEN 1 ELSE 0 END) AS review,
                 SUM(CASE WHEN result = 'fail' THEN 1 ELSE 0 END) AS fail,
-                SUM(CASE WHEN decision IS NOT NULL THEN 1 ELSE 0 END) AS closed
+                SUM(CASE WHEN decision IS NOT NULL THEN 1 ELSE 0 END) AS closed,
+                COUNT(*) AS total
             FROM records
             """
         ).fetchone()
-        return {k: row[k] or 0 for k in ("attention", "pending", "review", "fail", "closed")}
+        return {
+            k: row[k] or 0
+            for k in ("attention", "pending", "review", "fail", "closed", "total")
+        }
     finally:
         conn.close()
 
@@ -300,18 +319,40 @@ def get_field_results(record_id: str) -> list[sqlite3.Row]:
 
 
 def next_record_id() -> str:
-    """COLA-YYYY-NNNN, continuing the highest number already in the store."""
+    """COLA-YYYY-NNNN, continuing the highest number already in the store.
+
+    The suffix is read with one aggregate rather than by scanning every id into
+    Python: filing a 300-row batch called this once per row, which made the
+    commit quadratic in the size of the store.
+    """
     conn = connect()
     try:
-        rows = conn.execute("SELECT id FROM records WHERE id LIKE 'COLA-%'").fetchall()
+        row = conn.execute(
+            "SELECT MAX(CAST(substr(id, 11) AS INTEGER)) AS n FROM records "
+            "WHERE id LIKE 'COLA-____-%' ESCAPE '\\'"
+        ).fetchone()
     finally:
         conn.close()
-    highest = 4099
-    for row in rows:
-        parts = row["id"].split("-")
-        if len(parts) == 3 and parts[2].isdigit():
-            highest = max(highest, int(parts[2]))
+    highest = max(4099, int(row["n"] or 0))
     return f"COLA-{datetime.now(UTC).year}-{highest + 1}"
+
+
+def insert_new_record(row: dict[str, Any]) -> str:
+    """Allocate an id and file the row under it, returning the id.
+
+    Allocation and insert are two statements, so two concurrent filings can pick
+    the same number - and PRD §9 runs more than one worker. The unique index on
+    `records.id` is what actually decides, and losing that race is a retry, not
+    the 500 an uncaught IntegrityError produced.
+    """
+    for _ in range(8):
+        row["id"] = next_record_id()
+        try:
+            insert_record(row)
+        except sqlite3.IntegrityError:
+            continue
+        return str(row["id"])
+    raise RuntimeError("could not allocate a record id")
 
 
 _background: list[threading.Thread] = []
@@ -407,26 +448,39 @@ def reset_images_dir() -> None:
     images.mkdir()
 
 
-def _pack_field_results(record_id: str) -> tuple[str, str, str]:
-    rows = get_field_results(record_id)
-    results = "|".join(f"{r['field_key']}:{r['verdict']}" for r in rows if r["verdict"])
-    notes = "|".join(f"{r['field_key']}:{r['note']}" for r in rows if r["note"])
-    return results, notes, csv_io.pack_field_values(rows)
-
-
 def mirror_rows() -> list[dict[str, Any]]:
+    """Every record with its field results packed into the mirror's cells.
+
+    Both tables are read once. Packing per record through `get_field_results`
+    meant a fresh connection and a query per row, so regenerating the mirror for
+    a 300-record store opened 301 connections - on the debounce timer once a
+    second through a batch commit, and on the request path for both exports.
+    """
     conn = connect()
     try:
         records = conn.execute("SELECT * FROM records ORDER BY received").fetchall()
+        results = conn.execute("SELECT * FROM field_results").fetchall()
     finally:
         conn.close()
+
+    order = {key: i for i, key in enumerate(FIELD_ORDER)}
+    by_record: dict[str, list[sqlite3.Row]] = {}
+    for result in results:
+        by_record.setdefault(result["record_id"], []).append(result)
+    for grouped in by_record.values():
+        grouped.sort(key=lambda r: order.get(r["field_key"], len(order)))
+
     rows = []
     for record in records:
-        field_results, field_notes, field_values = _pack_field_results(record["id"])
+        fields = by_record.get(record["id"], [])
         row = {col: record[col] for col in record.keys()}  # noqa: SIM118 (sqlite3.Row)
-        row["field_results"] = field_results
-        row["field_notes"] = field_notes
-        row["field_values"] = field_values
+        row["field_results"] = "|".join(
+            f"{r['field_key']}:{r['verdict']}" for r in fields if r["verdict"]
+        )
+        row["field_notes"] = "|".join(
+            f"{r['field_key']}:{r['note']}" for r in fields if r["note"]
+        )
+        row["field_values"] = csv_io.pack_field_values(fields)
         rows.append(row)
     return rows
 

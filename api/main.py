@@ -34,9 +34,9 @@ _ADMIN_ROUTES = [
     ("POST", "/api/store/import"),
 ]
 # POST /api/fixtures is access-gated always here; its additional ADMIN_TOKEN
-# requirement for mode: "reset" (PRD §5.1, §8) depends on the request body,
-# so that half of the check belongs in the route handler once it exists (M1),
-# not in this path/method-based middleware.
+# requirement for the destructive modes ("reset" and "empty", PRD §5.1, §8)
+# depends on the request body, so that half of the check lives in the route
+# handler (routers/store.py) rather than in this path/method-based middleware.
 
 
 # PRD §8: per-IP rate limits on upload and verify. These are the two routes

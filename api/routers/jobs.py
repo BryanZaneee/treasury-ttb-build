@@ -17,7 +17,6 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-import batching
 import csv_io
 import db
 from config import settings
@@ -48,6 +47,10 @@ class Job(BaseModel):
     committed: int = 0
     failed: int = 0
     verdicts: dict[str, int] = {}
+    # The records this job is verifying. A `pending` job derives its own set
+    # server side, so without this the browser cannot say which rows the job
+    # covers - only how many - and the inbox could not mark them as in progress.
+    record_ids: list[str] = []
     events: list[dict[str, Any]] = []
     error: str | None = None
 
@@ -73,30 +76,25 @@ def _commit_batch(job: Job, batch_id: str, only: list[int] | None = None) -> lis
     `only` files a subset - the reviewer accepted part of the staged table -
     and the rows that were filed are then removed from the staged document, so
     committing the remainder later cannot file them twice."""
-    entry = batches.get_staged(batch_id)
-    if entry is None:
-        raise KeyError(f"unknown batch {batch_id!r}")
-
-    chosen = [r for r in entry.rows if only is None or r.row in set(only)]
-    if not chosen:
-        raise ValueError("no staged rows to file")
-
+    # Claiming removes the rows from the staged document inside the same
+    # transaction that reads them, so a second commit of the same batch finds
+    # nothing to file rather than filing everything twice.
+    chosen, blocking = batches.claim_rows(batch_id, only)
     # Block, don't skip: a caller bypassing the UI must not lose rows silently.
-    unresolved = batching.unresolved(chosen)
-    if unresolved:
+    if blocking:
         raise ValueError(
             "resolve the ambiguous row(s) before committing: "
-            + ", ".join(str(n) for n in unresolved)
+            + ", ".join(str(n) for n in blocking)
         )
+    if not chosen:
+        raise ValueError("no staged rows to file")
 
     record_ids = []
     received = datetime.now(UTC).isoformat()
     for row in chosen:
         values = row.values
-        record_id = db.next_record_id()
-        db.insert_record(
+        record_id = db.insert_new_record(
             {
-                "id": record_id,
                 "received": received,
                 "applicant": values.get("applicant", ""),
                 "beverage": values.get("class_type", ""),
@@ -121,10 +119,6 @@ def _commit_batch(job: Job, batch_id: str, only: list[int] | None = None) -> lis
         if row.image:
             record_ids.append(record_id)
 
-    if only is not None:
-        filed = {r.row for r in chosen}
-        entry.rows = [r for r in entry.rows if r.row not in filed]
-        batches.put_staged(batch_id, entry)
     return record_ids
 
 
@@ -183,6 +177,7 @@ def _run(job: Job, body: JobCreateRequest) -> None:
             return
 
         job.total = len(record_ids)
+        job.record_ids = record_ids
         save_job(job)
         # PRD §8: bounded, not unbounded. A 300-record batch one-at-a-time
         # cannot meet the 10-minute budget, and 300 at once would breach the

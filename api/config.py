@@ -1,7 +1,8 @@
 """Environment configuration, parsed once at import time.
 
-Mirrors .env.example verbatim. Per-provider effort clamping (PRD §5.2) is an M3
-concern and is not implemented here.
+Mirrors .env.example verbatim. Per-provider effort clamping (PRD §5.2) is not
+applied here - it belongs to the adapter that knows the provider's floor, in
+`readers/vision.py`, and is asserted by `test_readers.py`.
 """
 
 from pathlib import Path

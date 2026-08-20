@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
+import csv_io
 from models import (
     Application,
     CaptureQuality,
@@ -35,15 +36,11 @@ _APP_ATTR = {
     "origin": "origin",
 }
 
-_LABELS = {
-    "brand": "Brand name",
-    "classType": "Class/type",
-    "abv": "Alcohol content",
-    "net": "Net contents",
-    "producer": "Bottler/producer",
-    "origin": "Country of origin",
-    "warning": "Government warning",
-}
+# One spelling of each field name, shared with the CSV `issues` column. Two
+# tables drifted apart - "Class/type" in a reviewer's field note against
+# "Class / type" in the export of the same record - so the same field was named
+# two ways across two reviewer-facing surfaces. PRD §3.1 spells it spaced.
+_LABELS = csv_io.FIELD_LABEL
 
 # Fields that must be adjudicated on every record. `producer` is conditional and
 # `origin` is imports-only (PRD §3.1), so they are adjudicated only when either

@@ -1336,3 +1336,70 @@ def test_committing_a_selection_files_only_those_rows_and_leaves_the_rest() -> N
     )
     assert _await_job(again.json()["id"])["committed"] == 1
     assert len(client.get("/api/records", headers=ACCESS).json()["records"]) == 2
+
+
+def test_committing_the_same_batch_twice_does_not_file_it_twice() -> None:
+    """The staged rows are claimed inside the transaction that reads them, so a
+    double-clicked commit - or a retry landing on the second worker PRD §9
+    deploys - finds nothing left to file rather than writing a second copy of
+    every record."""
+    staged = client.post(
+        "/api/batches/stage",
+        headers=ACCESS,
+        files={"applications_csv": ("apps.csv", SAMPLE_CSV, "text/csv")},
+    ).json()
+    batch_id = staged["batch_id"]
+    rows = [r["row"] for r in staged["rows"]]
+
+    first = _await_job(
+        client.post(
+            "/api/jobs",
+            headers=ACCESS,
+            json={"scope": "batch", "batch_id": batch_id, "rows": rows, "verify_now": False},
+        ).json()["id"]
+    )
+    assert first["state"] == "done"
+    assert first["committed"] == len(rows)
+
+    second = _await_job(
+        client.post(
+            "/api/jobs",
+            headers=ACCESS,
+            json={"scope": "batch", "batch_id": batch_id, "rows": rows, "verify_now": False},
+        ).json()["id"]
+    )
+    assert second["state"] == "error", "the rows were already claimed"
+    assert second["committed"] == 0
+
+    filed = client.get("/api/records", headers=ACCESS).json()
+    assert filed["counts"]["total"] == len(rows), "one record per staged row, not two"
+
+
+def test_a_record_files_without_an_applicant() -> None:
+    """The single-label form asks for the seven fields of PRD §3.1, and
+    applicant is not one of them - so it must not be a required part of the
+    filing. It stays a column, fed by batch intake (§4.3) and the seed."""
+    resp = client.post(
+        "/api/records",
+        headers=ACCESS,
+        data={
+            "beverage": "Distilled Spirits",
+            "application": (
+                '{"brand": "Old Tom", "class_type": "Bourbon", "abv": "45%", '
+                '"net": "750 mL"}'
+            ),
+            "specimen_key": "old-tom-pass.jpg",
+        },
+        files={},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["applicant"] == ""
+
+
+def test_counts_only_skips_the_rows() -> None:
+    """The masthead badge wants one integer, not the whole store."""
+    _seed_and_get("old-tom-pass.jpg")
+    body = client.get("/api/records?counts_only=true", headers=ACCESS).json()
+    assert body["records"] == []
+    assert body["counts"]["total"] >= 1
+    assert body["counts"]["total"] == len(client.get("/api/records", headers=ACCESS).json()["records"])

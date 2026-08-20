@@ -41,6 +41,9 @@ class RecordCounts(BaseModel):
     review: int = 0
     fail: int = 0
     closed: int = 0
+    # The whole-store count, so a caller wanting only a number does not have to
+    # fetch every record to take its length.
+    total: int = 0
 
 
 class RecordsListResponse(BaseModel):
@@ -50,13 +53,6 @@ class RecordsListResponse(BaseModel):
 
 class RecordDetail(Record):
     field_results: list[FieldResult] = []
-
-
-class RecordCreateRequest(BaseModel):
-    applicant: str
-    beverage: str
-    application: Application
-    specimen_key: str | None = None
 
 
 class RecordPatchRequest(BaseModel):
@@ -76,10 +72,18 @@ def _row_to_record(row: sqlite3.Row) -> Record:
 @router.get("/records", response_model=RecordsListResponse)
 def list_records(
     filter: FilterName | None = None,
-    q: str | None = None,
+    counts_only: bool = False,
 ) -> RecordsListResponse:
-    rows = db.list_records(result_filter=filter, query=q)
+    """The queue, plus the filter counts every view leads with.
+
+    `counts_only` skips the row list for callers that want the counts alone -
+    the masthead badge fetched the entire store on every route change to render
+    one integer. Search is not a parameter here: it runs client side over the
+    already-loaded set (`web/src/lib/search.ts`), which is the only
+    implementation and the only one that is punctuation-insensitive per S5.
+    """
     counts = db.filter_counts()
+    rows = [] if counts_only else db.list_records(result_filter=filter)
     return RecordsListResponse(
         records=[_row_to_record(r) for r in rows],
         counts=RecordCounts(**counts),
@@ -88,7 +92,10 @@ def list_records(
 
 @router.post("/records", response_model=Record, status_code=201)
 def create_record(
-    applicant: str = Form(...),
+    # Not collected on the single-label form: PRD §6.1 files the seven fields of
+    # §3.1 and applicant is not one of them. It still arrives from batch intake
+    # (§4.3) and the seed, and remains a record column and an S5 search key.
+    applicant: str = Form(""),
     beverage: str = Form(...),
     application: str = Form(..., description="JSON-encoded Application"),
     specimen_key: str | None = Form(None),
@@ -107,7 +114,6 @@ def create_record(
     if uploaded is None and not specimen_key:
         raise HTTPException(status_code=422, detail="an image or a specimen_key is required")
 
-    record_id = db.next_record_id()
     filename = uploads.safe_basename(uploaded.filename or "") if uploaded else specimen_key or ""
     specimen = specimen_key or ""
     if uploaded is not None:
@@ -116,7 +122,6 @@ def create_record(
         except uploads.UploadError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
     record: dict[str, Any] = {
-        "id": record_id,
         "received": datetime.now(UTC).isoformat(),
         "applicant": applicant,
         "beverage": beverage,
@@ -133,7 +138,7 @@ def create_record(
         "verified": False,
         "result": None,
     }
-    db.insert_record(record)
+    record_id = db.insert_new_record(record)
     # Deviation from PRD §5.2, deliberate: nothing calls a reader on upload.
     # Extraction only happens when a reviewer asks for it, so a filing that is
     # never verified never costs a paid call.

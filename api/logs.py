@@ -56,11 +56,6 @@ def counters() -> dict[str, int]:
         return dict(_counters)
 
 
-def reset_counters() -> None:
-    with _counter_lock:
-        _counters.clear()
-
-
 def event(name: str, **fields: Any) -> None:
     """Log one structured event. Field values are redacted by key."""
     logger.info(name, extra={"fields": redact(fields)})
