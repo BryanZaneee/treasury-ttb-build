@@ -166,7 +166,7 @@ vitest, production build) ran on every push.
 
 | Layer | Choice |
 | --- | --- |
-| Frontend | React 19, TypeScript strict, Vite, React Router, TanStack Query, Zod |
+| Frontend | React 19, TypeScript strict, Vite, React Router, TanStack Query |
 | Backend | Python 3.12, FastAPI, Pydantic |
 | Store | SQLite via the stdlib `sqlite3` module, WAL mode, no ORM, derived CSV mirror |
 | Reader | `gpt-4.1-mini` vision, with local Tesseract OCR always available as the fallback |
