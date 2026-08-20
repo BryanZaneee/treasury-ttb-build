@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # Named per provider so the key a reader uses is unambiguous; falls back to
     # READER_API_KEY when unset.
     openai_api_key: str = ""
-    reader_effort: str = "low"
+    reader_effort: str = "none"
     reader_service_tier: str = "standard"
     reader_timeout_s: int = 25
     # PRD §8: reader calls during a batch run are bounded, not unbounded - 300

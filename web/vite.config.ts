@@ -14,6 +14,9 @@ export default defineConfig(({ mode }) => {
     base,
     envDir,
     plugins: [react()],
+    // Vitest's default glob would also collect the Playwright specs in e2e/,
+    // which need a browser and a running server. Unit tests live in src/.
+    test: { include: ['src/**/*.{test,spec}.{ts,tsx}'] },
     // Dev only: the production topology puts Caddy in front and routes /api to
     // the API container (PRD §9), so this proxy stands in for that locally.
     server: {

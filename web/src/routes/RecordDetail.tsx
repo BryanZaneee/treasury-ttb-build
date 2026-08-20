@@ -132,7 +132,7 @@ export function RecordDetail() {
           <div className="card card-pad">
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
               <div className="card-title">Label image</div>
-              <div className="mono" style={{ fontSize: 11, color: 'var(--ink-6)' }}>
+              <div className="mono" style={{ fontSize: 11, color: 'var(--ink-4)' }}>
                 {data.filename}
               </div>
             </div>
@@ -186,10 +186,12 @@ export function RecordDetail() {
                     </div>
                   </div>
                 ))}
-                <div className="check-row">
+                {/* A label, not a div: the text has to be the checkbox's own
+                    label or a screen reader announces an unnamed control. */}
+                <label className="check-row">
                   <input type="checkbox" checked={data.app_warning_declared} readOnly />
                   <span>Applicant declares required government warning</span>
-                </div>
+                </label>
               </div>
             )}
             <button

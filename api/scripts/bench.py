@@ -30,6 +30,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import adjudicate
+from config import settings
 from models import Application
 from readers import get_reader
 from readers.fake import expectations
@@ -51,8 +52,10 @@ def _application(expected: dict[str, Any]) -> Application:
     )
 
 
-def run(reader_name: str) -> list[dict[str, Any]]:
-    reader = get_reader(reader_name)
+def run(
+    reader_name: str, model: str | None = None, effort: str | None = None
+) -> list[dict[str, Any]]:
+    reader = get_reader(reader_name, model, effort)
     rows: list[dict[str, Any]] = []
     for specimen, expected in sorted(expectations().items()):
         path = FIXTURES_DIR / specimen
@@ -74,6 +77,13 @@ def run(reader_name: str) -> list[dict[str, Any]]:
         results, verdict = adjudicate.adjudicate(specimen, _application(expected), reading)
         finished = time.perf_counter_ns()
 
+        # `usage` is the vision reader's last-call token count (readers/vision.py);
+        # the fake and OCR readers have no such attribute and still have to bench.
+        usage = getattr(reader, "usage", None)
+        in_tok = getattr(usage, "input_tokens", 0)
+        out_tok = getattr(usage, "output_tokens", 0)
+        reader_ms = max(0, round((read_done - started) / 1_000_000) - prep_ms)
+
         got = {r.field_key: r.verdict for r in results}
         want = expected["field_verdicts"]
         rows.append(
@@ -87,15 +97,21 @@ def run(reader_name: str) -> list[dict[str, Any]]:
                 "quality": reading.quality,
                 "quality_ok": reading.quality == expected["quality"],
                 "prep_ms": prep_ms,
-                "reader_ms": max(0, round((read_done - started) / 1_000_000) - prep_ms),
+                "reader_ms": reader_ms,
                 "rules_ms": round((finished - read_done) / 1_000_000),
                 "total_ms": round((finished - started) / 1_000_000),
+                "in_tok": in_tok,
+                "out_tok": out_tok,
+                # Output tokens per second of reader wall-clock. On a reasoning
+                # model this is a throughput proxy, not a decode rate: reasoning
+                # tokens are billed as output but are not all in completion_tokens.
+                "tok_s": round(out_tok / (reader_ms / 1000), 1) if reader_ms and out_tok else 0.0,
             }
         )
     return rows
 
 
-def report(reader_name: str, rows: list[dict[str, Any]]) -> str:
+def report(reader_name: str, rows: list[dict[str, Any]], model: str | None = None) -> str:
     ok = [r for r in rows if not r.get("error")]
     totals = sorted(r["total_ms"] for r in ok)
 
@@ -107,8 +123,12 @@ def report(reader_name: str, rows: list[dict[str, Any]]) -> str:
     field_total = sum(r["fields_total"] for r in ok)
     p95 = p(0.95)
 
+    def med(key: str) -> float:
+        vals = [r[key] for r in ok if r.get(key)]
+        return round(statistics.median(vals), 1) if vals else 0.0
+
     lines = [
-        f"# Reader benchmark — `{reader_name}`",
+        f"# Reader benchmark — `{reader_name}`" + (f" / `{model}`" if model else ""),
         "",
         f"{len(rows)} fixtures. Extraction cache bypassed (PRD §5.4); prep cache cleared per",
         "fixture. Timings are measured from the Verify press, which is where §8 sets the",
@@ -124,22 +144,37 @@ def report(reader_name: str, rows: list[dict[str, Any]]) -> str:
         f"| max total | {totals[-1] if totals else 0} ms |",
         f"| median reader | {round(statistics.median([r['reader_ms'] for r in ok])) if ok else 0} ms |",
         f"| median prep | {round(statistics.median([r['prep_ms'] for r in ok])) if ok else 0} ms |",
+        f"| median input tokens | {med('in_tok')} |",
+        f"| median output tokens | {med('out_tok')} |",
+        f"| median output tok/s | {med('tok_s')} |",
         f"| Errors | {len(rows) - len(ok)} |",
         "",
-        f"**§8 five-second p95: {'MET' if p95 < 5000 else 'NOT MET'}** ({p95} ms).",
+        # A run where every read errored has no timings at all. Reporting that
+        # as "MET (0 ms)" reads as a pass, which is the opposite of the truth.
+        (
+            f"**§8 five-second p95: {'MET' if p95 < 5000 else 'NOT MET'}** ({p95} ms)."
+            if ok
+            else "**§8 five-second p95: NO DATA** - every read failed."
+        ),
         "",
-        "| Fixture | Verdict | Expected | Fields | Quality | prep | reader | rules | total |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        (
+            "| Fixture | Verdict | Expected | Fields | Quality | prep | reader | rules | total "
+            "| in tok | out tok | tok/s |"
+        ),
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for r in rows:
         if r.get("error"):
-            lines.append(f"| `{r['specimen']}` | error | — | — | — | — | — | — | {r['error']} |")
+            lines.append(
+                f"| `{r['specimen']}` | error | — | — | — | — | — | — | — | — | — | {r['error']} |"
+            )
             continue
         mark = "" if r["verdict_ok"] else " ⚠"
         lines.append(
             f"| `{r['specimen']}` | {r['verdict']}{mark} | {r['expected']} | "
             f"{r['fields_ok']}/{r['fields_total']} | {r['quality']} | "
-            f"{r['prep_ms']} | {r['reader_ms']} | {r['rules_ms']} | {r['total_ms']} |"
+            f"{r['prep_ms']} | {r['reader_ms']} | {r['rules_ms']} | {r['total_ms']} | "
+            f"{r['in_tok']} | {r['out_tok']} | {r['tok_s']} |"
         )
     return "\n".join(lines) + "\n"
 
@@ -147,12 +182,14 @@ def report(reader_name: str, rows: list[dict[str, Any]]) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reader", default="fake", help="fake | ocr | openai")
+    parser.add_argument("--model", help="override READER_MODEL, e.g. gpt-5.6-luna")
+    parser.add_argument("--effort", help="override READER_EFFORT, e.g. minimal")
     parser.add_argument("--out", type=Path, help="write the report here as well as stdout")
     parser.add_argument("--json", type=Path, help="write the raw rows for later comparison")
     args = parser.parse_args()
 
-    rows = run(args.reader)
-    text = report(args.reader, rows)
+    rows = run(args.reader, args.model, args.effort)
+    text = report(args.reader, rows, args.model or settings.reader_model)
     print(text)
     if args.out:
         args.out.write_text(text)

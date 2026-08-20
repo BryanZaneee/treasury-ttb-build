@@ -6,15 +6,18 @@ which is where §8 sets the five-second threshold.
 
 ## What this decides
 
-**The §8 latency target holds.** This service reads a label only when a reviewer asks
-for it, rather than extracting on upload as §5.2 describes — so the whole reader call
-sits inside the Verify press instead of overlapping the reviewer's data entry. That
-made the p95 worth measuring rather than assuming. Local OCR comes in at **773 ms
-p95**, against a 5,000 ms budget. Image preparation is a median 7 ms, so essentially
-all of it is the reader.
+**The §8 latency target is met, but only by one configuration.** This service reads a
+label only when a reviewer asks, rather than extracting on upload as §5.2 describes, so
+the whole reader call sits inside the Verify press instead of overlapping the reviewer's
+data entry — which is what makes the p95 below worth measuring rather than assuming.
+Image preparation is a median 7 ms, so essentially all of it is the reader. The
+head-to-head is below; re-run `bench.py` for per-fixture detail on any single
+configuration.
 
 **OCR stays a fallback, not a reader of record.** It reaches the documented verdict on
-15 of 25 fixtures and gets 85 of 155 fields right. That is the reason `READER_PROVIDER`
+15 of 25 fixtures — the same count as `gpt-4.1-mini` — but on only 85 of 155 fields
+against that model's 127, which is the number that matters: a verdict can be right for
+the wrong reason. That is the reason `READER_PROVIDER`
 defaults to a vision model in production and OCR runs only when that model is
 unreachable: it is fast and free, and it is not accurate enough to adjudicate against.
 A record it read never auto-closes, and the determination view says so.
@@ -24,10 +27,42 @@ verdicts and 155/155 fields at a 7 ms p95 by construction. That is not an accura
 measurement — it is what makes the suite deterministic and free. Its value here is
 proving the rules engine and the timing harness agree with the fixture ground truth.
 
-**Not measured: the production vision reader.** Running `--reader openai` costs real
-money per call and needs a key, so those numbers are taken on demand rather than
-committed. `MAX_EDGE = 1024` and `JPEG_QUALITY = 85` in `readers/prep.py` are what the
+**The production vision reader: `gpt-5.6-luna` at `READER_EFFORT=none`.** Measured
+head to head against the 4.1 class on 2026-08-20, 25 fixtures each, sequential, zero
+errors. `MAX_EDGE = 1024` and `JPEG_QUALITY = 85` in `readers/prep.py` are what the
 model receives; re-run this before changing either.
+
+| Reader | effort | p50 | **p95** | max | median reader | in tok | out tok | tok/s | Verdicts | Fields | Quality |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **gpt-5.6-luna** | **none** | **2482 ms** | **4084 ms** | 4394 ms | 2465 ms | 1696 | 186 | 73.4 | 16/25 | 122/155 | 15/25 |
+| gpt-4.1-nano | n/a | 3548 ms | 4629 ms | 5369 ms | 3538 ms | 2670 | 165 | 46.4 | 13/25 | 108/155 | 12/25 |
+| gpt-5.6-luna | low | 3884 ms | 5105 ms | 5512 ms | 3874 ms | 1696 | 279 | 75.6 | 18/25 | 124/155 | 20/25 |
+| gpt-4.1-mini | n/a | 3815 ms | 5240 ms | 5434 ms | 3804 ms | 2025 | 182 | 47.4 | 15/25 | 127/155 | 12/25 |
+
+`effort` is `reasoning_effort`, which only the gpt-5.x family accepts - `readers/vision.py`
+withholds it from `gpt-4.1-*`, which is why those rows read n/a. Note that `minimal` is
+**not** a valid value for `gpt-5.6-luna`: it returns a 400, and the supported set is
+`none`, `low`, `medium`, `high`, `xhigh`.
+
+**Why luna at `none` wins.** It is the only configuration that is both the fastest
+measured and more accurate than either 4.1 model - a 545 ms better p95 than nano and
+1,156 ms better than mini, while reaching three more documented verdicts than nano.
+Dropping effort from `low` to `none` cuts p50 by 1,402 ms because output falls from 279
+to 186 tokens; throughput is unchanged at ~73-75 tok/s, so the saving is reasoning
+tokens not emitted rather than a faster model.
+
+**The accuracy cost of that choice is real.** luna at `low` is the most accurate reader
+measured - 18/25 verdicts and 20/25 quality calls - but its 5,105 ms p95 misses the §8
+budget. If §8 latency is ever relaxed, `low` is the setting to go back to.
+
+**Caveat on the latency ranking.** A p95 over 25 samples is effectively the single
+24th-slowest call, so the gaps between adjacent rows rest on one sample apiece. The
+luna-`none` result is far enough clear of the rest to act on; the nano/luna-`low`/mini
+ordering is not a hard margin. p50 is the sturdier number here.
+
+**Accuracy figures are relative, not pass rates.** `fixtures/expectations.json` encodes
+brand verdicts no real reader can reach, so every model scores low in absolute terms.
+Compare the columns across rows, not against 25/25.
 
 ## Reproducing
 

@@ -9,7 +9,7 @@ Three implementations, interchangeable by configuration:
   fake    replays fixtures/expectations.json - instant, free, used in CI
   ocr     local Tesseract - ~600ms, free, no network, and the fallback the
           service degrades to when the vision reader cannot be reached
-  openai  gpt-4.1-mini vision, the production reader
+  openai  gpt-5.6-luna vision, the production reader (see docs/benchmark.md)
 """
 
 from __future__ import annotations

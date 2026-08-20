@@ -22,7 +22,13 @@
   --ink-3: #3c4855;
   --ink-4: #55606e;
   --ink-5: #6a7481;
-  --ink-6: #78838f;
+  /* Darkened from the prototype's #78838f, a deliberate deviation from PRD
+     §6.2. It carries small secondary text - filenames, hints, the "Not
+     declared" placeholder - and at #78838f that text measured 3.6-3.9:1,
+     under WCAG AA's 4.5:1 for normal-size type. #66707d is the smallest
+     darkening that clears AA on every surface it lands on, including the
+     sunk panels and the tinted verdict headers (axe, e2e/a11y.spec.ts). */
+  --ink-6: #66707d;
 
   /* action */
   --link: #14507d;
@@ -168,7 +174,9 @@ h1 { margin: 0; font-size: 27px; font-weight: 700; letter-spacing: -0.022em; col
   font-family: var(--mono); font-size: 30px; font-weight: 600; line-height: 1;
   letter-spacing: -0.02em; color: var(--pending-dot);
 }
-.kpi-hint { font-size: 11.5px; color: var(--ink-6); margin-top: 7px; font-weight: 400; }
+/* --ink-4, not --ink-6: at 11.5px this is normal-size text, and --ink-6 comes
+   in at 3.9:1 against the card, under WCAG AA's 4.5:1 (axe, e2e/a11y.spec.ts). */
+.kpi-hint { font-size: 11.5px; color: var(--ink-4); margin-top: 7px; font-weight: 400; }
 .kpi-pending { border-left-color: var(--pending-dot); }
 .kpi-pending .kpi-value { color: var(--pending-dot); }
 .kpi-review { border-left-color: var(--review-dot); }
@@ -252,7 +260,12 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 .segmented button[aria-pressed='true'] {
   background: var(--paper); color: var(--ink); box-shadow: 0 1px 2px rgba(16, 40, 61, 0.14);
 }
-.segmented .count { font-family: var(--mono); opacity: 0.65; }
+/* Dimmed by tone rather than opacity: 0.65 over --ink-4 dropped the count to
+   3.4:1 against the control's own background. --ink-5 clears AA on the pressed
+   button's white ground but not on the control's tint, so the unpressed state
+   takes the darker one. */
+.segmented .count { font-family: var(--mono); color: var(--ink-4); }
+.segmented button[aria-pressed='true'] .count { color: var(--ink-5); }
 
 /* ---------------- card ---------------- */
 
@@ -571,13 +584,18 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 }
 .queue-nav-step.right { text-align: right; }
 .queue-nav-step:hover { background: var(--sunk); color: inherit; }
-.queue-nav-step.is-end { opacity: 0.4; }
+/* Muted by tone, not opacity. At 0.4 the end-of-queue text fell to about 2:1.
+   --ink-4 rather than --ink-5 because this bar sits on the tinted verdict
+   header, where --ink-5 lands at 4.2-4.4:1 - under AA on every verdict colour
+   (axe, e2e/a11y.spec.ts). */
+.queue-nav-step.is-end .queue-nav-brand,
+.queue-nav-step.is-end .queue-nav-label,
+.queue-nav-step.is-end { color: var(--ink-4); }
 .queue-nav-label { display: block; font-size: 13px; font-weight: 600; color: var(--link); }
-.queue-nav-step.is-end .queue-nav-label { color: var(--ink-5); }
 .queue-nav-brand {
   display: block;
   font-size: 12px;
-  color: var(--ink-5);
+  color: var(--ink-4);
   margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
