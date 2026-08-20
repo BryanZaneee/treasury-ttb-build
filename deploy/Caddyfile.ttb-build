@@ -37,7 +37,13 @@ handle_path /ttb-build/* {
 		# which is exactly what happened on the first cutover.
 		@fingerprinted path /assets/*
 		header @fingerprinted Cache-Control "public, max-age=31536000, immutable"
-		header Cache-Control "no-cache, must-revalidate"
+		header Cache-Control "no-store, must-revalidate"
+		# Cloudflare honours CDN-Cache-Control above Cache-Control. Without
+		# it a Cache Everything rule pinned every visitor to a day-old shell
+		# naming a bundle the deploy had already deleted. Note this only
+		# governs what the edge stores next: it cannot evict what is already
+		# cached, which needs a purge or a bypass rule for /ttb-build/*.
+		header CDN-Cache-Control "no-store"
 
 		try_files {path} /index.html
 		file_server
