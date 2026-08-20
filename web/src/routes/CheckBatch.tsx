@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, apiUrl, imageUrl } from '../api/client'
 import type { Job, StagedBatch, StagedRow } from '../api/client'
 
@@ -14,10 +14,14 @@ const BUCKET: Record<string, { label: string; pill: string }> = {
 const REQUIRED =
   'filename, brand_name, class_type, alcohol_content, net_contents, producer, country_of_origin, government_warning, applicant'
 
+/** Where the staged batch id is remembered, so a reviewer can leave the page
+    and come back to the batch they were working on. The batch itself lives on
+    the server (PRD §5.5) - this is only the pointer at it. */
+const BATCH_KEY = 'ttb.batch'
+
 export function CheckBatch() {
-  const [batch, setBatch] = useState<StagedBatch | null>(null)
+  const [batchId, setBatchId] = useState(() => localStorage.getItem(BATCH_KEY) ?? '')
   const [job, setJob] = useState<Job | null>(null)
-  const [verifyNow, setVerifyNow] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   // The row whose image picker is open, and the selection the bulk bar acts on.
@@ -30,12 +34,59 @@ export function CheckBatch() {
   const imgRef = useRef<HTMLInputElement>(null)
   const [csvName, setCsvName] = useState('No file selected')
   const [imgCount, setImgCount] = useState('No images selected')
+  const [imgFiles, setImgFiles] = useState(0)
+
+  // The pickers name what is about to be staged, so they are stale the moment
+  // it has been.
+  const resetPickers = () => {
+    setCsvName('No file selected')
+    setImgCount('No images selected')
+    setImgFiles(0)
+    if (csvRef.current) csvRef.current.value = ''
+    if (imgRef.current) imgRef.current.value = ''
+  }
   const client = useQueryClient()
 
+  const stagedBatch = useQuery({
+    queryKey: ['batch', batchId],
+    // The id can outlive the batch - a fixtures reset, or a restart of a store
+    // that was wiped underneath it. Drop the pointer on the way past rather
+    // than holding the page on a 404 the reviewer cannot act on.
+    queryFn: async () => {
+      try {
+        return await api<StagedBatch>(`/batches/${batchId}`)
+      } catch (e) {
+        localStorage.removeItem(BATCH_KEY)
+        throw e
+      }
+    },
+    enabled: Boolean(batchId),
+    retry: false,
+  })
+  const batch = stagedBatch.data ?? null
+
+  const forget = () => {
+    localStorage.removeItem(BATCH_KEY)
+    setBatchId('')
+  }
+
+  /** Put the staged batch down without filing it, and empty the pickers with
+      it. The batch stays on the server; nothing was ever written to the store. */
+  const clearStaging = () => {
+    forget()
+    setSelected(new Set())
+    setJob(null)
+    setError(null)
+    resetPickers()
+  }
+
   const staged = (data: StagedBatch) => {
-    setBatch(data)
+    localStorage.setItem(BATCH_KEY, data.batch_id)
+    setBatchId(data.batch_id)
+    client.setQueryData(['batch', data.batch_id], data)
     setError(null)
   }
+
 
   const loadSample = useMutation({
     mutationFn: () =>
@@ -43,6 +94,7 @@ export function CheckBatch() {
     onSuccess: (data) => {
       staged(data.batch)
       setJob(null)
+      resetPickers()
     },
     onError: (e) => setError(String(e)),
   })
@@ -59,6 +111,7 @@ export function CheckBatch() {
     onSuccess: (data) => {
       staged(data)
       setJob(null)
+      resetPickers()
     },
     onError: (e) => setError(String(e)),
   })
@@ -140,7 +193,9 @@ export function CheckBatch() {
       client.invalidateQueries({ queryKey: ['records'] })
       // The filed rows are gone from the staged document; re-read what is left
       // rather than guessing at it client side.
-      setBatch(await api<StagedBatch>(`/batches/${batch!.batch_id}`))
+      const left = await api<StagedBatch>(`/batches/${batchId}`)
+      if (left.rows.length === 0) forget()
+      else staged(left)
     },
     onError: (e) => setError(String(e)),
   })
@@ -169,6 +224,7 @@ export function CheckBatch() {
       return next
     })
   const busy = assign.isPending || discard.isPending || uploadRow.isPending
+  const staging = stage.isPending || loadSample.isPending
 
   return (
     <div>
@@ -185,23 +241,26 @@ export function CheckBatch() {
 
       <div className="batch-grid">
         <div className="card card-pad area-step1">
-            <div className="row">
-              <div className="card-title">Step 1 · Application CSV</div>
-              <a className="push" href={apiUrl('/export/template.csv')} download>
-                Download blank template
-              </a>
-            </div>
+            <div className="card-title">Application CSV</div>
             <p className="card-note">Required columns: {REQUIRED}</p>
             <p className="card-note">
               An exported records CSV works here too — its column names are recognised and
               its extra columns ignored.
             </p>
             <div className="grid-2" style={{ marginTop: 12 }}>
-              <button className="dropzone" onClick={() => csvRef.current?.click()}>
+              <button
+                className="dropzone"
+                disabled={staging}
+                onClick={() => csvRef.current?.click()}
+              >
                 <div className="dropzone-title">Choose CSV file</div>
                 <div className="dropzone-hint">{csvName}</div>
               </button>
-              <button className="dropzone" onClick={() => imgRef.current?.click()}>
+              <button
+                className="dropzone"
+                disabled={staging}
+                onClick={() => imgRef.current?.click()}
+              >
                 <div className="dropzone-title">Choose label images</div>
                 <div className="dropzone-hint">{imgCount}</div>
               </button>
@@ -219,34 +278,46 @@ export function CheckBatch() {
               accept="image/*"
               multiple
               hidden
-              onChange={(e) =>
-                setImgCount(
-                  e.target.files?.length
-                    ? `${e.target.files.length} images selected`
-                    : 'No images selected',
-                )
-              }
+              onChange={(e) => {
+                const count = e.target.files?.length ?? 0
+                setImgFiles(count)
+                setImgCount(count ? `${count} images selected` : 'No images selected')
+              }}
             />
             <div className="row" style={{ marginTop: 12 }}>
               <button
                 className="btn btn-quiet"
                 onClick={() => stage.mutate()}
-                disabled={stage.isPending}
+                disabled={staging}
               >
                 {stage.isPending && <span className="spinner spinner-dark" />}
-                Stage upload
+                {stage.isPending ? 'Staging…' : 'Stage upload'}
               </button>
             </div>
           </div>
 
         <div className="card card-pad area-step2">
-            <div className="card-title">Step 2 · Staged applications</div>
+            <div className="card-title">Staged applications</div>
             {error && (
               <div className="banner-error" style={{ marginTop: 12, marginBottom: 0 }}>
                 {error}
               </div>
             )}
-            {!batch || batch.rows.length === 0 ? (
+            {staging ? (
+              /* ponytail: indeterminate on purpose. Staging is one request with
+                 no server-side job to poll, unlike commit, so a percentage
+                 would be invented. */
+              <div className="dropzone batch-empty" style={{ marginTop: 12, padding: 40 }}>
+                <div className="dropzone-hint" style={{ fontSize: 13.5 }}>
+                  <span className="spinner spinner-dark" />{' '}
+                  {stage.isPending
+                    ? `Uploading the CSV and ${imgFiles} label image${imgFiles === 1 ? '' : 's'}…`
+                    : 'Loading the bundled sample batch…'}
+                  <br />
+                  Nothing is written to the store until you file the batch.
+                </div>
+              </div>
+            ) : !batch || batch.rows.length === 0 ? (
               <div className="dropzone batch-empty" style={{ marginTop: 12, padding: 40 }}>
                 <div className="dropzone-hint" style={{ fontSize: 13.5 }}>
                   {batch ? 'Every staged row has been filed.' : 'No applications staged yet.'}
@@ -262,62 +333,81 @@ export function CheckBatch() {
                     to the same name — open the row's Image picker and choose the right one.
                   </div>
                 )}
-                {selected.size > 0 && (
-                  <div className="bulkbar" style={{ marginTop: 12 }}>
-                    <span className="bulkbar-count">{selected.size} selected</span>
-                    <button
-                      className="btn btn-quiet btn-sm"
-                      disabled={busy}
-                      onClick={() => fileRows([...selected], false)}
-                    >
-                      Accept upload
-                    </button>
-                    <button
-                      className="btn btn-quiet btn-sm"
-                      disabled={busy}
-                      onClick={() => fileRows([...selected], true)}
-                    >
-                      Accept and verify
-                    </button>
-                    <button
-                      className="btn btn-quiet btn-sm"
-                      disabled={busy}
-                      onClick={() => dropRows.mutate([...selected])}
-                    >
-                      Reject
-                    </button>
-                    <button
-                      className="btn btn-quiet btn-sm push"
-                      onClick={() => setSelected(new Set())}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                )}
                 <div className="scroll-x" style={{ marginTop: 12 }}>
-                  <table>
+                  <table className="staged-table">
                     <thead>
-                      <tr>
-                        <th style={{ width: 34 }}>
-                          <input
-                            type="checkbox"
-                            aria-label={allSelected ? 'Clear selection' : 'Select every row'}
-                            checked={allSelected}
-                            ref={(el) => {
-                              if (el) el.indeterminate = selected.size > 0 && !allSelected
-                            }}
-                            onChange={toggleAll}
-                          />
-                        </th>
-                        <th>#</th>
-                        <th>Label</th>
-                        <th>Brand</th>
-                        <th>Applicant</th>
-                        <th>Filename</th>
-                        <th>Pairing</th>
-                        <th>Image</th>
-                        <th />
-                      </tr>
+                      {/* The bar replaces the header row rather than sitting
+                          above it, so ticking a box does not push the table
+                          down - and inside the table it scrolls with the
+                          columns it acts on. */}
+                      {selected.size > 0 ? (
+                        <tr>
+                          <th className="bulkbar-cell" colSpan={9}>
+                            <div className="bulkbar">
+                              <span className="bulkbar-check">
+                                <input
+                                  type="checkbox"
+                                  aria-label={
+                                    allSelected ? 'Clear selection' : 'Select every row'
+                                  }
+                                  checked={allSelected}
+                                  ref={(el) => {
+                                    if (el) el.indeterminate = selected.size > 0 && !allSelected
+                                  }}
+                                  onChange={toggleAll}
+                                />
+                              </span>
+                              <span className="bulkbar-count">{selected.size} selected</span>
+                              <button
+                                className="btn btn-quiet btn-sm"
+                                disabled={busy}
+                                onClick={() => fileRows([...selected], false)}
+                              >
+                                Accept upload
+                              </button>
+                              <button
+                                className="btn btn-quiet btn-sm"
+                                disabled={busy}
+                                onClick={() => fileRows([...selected], true)}
+                              >
+                                Accept and verify
+                              </button>
+                              <button
+                                className="btn btn-quiet btn-sm"
+                                disabled={busy}
+                                onClick={() => dropRows.mutate([...selected])}
+                              >
+                                Reject
+                              </button>
+                              <button
+                                className="btn btn-quiet btn-sm push"
+                                onClick={() => setSelected(new Set())}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                          </th>
+                        </tr>
+                      ) : (
+                        <tr>
+                          <th>
+                            <input
+                              type="checkbox"
+                              aria-label="Select every row"
+                              checked={false}
+                              onChange={toggleAll}
+                            />
+                          </th>
+                          <th>#</th>
+                          <th>Label</th>
+                          <th>Brand</th>
+                          <th>Applicant</th>
+                          <th>Filename</th>
+                          <th>Pairing</th>
+                          <th>Image</th>
+                          <th />
+                        </tr>
+                      )}
                     </thead>
                     <tbody>
                       {batch.rows.map((r) => (
@@ -341,36 +431,35 @@ export function CheckBatch() {
           </div>
 
         <div className="card card-pad area-run">
-            <div className="card-title">Step 3 · Run</div>
-            <label className="check-row" style={{ marginTop: 12, alignItems: 'flex-start' }}>
-              <input
-                type="checkbox"
-                checked={verifyNow}
-                onChange={(e) => setVerifyNow(e.target.checked)}
-              />
-              <span style={{ fontWeight: 400 }}>
-                <strong>Verify on intake.</strong> Leave unchecked to file the batch as awaiting
-                verification.
-              </span>
-            </label>
+            <div className="card-title">Run</div>
+            {/* Filing the whole batch verifies it. Filing without verifying is
+                a per-selection choice, and lives in the bar on the table. */}
             <button
               className="btn btn-wide"
               style={{ marginTop: 12 }}
-              onClick={() => fileRows(rowNumbers, verifyNow)}
+              onClick={() => fileRows(rowNumbers, true)}
               disabled={
                 !batch || batch.rows.length === 0 || batch.blocks_commit || commit.isPending
               }
             >
               {commit.isPending && <span className="spinner" />}
-              {batch
-                ? `${verifyNow ? 'File and verify' : 'File'} ${committable} rows`
-                : 'File and verify batch'}
+              {batch ? `File and verify ${committable} rows` : 'File and verify batch'}
             </button>
             {commit.isPending && job && (
               <p className="card-note">
                 {job.completed}/{job.total} verified…
               </p>
             )}
+            {/* The staged batch outlives the page now, so there has to be a way
+                to put it down that is not filing it. */}
+            <button
+              className="btn btn-quiet btn-wide"
+              style={{ marginTop: 10 }}
+              onClick={clearStaging}
+              disabled={!batch || commit.isPending}
+            >
+              Clear staged batch
+            </button>
             {commit.isSuccess && job && (
               <p className="card-note">
                 Filed {job.committed} record{job.committed === 1 ? '' : 's'}
@@ -388,14 +477,22 @@ export function CheckBatch() {
         <div className="card card-pad area-nofiles" style={{ background: 'var(--sunk-2)' }}>
             <div className="card-title">No files handy?</div>
             <p className="card-note">
-              Load a bundled sample batch of 25 applications with matching specimens — clean
-              artwork, casing differences, missing and altered warnings, and degraded captures.
+              Start from a blank template with the columns above, or load a bundled sample batch
+              of 25 applications with matching label images.
             </p>
-            <button
+            <a
               className="btn btn-quiet btn-wide"
               style={{ marginTop: 12 }}
+              href={apiUrl('/export/template.csv')}
+              download
+            >
+              Download blank template
+            </a>
+            <button
+              className="btn btn-quiet btn-wide"
+              style={{ marginTop: 10 }}
               onClick={() => loadSample.mutate()}
-              disabled={loadSample.isPending}
+              disabled={staging}
             >
               {loadSample.isPending && <span className="spinner spinner-dark" />}
               Load bundled sample batch
