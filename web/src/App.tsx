@@ -1,5 +1,4 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from './api/client'
 import type { Health, RecordsPage } from './api/client'
@@ -8,11 +7,9 @@ import { CheckLabel } from './routes/CheckLabel'
 import { CheckBatch } from './routes/CheckBatch'
 import { RecordDetail } from './routes/RecordDetail'
 import { Export } from './routes/Export'
-import { SessionDialog } from './components/SessionDialog'
 import { REVIEWER } from './lib/session'
 
 export function App() {
-  const [session, setSession] = useState(false)
 
   // The masthead badge counts what needs an agent, so it is the same number the
   // inbox leads with rather than a second definition of "outstanding".
@@ -59,26 +56,21 @@ export function App() {
               Batch upload
             </NavLink>
             <NavLink to="/export" className={({ isActive }) => (isActive ? 'active' : '')}>
-              Export
+              Records
             </NavLink>
           </nav>
 
-          <button
-            className="agent"
-            onClick={() => setSession(true)}
-            aria-haspopup="dialog"
-            title="Session actions"
-          >
+          {/* Who the determinations are recorded against, not a menu: what the
+              dialog behind it offered is all on Records now. */}
+          <div className="agent">
             <div className="agent-avatar">{REVIEWER.initials}</div>
             <div>
               <div className="agent-name">{REVIEWER.name}</div>
               <div className="agent-role">{REVIEWER.role}</div>
             </div>
-          </button>
+          </div>
         </div>
       </header>
-
-      {session && <SessionDialog onClose={() => setSession(false)} />}
 
       {degraded && (
         <div className="strip-warn" role="status">

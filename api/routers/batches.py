@@ -8,6 +8,7 @@ commits it (`POST /api/jobs`).
 from __future__ import annotations
 
 import json
+import shutil
 import uuid
 from dataclasses import dataclass
 from typing import Literal
@@ -220,11 +221,48 @@ def drop_row(batch_id: str, row_no: int) -> StagedBatch:
     return to_response(batch_id, put_staged(batch_id, staged))
 
 
+# The sample batch is what a reviewer learns pairing on, so it arrives with one
+# row in each state PRD §5.5 defines rather than 25 clean matches: a row whose
+# image never arrived, a row named with the wrong extension, and a row two
+# uploads both answer to. The rest match exactly.
+_SAMPLE_MISSING = "tallgrass-cropped.jpg"
+_SAMPLE_FUZZY = "quarry-house-units.jpg"
+_SAMPLE_AMBIGUOUS = "ember-line-heavyblur.jpg"
+
+
+def _sample_images(filenames: list[str]) -> list[str]:
+    """The images "uploaded" with the sample batch - what is actually on disk,
+    which is not quite what the CSV asks for."""
+    images_dir = db.data_dir() / "images"
+    names = [f for f in filenames if f != _SAMPLE_MISSING]
+
+    # Two files that normalise to the same stem, and no exact match for either,
+    # is what makes a row ambiguous (batching.stem).
+    names.remove(_SAMPLE_AMBIGUOUS)
+    source = images_dir / _SAMPLE_AMBIGUOUS
+    for variant in (
+        _SAMPLE_AMBIGUOUS.replace("-", "_"),
+        _SAMPLE_AMBIGUOUS.replace("-", " "),
+    ):
+        if source.exists():
+            shutil.copyfile(source, images_dir / variant)
+        names.append(variant)
+    return names
+
+
 def stage_sample_batch() -> StagedBatch:
     """The bundled 25-application sample batch, images already on disk (S4)."""
     rows = seed.read_applications()
     seed.copy_fixture_images()
-    names = [r["filename"] for r in rows]
+    # Built before the CSV is edited below: these are the files on disk.
+    names = _sample_images([r["filename"] for r in rows])
+
+    for row in rows:
+        # The CSV names it .png; the file on disk is the .jpg beside it, which
+        # is a fuzzy match rather than an exact one.
+        if row["filename"] == _SAMPLE_FUZZY:
+            row["filename"] = _SAMPLE_FUZZY.replace(".jpg", ".png")
+
     paired, _ = batching.pair(rows, names)
     batch_id = f"sample-{uuid.uuid4().hex[:8]}"
     return to_response(batch_id, put_staged(batch_id, Staged(rows=paired, images=names)))

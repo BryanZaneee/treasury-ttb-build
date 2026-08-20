@@ -50,7 +50,7 @@ export function Export() {
       <div className="page-head">
         <div>
           <div className="eyebrow">Administration</div>
-          <h1>Export</h1>
+          <h1>Records</h1>
         </div>
       </div>
 

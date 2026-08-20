@@ -48,6 +48,7 @@ export function CheckBatch() {
   // Set while a commit is waiting on the reviewer to accept that rows without
   // a specimen will be dropped rather than filed.
   const [dropWarn, setDropWarn] = useState<{ rows: number[]; verify: boolean } | null>(null)
+  const [clearing, setClearing] = useState(false)
   const csvRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
   const [csvName, setCsvName] = useState('No file selected')
@@ -367,7 +368,7 @@ export function CheckBatch() {
               /* ponytail: indeterminate on purpose. Staging is one request with
                  no server-side job to poll, unlike commit, so a percentage
                  would be invented. */
-              <div className="dropzone batch-empty" style={{ marginTop: 12, padding: 40 }}>
+              <div className="dropzone batch-empty" style={{ marginTop: 12, padding: 20 }}>
                 <div className="dropzone-hint" style={{ fontSize: 13.5 }}>
                   <span className="spinner spinner-dark" />{' '}
                   {stage.isPending
@@ -378,7 +379,7 @@ export function CheckBatch() {
                 </div>
               </div>
             ) : !batch || batch.rows.length === 0 ? (
-              <div className="dropzone batch-empty" style={{ marginTop: 12, padding: 40 }}>
+              <div className="dropzone batch-empty" style={{ marginTop: 12, padding: 20 }}>
                 <div className="dropzone-hint" style={{ fontSize: 13.5 }}>
                   {batch ? 'Every staged row has been filed.' : 'No applications staged yet.'}
                   <br />
@@ -521,9 +522,9 @@ export function CheckBatch() {
             {/* The staged batch outlives the page now, so there has to be a way
                 to put it down that is not filing it. */}
             <button
-              className="btn btn-quiet btn-wide"
+              className="btn btn-danger btn-wide"
               style={{ marginTop: 10 }}
-              onClick={clearStaging}
+              onClick={() => setClearing(true)}
               disabled={!batch || commit.isPending}
             >
               Clear staged batch
@@ -590,6 +591,43 @@ export function CheckBatch() {
           onDiscard={(name) => discard.mutate(name)}
           onClose={() => setPicking(null)}
         />
+      )}
+
+      {clearing && batch && (
+        <div className="dialog-backdrop" role="presentation" onClick={() => setClearing(false)}>
+          <div
+            className="dialog dialog-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="clear-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="dialog-head">
+              <h2 id="clear-title">Clear the staged batch?</h2>
+            </div>
+            <div className="dialog-body">
+              <p className="card-note">
+                {batch.rows.length} staged row{batch.rows.length === 1 ? '' : 's'} and the
+                pairing work done on them are discarded. Nothing has been filed yet, so nothing
+                is removed from the store — but the CSV and its images have to be uploaded again.
+              </p>
+            </div>
+            <div className="dialog-foot">
+              <button
+                className="btn btn-danger"
+                onClick={() => {
+                  setClearing(false)
+                  clearStaging()
+                }}
+              >
+                Yes, clear it
+              </button>
+              <button className="btn btn-quiet" onClick={() => setClearing(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {dropWarn && batch && (

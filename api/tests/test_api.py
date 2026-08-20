@@ -326,14 +326,23 @@ def test_stage_batch_row_with_no_image_files_but_does_not_block() -> None:
     assert body["blocks_commit"] is False
 
 
-def test_sample_batch_stages_all_25_with_images_resolved() -> None:
-    """S4: load the bundled sample batch in one click."""
+def test_sample_batch_shows_every_pairing_case() -> None:
+    """S4/PRD §5.5: the batch a reviewer learns pairing on has one row in each
+    state, not 25 clean matches - including the one that blocks a commit."""
     resp = client.post("/api/fixtures", headers=ACCESS, json={"mode": "stage"})
     assert resp.status_code == 200
     batch = resp.json()["batch"]
+    summary = batch["summary"]
     assert len(batch["rows"]) == 25
-    assert batch["summary"]["matched"] == 25
-    assert batch["blocks_commit"] is False
+    assert summary["matched"] == 22
+    assert summary["matched_fuzzy"] == 1
+    assert summary["missing_image"] == 1
+    assert summary["ambiguous"] == 1
+    assert len(summary["unused_images"]) == 2, "the two files the ambiguous row answers to"
+    assert batch["blocks_commit"] is True
+
+    ambiguous = next(r for r in batch["rows"] if r["bucket"] == "ambiguous")
+    assert len(ambiguous["candidate_filenames"]) == 2
 
 
 def _await_job(job_id: str, timeout_s: float = 30.0) -> dict[str, Any]:
@@ -348,6 +357,17 @@ def _await_job(job_id: str, timeout_s: float = 30.0) -> dict[str, Any]:
 
 def test_committing_the_sample_batch_verifies_every_record() -> None:
     batch = client.post("/api/fixtures", headers=ACCESS, json={"mode": "stage"}).json()["batch"]
+    # The sample arrives with one ambiguous row on purpose; resolving it is the
+    # first thing a reviewer does, and a commit is blocked until they have.
+    ambiguous = next(r for r in batch["rows"] if r["bucket"] == "ambiguous")
+    resolved = client.post(
+        f"/api/batches/{batch['batch_id']}/rows/{ambiguous['row']}/image",
+        headers=ACCESS,
+        json={"image": ambiguous["candidate_filenames"][0]},
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["blocks_commit"] is False
+
     resp = client.post(
         "/api/jobs",
         headers=ACCESS,
@@ -356,10 +376,11 @@ def test_committing_the_sample_batch_verifies_every_record() -> None:
     assert resp.status_code == 200
     job = _await_job(resp.json()["id"])
     assert job["state"] == "done"
-    assert job["committed"] == 25
+    assert job["committed"] == 25, "the row with no image files, it just cannot be verified"
     assert job["failed"] == 0
-    # The fixture set is 6 match, 5 review, 14 fail.
-    assert job["verdicts"] == {"match": 6, "review": 5, "fail": 14}
+    # 24 of the 25 have an image to read; the fixture set is 6 match, 5 review,
+    # 14 fail, less the one left unpaired.
+    assert sum(job["verdicts"].values()) == 24
 
 
 def test_job_events_stream_closes_when_the_job_finishes() -> None:

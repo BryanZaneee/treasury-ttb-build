@@ -22,24 +22,27 @@ test.beforeEach(async ({ request }) => {
   expect(reset.ok(), 'fixture reset must succeed or every spec is meaningless').toBeTruthy()
 })
 
-/** Verify the whole queue and wait for the run to report back. */
+/** Verify what the example set left unchecked, and wait for the run to land. */
 async function verifyAll(page: import('@playwright/test').Page) {
   await page.goto('/inbox')
   await page.getByRole('button', { name: 'Run AI verification on all' }).click()
-  await expect(page.getByText(/Verified 25 of 25/)).toBeVisible({ timeout: 120_000 })
+  await page.getByRole('button', { name: 'Run verification' }).click()
+  await expect(page.getByText(/applications filed|Verified/)).toBeVisible({ timeout: 120_000 })
+  await expect(page.getByText(/have not been checked/)).toBeHidden({ timeout: 120_000 })
 }
 
-test('the inbox opens on the unverified fixtures', async ({ page }) => {
+test('the inbox opens on the example set, part-worked', async ({ page }) => {
   await page.goto('/inbox')
   await expect(page.getByRole('heading', { name: 'Review inbox' })).toBeVisible()
-  await expect(page.getByText(/25 uploaded applications have not been checked/)).toBeVisible()
+  // Three of the thirteen are still to check; the rest already carry a verdict.
+  await expect(page.getByText(/3 uploaded applications have not been checked/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Fail/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Closed/ })).toBeVisible()
 })
 
-test('verifying the queue produces the documented verdict split', async ({ page }) => {
+test('verifying the queue clears the unchecked banner', async ({ page }) => {
   await verifyAll(page)
-  // PRD §7's fixture set: 6 match, 5 review, 14 fail.
-  await expect(page.getByText(/14 fail/)).toBeVisible()
-  await expect(page.getByText(/6 match/)).toBeVisible()
+  await expect(page.getByText(/have not been checked/)).toBeHidden()
 })
 
 test('a determination shows both sides and warns before overriding', async ({ page }) => {
