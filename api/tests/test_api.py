@@ -133,6 +133,9 @@ def _seed_and_get(filename: str) -> str:
         decided_by=None,
         decided_at=None,
         note=None,
+        # A record on arrival has not been read, so it carries no reading
+        # either. The seed stores one because it adjudicates the example set.
+        reading_json=None,
     )
     return record_id
 
@@ -1463,3 +1466,47 @@ def test_the_reading_behind_a_verdict_is_kept_on_the_record() -> None:
     # The composite the field results cannot carry: a header-case defect has to
     # survive a correction, or re-adjudicating would quietly upgrade it.
     assert "header_case" in reading["warning"]
+
+
+def test_correcting_a_seeded_record_keeps_its_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The example set is the whole inbox on a fresh store.
+
+    Its verdicts come from a replayed reading rather than from verify_record,
+    so nothing was ever written to the extraction cache for them - which made
+    every record a reviewer could practise on fall back to "awaiting AI
+    verification" the moment they corrected a transcription error.
+    """
+    seed.seed_store()
+
+    def no_reading(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("correcting a seeded record must not call a reader")
+
+    monkeypatch.setattr(records, "read_specimen", no_reading)
+
+    rows = client.get("/api/records").json()["records"]
+    # An undecided record carrying a verdict: what "needs attention" is.
+    row = next(
+        r for r in rows if r["verified"] and r["decision"] is None and r["result"] != "match"
+    )
+
+    resp = client.patch(
+        f"/api/records/{row['id']}",
+        headers=ACCESS,
+        json={
+            "application": {
+                "brand": row["app_brand"],
+                "class_type": row["app_class_type"],
+                "abv": row["app_alcohol_content"],
+                "net": row["app_net_contents"],
+                "producer": row["app_producer"],
+                "origin": row["app_origin"],
+                "warning": bool(row["app_warning_declared"]),
+            }
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["verified"] is True, "a correction must not un-verify a seeded record"
+    assert body["result"] is not None

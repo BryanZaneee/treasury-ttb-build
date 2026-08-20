@@ -460,6 +460,10 @@ def patch_record(record_id: str, body: RecordPatchRequest) -> Record:
                 reader_provider=reader_used,
                 reader_model=settings.reader_model if reader_used != "ocr" else None,
                 prompt_version=PROMPT_VERSION if reader_used == "openai" else None,
+                # Written back when it came from the cache, so a record verified
+                # before migrations/005 stops depending on a cache entry that
+                # can be evicted or keyed out from under it.
+                reading_json=reading.model_dump_json(),
             )
             db.append_audit(
                 record_id,

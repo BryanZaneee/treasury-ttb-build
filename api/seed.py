@@ -96,6 +96,12 @@ def _verify(record_id: str, app: dict[str, str], filename: str) -> str:
         quality=reading.quality,
         engine="rules check (example set)",
         reader_provider="fake",
+        # The reading these verdicts came from, kept like any other verified
+        # record's (migrations/005). Without it, correcting a seeded record has
+        # nothing to re-adjudicate against and it falls back to awaiting
+        # verification - and the example set is the whole inbox on a fresh
+        # store, so that was every record a reviewer could practise on.
+        reading_json=reading.model_dump_json(),
     )
     return verdict
 
