@@ -107,6 +107,19 @@ def to_response(batch_id: str, staged: Staged) -> StagedBatch:
     )
 
 
+# Batch images are stored under their own basename, not the content-addressed
+# key `uploads.store` produces: pairing is by filename, so the name is the
+# thing being matched on and has to survive the write.
+def _write_image(image: UploadFile) -> str | None:
+    name = uploads.safe_basename(image.filename or "")
+    if not name:
+        return None
+    images_dir = db.data_dir() / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    (images_dir / name).write_bytes(image.file.read())
+    return name
+
+
 @router.post("/batches/stage", response_model=StagedBatch)
 def stage_batch(
     applications_csv: UploadFile = File(...),
@@ -122,15 +135,20 @@ def stage_batch(
     # the next fixture reset clears.
     names = []
     for image in images:
-        name = uploads.safe_basename(image.filename or "")
-        if not name:
-            continue
-        (db.data_dir() / "images" / name).write_bytes(image.file.read())
-        names.append(name)
+        name = _write_image(image)
+        if name:
+            names.append(name)
 
     paired, _ = batching.pair(rows, names)
     batch_id = f"batch-{uuid.uuid4().hex[:8]}"
     return to_response(batch_id, put_staged(batch_id, Staged(rows=paired, images=names)))
+
+
+def _require(batch_id: str) -> Staged:
+    staged = get_staged(batch_id)
+    if staged is None:
+        raise HTTPException(status_code=404, detail=f"unknown batch {batch_id!r}")
+    return staged
 
 
 class AssignRequest(BaseModel):
@@ -139,9 +157,7 @@ class AssignRequest(BaseModel):
 
 @router.post("/batches/{batch_id}/rows/{row_no}/image", response_model=StagedBatch)
 def assign_image(batch_id: str, row_no: int, body: AssignRequest) -> StagedBatch:
-    staged = get_staged(batch_id)
-    if staged is None:
-        raise HTTPException(status_code=404, detail=f"unknown batch {batch_id!r}")
+    staged = _require(batch_id)
     try:
         batching.assign(staged.rows, staged.images, row_no, body.image)
     except KeyError as exc:
@@ -150,6 +166,37 @@ def assign_image(batch_id: str, row_no: int, body: AssignRequest) -> StagedBatch
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     # `assign` mutates the rows in place, so the staged document has to be
     # written back - it is no longer the same object the next request loads.
+    return to_response(batch_id, put_staged(batch_id, staged))
+
+
+@router.post("/batches/{batch_id}/rows/{row_no}/upload", response_model=StagedBatch)
+def upload_row_image(batch_id: str, row_no: int, image: UploadFile = File(...)) -> StagedBatch:
+    """Supply the missing specimen for one staged row without re-uploading the
+    batch - the reviewer has the file, it just was not in the folder."""
+    staged = _require(batch_id)
+    name = _write_image(image)
+    if not name:
+        raise HTTPException(status_code=422, detail="the upload has no filename")
+    if name not in staged.images:
+        staged.images.append(name)
+    try:
+        batching.assign(staged.rows, staged.images, row_no, name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc).strip("\"'")) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return to_response(batch_id, put_staged(batch_id, staged))
+
+
+@router.delete("/batches/{batch_id}/images/{name}", response_model=StagedBatch)
+def discard_image(batch_id: str, name: str) -> StagedBatch:
+    """Drop an uploaded image the reviewer does not want in this batch. The
+    file stays on disk; only the batch stops offering it."""
+    staged = _require(batch_id)
+    try:
+        batching.discard(staged.rows, staged.images, uploads.safe_basename(name))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc).strip("\"'")) from exc
     return to_response(batch_id, put_staged(batch_id, staged))
 
 

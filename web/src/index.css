@@ -280,10 +280,21 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 }
 .card-note { font-size: 12.5px; color: var(--ink-5); line-height: 1.55; margin: 6px 0 0; }
 
+/* Hover/focus help affordance. The explanation lives in the native `title`
+   tooltip, so there is no popover to position or dismiss. */
+.help-dot {
+  width: 18px; height: 18px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--field); background: var(--paper); color: var(--ink-4);
+  font-size: 11px; font-weight: 700; cursor: help; user-select: none;
+}
+.help-dot:hover, .help-dot:focus-visible { color: var(--ink-2); border-color: var(--ink-4); }
+
 /* ---------------- queue table ---------------- */
 
 .queue-head {
-  display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center;
+  display: grid; grid-template-columns: 34px 30px 76px minmax(0, 1fr); gap: 14px;
+  align-items: center;
   padding-left: 16px;
   background: var(--sunk); border-bottom: 1px solid var(--rule);
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
@@ -420,7 +431,10 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
   align-items: start;
 }
 .area-step1 { grid-area: step1; }
-.area-step2 { grid-area: step2; }
+.area-step2 { grid-area: step2; align-self: stretch; display: flex; flex-direction: column; }
+/* The empty state grows into whatever height the row has, so "Step 2" and
+   "No files handy?" end flush even before a batch is staged. */
+.batch-empty { flex: 1; display: flex; align-items: center; justify-content: center; }
 .area-run { grid-area: run; }
 .area-nofiles { grid-area: nofiles; }
 .dropzone {
@@ -459,13 +473,16 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 
 .queue-row {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  /* The dot and the thumbnail sit here rather than inside .queue-main, because
+     the thumbnail is its own button and buttons cannot nest. */
+  grid-template-columns: 34px 30px 76px minmax(0, 1fr);
+  gap: 14px;
   align-items: center;
   padding: 0 0 0 16px;
 }
 .queue-main {
   display: grid;
-  grid-template-columns: 30px 76px minmax(0, 1fr) 150px 118px 172px 26px;
+  grid-template-columns: minmax(0, 1fr) 150px 118px 172px 26px;
   gap: 14px;
   align-items: center;
   width: 100%;
@@ -483,7 +500,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 .queue-item.selected { background: #f2f7fb; }
 .queue-head-main {
   display: grid;
-  grid-template-columns: 30px 76px minmax(0, 1fr) 150px 118px 172px 26px;
+  grid-template-columns: minmax(0, 1fr) 150px 118px 172px 26px;
   gap: 14px;
   align-items: center;
   padding: 10px 16px 10px 0;
@@ -643,7 +660,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
     grid-template-areas: 'step1' 'run' 'step2' 'nofiles';
   }
   .queue-head { display: none; }
-  .queue-main { grid-template-columns: 30px 76px minmax(0, 1fr) 172px 26px; }
+  .queue-main { grid-template-columns: minmax(0, 1fr) 172px 26px; }
   .queue-main .hide-sm { display: none; }
 }
 @media (max-width: 720px) {
@@ -712,7 +729,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
   letter-spacing: 0.06em;
 }
 .unused-strip { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
-.unused-strip figure { margin: 0; max-width: 88px; }
+.unused-strip figure { margin: 0; max-width: 108px; }
 .unused-strip figcaption {
   font-size: 10px;
   color: var(--ink-6);
@@ -720,3 +737,55 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
   overflow-wrap: anywhere;
 }
 .fields-unrecorded { color: var(--ink-6); font-style: italic; }
+
+
+/* ---------------- staged batch: thumbnails, row detail, lightbox ---------------- */
+
+/* A thumbnail is the handle for both actions on an image, so it is a button
+   wherever it is one - reset the chrome rather than wrap it in another box. */
+button.thumb, .thumb-open {
+  appearance: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit;
+  background: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+button.thumb { border: 1px solid var(--rule); cursor: zoom-in; }
+.thumb-open { width: 100%; height: 100%; }
+.thumb-lg { width: 108px; height: 74px; position: relative; }
+.thumb-x, .cell-x {
+  appearance: none; border: 1px solid var(--rule); background: var(--paper);
+  color: var(--ink-4); cursor: pointer; line-height: 1;
+  width: 20px; height: 20px; border-radius: 50%; font-size: 14px; padding: 0;
+}
+.thumb-x { position: absolute; top: -7px; right: -7px; box-shadow: 0 1px 3px rgba(16, 40, 61, 0.2); }
+.thumb-x:hover, .cell-x:hover:not(:disabled) { color: var(--fail-fg); border-color: var(--fail-bd); }
+.cell-x:disabled { opacity: 0.3; cursor: default; }
+.image-cell { display: flex; align-items: center; gap: 8px; }
+
+button.caret { appearance: none; border: 0; background: none; cursor: pointer; padding: 0 4px; }
+.staged-expand td { background: var(--sunk-2); }
+.staged-detail {
+  display: grid; grid-template-columns: 240px minmax(0, 1fr);
+  gap: 18px; align-items: start; padding: 4px 0;
+}
+.staged-preview {
+  appearance: none; border: 1px solid var(--rule); background: #faf7f0; padding: 0;
+  cursor: pointer; display: block; width: 100%;
+}
+.staged-preview img { width: 100%; max-height: 200px; object-fit: contain; display: block; }
+.staged-drop { padding: 22px 14px; }
+.staged-detail-line { display: flex; gap: 10px; font-size: 12.5px; padding: 4px 0; }
+.staged-detail-line span:first-child { color: var(--ink-5); min-width: 92px; }
+
+.lightbox {
+  margin: 0; background: var(--paper); border: 1px solid var(--rule); padding: 12px;
+  max-width: min(920px, 100%);
+}
+.lightbox img { display: block; max-width: 100%; max-height: 74vh; object-fit: contain; }
+.lightbox figcaption { font-size: 11.5px; color: var(--ink-6); margin-top: 8px; text-align: center; }
+
+@media (max-width: 720px) {
+  .staged-detail { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The label frame doubles as the enlarge trigger on a determination. */
+.label-frame-zoom { appearance: none; padding: 0; cursor: zoom-in; width: 100%; }

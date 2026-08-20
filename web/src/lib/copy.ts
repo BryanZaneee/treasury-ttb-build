@@ -34,13 +34,6 @@ export const RESULT_COPY: Record<string, string> = {
   pending: 'Not yet verified.',
 }
 
-export function engineLine(record: { engine: string | null; elapsed_ms: number | null }): string {
-  if (!record.engine) return 'not yet verified'
-  const ms = record.elapsed_ms
-  const elapsed = ms == null ? '' : ` · ${ms < 1 ? '<1' : ms} ms`
-  return `${record.engine}${elapsed}`
-}
-
 export function received(record: RecordRow) {
   return record.received.slice(0, 10)
 }

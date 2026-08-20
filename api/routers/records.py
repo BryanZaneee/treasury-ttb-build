@@ -240,6 +240,12 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
         capped = False
         cause = type(exc).__name__ if not str(exc) else str(exc).split("\n")[0][:120]
 
+    # The engine string a reviewer sees says only "unavailable" - which reader
+    # failed and why is an operator question, and without this line the cause
+    # was computed and thrown away, leaving a box that had silently degraded to
+    # OCR with nothing in the journal to say what the provider actually
+    # answered.
+    logs.event("reader_fallback", provider=provider, model=settings.reader_model, cause=cause)
     if provider == "ocr":
         raise HTTPException(status_code=422, detail=f"reader failed: {cause}")
     try:

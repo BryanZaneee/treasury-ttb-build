@@ -127,6 +127,16 @@ def from_csv(data: bytes) -> list[dict[str, Any]]:
     text = data.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text))
     if reader.fieldnames is None or "app_brand" not in reader.fieldnames:
+        # The other CSV this service hands out is the batch-intake template
+        # (batching.INTAKE_COLUMNS), which files new applications rather than
+        # restoring determinations. Say so instead of naming a column the
+        # operator never saw.
+        if reader.fieldnames and "brand_name" in reader.fieldnames:
+            raise CsvImportError(
+                "app_brand",
+                "this is a batch-intake CSV, not a records export - "
+                "file it on Check a batch, which pairs it with label images",
+            )
         raise CsvImportError("app_brand", "missing required column app_brand")
 
     rows = []

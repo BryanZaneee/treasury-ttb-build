@@ -197,3 +197,10 @@ export type Job = {
   verdicts: Record<string, number>
   error: string | null
 }
+
+/** POST /store/import — restoring the record store from an exported mirror. */
+export type StoreImport = {
+  imported: number
+  skipped: number
+  errors: string[]
+}

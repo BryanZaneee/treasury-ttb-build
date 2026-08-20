@@ -25,7 +25,8 @@ _ACCESS_ROUTES = [
     ("POST", "/api/records"),
     ("PATCH", "/api/records/"),
     ("POST", "/api/records/"),  # covers /api/records/{id}/verify
-    ("POST", "/api/batches/stage"),
+    ("POST", "/api/batches/"),  # stage, per-row assign, per-row upload
+    ("DELETE", "/api/batches/"),
     ("POST", "/api/jobs"),
     ("POST", "/api/fixtures"),
 ]

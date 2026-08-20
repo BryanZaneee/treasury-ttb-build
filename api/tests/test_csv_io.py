@@ -2,6 +2,8 @@
 
 from typing import Any
 
+import pytest
+
 from csv_io import MIRROR_COLUMNS, CsvImportError, from_csv, to_csv
 
 
@@ -64,3 +66,11 @@ def test_to_csv_fixed_column_order() -> None:
     data = to_csv([_row()])
     header = data.decode().splitlines()[0]
     assert header.split(",") == MIRROR_COLUMNS
+
+
+def test_a_batch_intake_csv_is_named_as_such_not_as_a_missing_column() -> None:
+    import batching
+
+    data = (",".join(batching.INTAKE_COLUMNS) + "\na.png,Old Tom,Gin,40% ALC/VOL,750 ML,,,,\n")
+    with pytest.raises(CsvImportError, match="batch-intake CSV"):
+        from_csv(data.encode())

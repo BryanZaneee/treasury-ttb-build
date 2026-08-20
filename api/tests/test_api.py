@@ -1076,3 +1076,50 @@ def test_reads_are_never_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
     main._hits.clear()
     assert all(client.get("/api/records").status_code == 200 for _ in range(6))
     main._hits.clear()
+
+
+def test_uploading_a_specimen_for_one_row_pairs_it() -> None:
+    """The reviewer has the missing file; re-uploading the batch is not a remedy."""
+    csv_bytes = (
+        b"filename,brand_name,class_type,alcohol_content,net_contents,applicant\n"
+        b"old-tom.png,Old Tom,Bourbon,45%,750 mL,Acme\n"
+    )
+    staged = client.post(
+        "/api/batches/stage",
+        headers=ACCESS,
+        files={"applications_csv": ("apps.csv", csv_bytes, "text/csv")},
+    ).json()
+    assert staged["summary"]["missing_image"] == 1
+
+    resp = client.post(
+        f"/api/batches/{staged['batch_id']}/rows/1/upload",
+        headers=ACCESS,
+        files={"image": ("old-tom.png", _png(), "image/png")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["rows"][0]["image"] == "old-tom.png"
+    assert (db.data_dir() / "images" / "old-tom.png").exists()
+
+
+def test_discarding_an_unwanted_image_removes_it_from_the_batch() -> None:
+    csv_bytes = (
+        b"filename,brand_name,class_type,alcohol_content,net_contents,applicant\n"
+        b"old-tom.png,Old Tom,Bourbon,45%,750 mL,Acme\n"
+    )
+    staged = client.post(
+        "/api/batches/stage",
+        headers=ACCESS,
+        files=[
+            ("applications_csv", ("apps.csv", csv_bytes, "text/csv")),
+            ("images", ("old-tom.png", _png(), "image/png")),
+            ("images", ("stray.png", _png("red"), "image/png")),
+        ],
+    ).json()
+    assert staged["summary"]["unused_images"] == ["stray.png"]
+
+    resp = client.delete(f"/api/batches/{staged['batch_id']}/images/stray.png", headers=ACCESS)
+    assert resp.status_code == 200
+    assert resp.json()["summary"]["unused_images"] == []
+
+    gone = client.delete(f"/api/batches/{staged['batch_id']}/images/stray.png", headers=ACCESS)
+    assert gone.status_code == 404

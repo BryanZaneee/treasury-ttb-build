@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, apiUrl, imageUrl } from '../api/client'
-import type { Job, StagedBatch } from '../api/client'
+import type { Job, StagedBatch, StagedRow } from '../api/client'
 
 const BUCKET: Record<string, { label: string; pill: string }> = {
   matched: { label: 'Matched', pill: 'pill-match' },
@@ -19,19 +19,28 @@ export function CheckBatch() {
   const [job, setJob] = useState<Job | null>(null)
   const [verifyNow, setVerifyNow] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Staging is about pairing names to files, so the only thing a row has to
+  // show is the specimen and the name it was filed under. Brand and applicant
+  // are the application's business and are checked at verification.
+  const [expanded, setExpanded] = useState<number | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
   const csvRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
   const [csvName, setCsvName] = useState('No file selected')
   const [imgCount, setImgCount] = useState('No images selected')
   const client = useQueryClient()
 
+  const staged = (data: StagedBatch) => {
+    setBatch(data)
+    setError(null)
+  }
+
   const loadSample = useMutation({
     mutationFn: () =>
       api<{ batch: StagedBatch }>('/fixtures', { method: 'POST', body: { mode: 'stage' } }),
     onSuccess: (data) => {
-      setBatch(data.batch)
+      staged(data.batch)
       setJob(null)
-      setError(null)
     },
     onError: (e) => setError(String(e)),
   })
@@ -46,9 +55,8 @@ export function CheckBatch() {
       return api<StagedBatch>('/batches/stage', { method: 'POST', form })
     },
     onSuccess: (data) => {
-      setBatch(data)
+      staged(data)
       setJob(null)
-      setError(null)
     },
     onError: (e) => setError(String(e)),
   })
@@ -59,10 +67,32 @@ export function CheckBatch() {
         method: 'POST',
         body: { image },
       }),
-    onSuccess: (updated) => {
-      setBatch(updated)
-      setError(null)
+    onSuccess: staged,
+    onError: (e) => setError(String(e)),
+  })
+
+  // Removing the image, not just the pairing: an uploaded file nobody wants in
+  // this batch stops being offered to every other row's picker too.
+  const discard = useMutation({
+    mutationFn: (name: string) =>
+      api<StagedBatch>(
+        `/batches/${batch!.batch_id}/images/${encodeURIComponent(name)}`,
+        { method: 'DELETE' },
+      ),
+    onSuccess: staged,
+    onError: (e) => setError(String(e)),
+  })
+
+  const uploadRow = useMutation({
+    mutationFn: ({ row, file }: { row: number; file: File }) => {
+      const form = new FormData()
+      form.set('image', file)
+      return api<StagedBatch>(`/batches/${batch!.batch_id}/rows/${row}/upload`, {
+        method: 'POST',
+        form,
+      })
     },
+    onSuccess: staged,
     onError: (e) => setError(String(e)),
   })
 
@@ -88,6 +118,7 @@ export function CheckBatch() {
   })
 
   const committable = batch ? batch.rows.filter((r) => r.bucket !== 'ambiguous').length : 0
+  const busy = assign.isPending || discard.isPending || uploadRow.isPending
 
   return (
     <div>
@@ -166,7 +197,7 @@ export function CheckBatch() {
               </div>
             )}
             {!batch ? (
-              <div className="dropzone" style={{ marginTop: 12, padding: 40 }}>
+              <div className="dropzone batch-empty" style={{ marginTop: 12, padding: 40 }}>
                 <div className="dropzone-hint" style={{ fontSize: 13.5 }}>
                   No applications staged yet.
                   <br />
@@ -192,13 +223,29 @@ export function CheckBatch() {
                     <p className="card-note">
                       {batch.summary.unused_images.length} uploaded image
                       {batch.summary.unused_images.length === 1 ? '' : 's'} no row claims. Pair
-                      one with a row using the Image column below.
+                      one with a row using the Image column below, or remove it with the ×.
                     </p>
                     <div className="unused-strip">
                       {batch.summary.unused_images.map((name) => (
                         <figure key={name}>
-                          <span className="thumb">
-                            <img src={imageUrl(name)} alt="" />
+                          <span className="thumb thumb-lg">
+                            <button
+                              type="button"
+                              className="thumb-open"
+                              aria-label={`View ${name}`}
+                              onClick={() => setPreview(name)}
+                            >
+                              <img src={imageUrl(name)} alt="" />
+                            </button>
+                            <button
+                              type="button"
+                              className="thumb-x"
+                              aria-label={`Remove ${name} from this batch`}
+                              disabled={busy}
+                              onClick={() => discard.mutate(name)}
+                            >
+                              ×
+                            </button>
                           </span>
                           <figcaption className="mono">{name}</figcaption>
                         </figure>
@@ -218,67 +265,111 @@ export function CheckBatch() {
                       <tr>
                         <th>#</th>
                         <th>Label</th>
-                        <th>Brand</th>
-                        <th>Applicant</th>
                         <th>Filename</th>
                         <th>Pairing</th>
                         <th>Image</th>
+                        <th />
                       </tr>
                     </thead>
                     <tbody>
                       {batch.rows.map((r) => (
-                        <tr key={r.row}>
-                          <td className="num">{r.row}</td>
-                          <td>
-                            {r.image ? (
-                              <span className="thumb">
-                                <img src={imageUrl(r.image)} alt="" />
+                        <Fragment key={r.row}>
+                          <tr>
+                            <td className="num">{r.row}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="thumb"
+                                aria-label={`Expand row ${r.row}`}
+                                onClick={() =>
+                                  setExpanded(expanded === r.row ? null : r.row)
+                                }
+                              >
+                                {r.image ? (
+                                  <img src={imageUrl(r.image)} alt="" />
+                                ) : (
+                                  <span className="thumb-empty">none</span>
+                                )}
+                              </button>
+                            </td>
+                            <td className="mono" style={{ fontSize: 12 }}>
+                              {r.filename}
+                            </td>
+                            <td>
+                              <span className={`pill pill-sm ${BUCKET[r.bucket].pill}`}>
+                                {BUCKET[r.bucket].label}
                               </span>
-                            ) : (
-                              <span className="thumb thumb-empty">none</span>
-                            )}
-                          </td>
-                          <td>{r.brand}</td>
-                          <td>{r.applicant}</td>
-                          <td className="mono" style={{ fontSize: 12 }}>
-                            {r.filename}
-                          </td>
-                          <td>
-                            <span className={`pill pill-sm ${BUCKET[r.bucket].pill}`}>
-                              {BUCKET[r.bucket].label}
-                            </span>
-                            {r.errors.length > 0 && (
-                              <div style={{ fontSize: 11, color: 'var(--ink-5)', marginTop: 4 }}>
-                                {r.errors.join('; ')}
+                              {r.errors.length > 0 && (
+                                <div
+                                  style={{ fontSize: 11, color: 'var(--ink-5)', marginTop: 4 }}
+                                >
+                                  {r.errors.join('; ')}
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              <div className="image-cell">
+                                <button
+                                  type="button"
+                                  className="cell-x"
+                                  aria-label={`Remove ${r.image ?? 'image'} from this batch`}
+                                  disabled={!r.image || busy}
+                                  onClick={() => r.image && discard.mutate(r.image)}
+                                >
+                                  ×
+                                </button>
+                                <select
+                                  value={r.image ?? ''}
+                                  disabled={busy}
+                                  aria-label={`Image for row ${r.row}`}
+                                  onChange={(e) =>
+                                    assign.mutate({ row: r.row, image: e.target.value || null })
+                                  }
+                                >
+                                  <option value="">— no image —</option>
+                                  {/* Its own pairing, the candidates that made it
+                                      ambiguous, and anything no other row claimed. */}
+                                  {[
+                                    ...new Set([
+                                      ...(r.image ? [r.image] : []),
+                                      ...r.candidate_filenames,
+                                      ...batch.summary.unused_images,
+                                    ]),
+                                  ].map((name) => (
+                                    <option key={name} value={name}>
+                                      {name}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
-                            )}
-                          </td>
-                          <td>
-                            <select
-                              value={r.image ?? ''}
-                              disabled={assign.isPending}
-                              aria-label={`Image for row ${r.row}`}
-                              onChange={(e) =>
-                                assign.mutate({ row: r.row, image: e.target.value || null })
-                              }
-                            >
-                              <option value="">— no image —</option>
-                              {/* Its own pairing, the candidates that made it
-                                  ambiguous, and anything no other row claimed. */}
-                              {[
-                                ...new Set([
-                                  ...(r.image ? [r.image] : []),
-                                  ...r.candidate_filenames,
-                                  ...batch.summary.unused_images,
-                                ]),
-                              ].map((name) => (
-                                <option key={name} value={name}>
-                                  {name}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                        </tr>
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className={`caret${expanded === r.row ? ' open' : ''}`}
+                                aria-expanded={expanded === r.row}
+                                aria-label={`Expand row ${r.row}`}
+                                onClick={() =>
+                                  setExpanded(expanded === r.row ? null : r.row)
+                                }
+                              >
+                                ▾
+                              </button>
+                            </td>
+                          </tr>
+                          {expanded === r.row && (
+                            <tr className="staged-expand">
+                              <td colSpan={6}>
+                                <StagedDetail
+                                  row={r}
+                                  busy={busy}
+                                  onPreview={() => r.image && setPreview(r.image)}
+                                  onUpload={(file) => uploadRow.mutate({ row: r.row, file })}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>
@@ -342,6 +433,90 @@ export function CheckBatch() {
               Load bundled sample batch
             </button>
           </div>
+      </div>
+
+      {preview && (
+        <div
+          className="dialog-backdrop"
+          role="dialog"
+          aria-label={preview}
+          onClick={() => setPreview(null)}
+        >
+          <figure className="lightbox">
+            <img src={imageUrl(preview)} alt={preview} />
+            <figcaption className="mono">{preview}</figcaption>
+          </figure>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StagedDetail({
+  row,
+  busy,
+  onPreview,
+  onUpload,
+}: {
+  row: StagedRow
+  busy: boolean
+  onPreview: () => void
+  onUpload: (file: File) => void
+}) {
+  const pick = useRef<HTMLInputElement>(null)
+  return (
+    <div className="staged-detail">
+      <input
+        ref={pick}
+        type="file"
+        accept="image/*"
+        hidden
+        aria-label={`Upload an image for row ${row.row}`}
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) onUpload(file)
+          e.target.value = ''
+        }}
+      />
+      {row.image ? (
+        <button type="button" className="staged-preview" onClick={onPreview}>
+          <img src={imageUrl(row.image)} alt={row.image} />
+        </button>
+      ) : (
+        <button
+          className="dropzone staged-drop"
+          onClick={() => pick.current?.click()}
+          disabled={busy}
+        >
+          <div className="dropzone-title">Upload a matching image</div>
+          <div className="dropzone-hint">Pairs with row {row.row} straight away</div>
+        </button>
+      )}
+      <div>
+        <div className="staged-detail-line">
+          <span>Filed as</span>
+          <span className="mono">{row.filename || '—'}</span>
+        </div>
+        <div className="staged-detail-line">
+          <span>Paired with</span>
+          <span className="mono">{row.image ?? 'no image'}</span>
+        </div>
+        {row.candidate_filenames.length > 0 && (
+          <div className="staged-detail-line">
+            <span>Candidates</span>
+            <span className="mono">{row.candidate_filenames.join(', ')}</span>
+          </div>
+        )}
+        {row.image && (
+          <button
+            className="btn btn-quiet btn-sm"
+            style={{ marginTop: 10 }}
+            onClick={() => pick.current?.click()}
+            disabled={busy}
+          >
+            Replace image
+          </button>
+        )}
       </div>
     </div>
   )

@@ -91,7 +91,12 @@ def parse_csv(data: bytes) -> list[dict[str, str]]:
     missing = [c for c in REQUIRED_COLUMNS if c not in header]
     if missing:
         raise BatchCsvError(f"missing required column(s): {', '.join(missing)}")
-    return [{_intake_name(k): (v or "").strip() for k, v in row.items()} for row in reader]
+    rows = [{_intake_name(k): (v or "").strip() for k, v in row.items()} for row in reader]
+    if not rows:
+        # The blank template is a valid file with nothing in it; staging it
+        # silently produced an empty preview with no explanation.
+        raise BatchCsvError("the file has a header but no application rows")
+    return rows
 
 
 def pair(rows: list[dict[str, str]], image_names: list[str]) -> tuple[list[Row], list[str]]:
@@ -201,3 +206,27 @@ def blocks_commit(rows: list[Row]) -> bool:
     """Commit is blocked while any row is ambiguous. `missing_image` rows do
     not block: they file, and are editable but not verifiable (PRD §5.5)."""
     return any(row.bucket == "ambiguous" for row in rows)
+
+
+def discard(rows: list[Row], images: list[str], name: str) -> None:
+    """Drop an uploaded image from the batch and repair the rows that used it.
+
+    Deleting the spare is the remedy an ambiguous row's own error message
+    names, so a row left with one candidate pairs with it rather than staying
+    blocked.
+    """
+    if name not in images:
+        raise KeyError(f"{name!r} was not uploaded with this batch")
+    images.remove(name)
+    for row in list(rows):
+        if row.image == name:
+            assign(rows, images, row.row, None)
+        elif name in row.candidate_filenames:
+            left = [c for c in row.candidate_filenames if c != name]
+            row.candidate_filenames = left
+            if len(left) == 1:
+                try:
+                    assign(rows, images, row.row, left[0])
+                except ValueError:
+                    # Another row already claims it; leave this one ambiguous.
+                    row.candidate_filenames = left

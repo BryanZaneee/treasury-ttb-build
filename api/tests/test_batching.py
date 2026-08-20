@@ -3,6 +3,7 @@
 import pytest
 
 import batching
+from batching import BatchCsvError
 
 HEADER = "filename,brand_name,class_type,alcohol_content,net_contents,applicant"
 
@@ -138,3 +139,38 @@ def test_a_csv_that_is_neither_header_is_still_rejected() -> None:
     bad = b"name,abv\r\nAbbey Row,7.6%\r\n"
     with pytest.raises(batching.BatchCsvError, match="missing required column"):
         batching.parse_csv(bad)
+
+
+def test_discarding_a_spare_resolves_an_ambiguous_row() -> None:
+    """The remedy the ambiguity error names: remove all but one."""
+    images = ["Old_Tom.jpg", "old-tom.jpeg"]
+    rows, _ = batching.pair(_rows("old-tom.png"), images)
+    assert rows[0].bucket == "ambiguous"
+
+    batching.discard(rows, images, "Old_Tom.jpg")
+    assert images == ["old-tom.jpeg"]
+    assert rows[0].image == "old-tom.jpeg"
+    assert not batching.blocks_commit(rows)
+
+
+def test_discarding_a_paired_image_returns_the_row_to_missing() -> None:
+    images = ["old-tom.png"]
+    rows, _ = batching.pair(_rows("old-tom.png"), images)
+    batching.discard(rows, images, "old-tom.png")
+    assert rows[0].bucket == "missing_image"
+    assert rows[0].image is None
+    assert batching.unused_images(rows, images) == []
+
+
+def test_discarding_an_image_that_is_not_in_the_batch_is_rejected() -> None:
+    images = ["old-tom.png"]
+    rows, _ = batching.pair(_rows("old-tom.png"), images)
+    with pytest.raises(KeyError):
+        batching.discard(rows, images, "stray.jpg")
+
+
+def test_the_blank_template_alone_is_a_readable_error() -> None:
+    """Downloading the template and uploading it unfilled staged nothing."""
+    header = ",".join(batching.INTAKE_COLUMNS).encode()
+    with pytest.raises(BatchCsvError, match="no application rows"):
+        batching.parse_csv(header + b"\n")

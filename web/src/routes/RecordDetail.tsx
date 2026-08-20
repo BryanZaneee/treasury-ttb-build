@@ -28,6 +28,7 @@ export function RecordDetail() {
   const backToInbox = `/inbox${params.toString() ? `?${params}` : ''}`
   const client = useQueryClient()
   const [minimised, setMinimised] = useState(() => localStorage.getItem(MINIMISED_KEY) === '1')
+  const [zoomed, setZoomed] = useState(false)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<null | 'accepted' | 'returned'>(null)
@@ -136,12 +137,19 @@ export function RecordDetail() {
                 {data.filename}
               </div>
             </div>
-            <div className="label-frame">
+            {/* Same click-to-enlarge as the staged batch preview: a specimen
+                is the evidence, and 3:4 in a column is too small to read. */}
+            <button
+              type="button"
+              className="label-frame label-frame-zoom"
+              onClick={() => setZoomed(true)}
+              aria-label={`Enlarge label image for ${data.app_brand}`}
+            >
               <img
                 src={imageUrl(data.specimen || data.filename)}
                 alt={`Label image for ${data.app_brand}`}
               />
-            </div>
+            </button>
             {readByFallback(data, health.data?.provider) && (
               <div className="row" style={{ gap: 8, marginTop: 12 }}>
                 <span className="chip chip-warn">Read by local OCR</span>
@@ -369,6 +377,26 @@ export function RecordDetail() {
           )}
         </div>
       </div>
+
+      {zoomed && (
+        <div
+          className="dialog-backdrop"
+          role="dialog"
+          aria-label={`Label image for ${data.app_brand}`}
+          tabIndex={-1}
+          autoFocus
+          onClick={() => setZoomed(false)}
+          onKeyDown={(e) => e.key === 'Escape' && setZoomed(false)}
+        >
+          <figure className="lightbox">
+            <img
+              src={imageUrl(data.specimen || data.filename)}
+              alt={`Label image for ${data.app_brand}`}
+            />
+            <figcaption className="mono">{data.filename}</figcaption>
+          </figure>
+        </div>
+      )}
     </div>
   )
 }

@@ -5,7 +5,7 @@ import { api, freshUrl, imageUrl } from '../api/client'
 import type { RecordRow, RecordsPage, FieldResult, RecordDetail } from '../api/client'
 import { Pill } from '../components/Pill'
 import { DOT_COLOR, kindOf } from '../lib/verdict'
-import { FIELD_LABEL, QUALITY_LABEL, engineLine, fieldValues } from '../lib/copy'
+import { FIELD_LABEL, QUALITY_LABEL, fieldValues } from '../lib/copy'
 import { matchesQuery } from '../lib/search'
 import { BulkDecisionDialog } from '../components/BulkDecisionDialog'
 import { useToast } from '../lib/toast'
@@ -315,9 +315,9 @@ export function Inbox() {
             }}
             onChange={toggleAll}
           />
+          <div />
+          <div>Label</div>
           <div className="queue-head-main">
-            <div />
-            <div>Label</div>
             <div>Application</div>
             <div className="hide-sm">Applicant</div>
             <div className="hide-sm">Received</div>
@@ -389,6 +389,7 @@ function QueueItem({
   onSelect: () => void
 }) {
   const kind = kindOf(record.result)
+  const [zoomed, setZoomed] = useState(false)
   const detail = useQuery({
     queryKey: ['record', record.id],
     queryFn: () => api<RecordDetail>(`/records/${record.id}`),
@@ -413,14 +414,20 @@ function QueueItem({
           aria-label={`Select ${record.app_brand}, ${record.id}`}
           onChange={onSelect}
         />
-        <button className="queue-main" onClick={onToggle} aria-expanded={open}>
         <div
           className="dot"
           style={{ background: record.decision ? '#c6d0da' : DOT_COLOR[kind] }}
         />
-        <div className="thumb">
+        {/* Outside the row button, not inside it: nesting one button in another
+            is invalid, and the thumbnail opens the specimen rather than the row. */}
+        <button
+          className="thumb"
+          onClick={() => setZoomed(true)}
+          aria-label={`Enlarge label image for ${record.app_brand}`}
+        >
           <img src={imageUrl(record.specimen || record.filename)} alt="" />
-        </div>
+        </button>
+        <button className="queue-main" onClick={onToggle} aria-expanded={open}>
         <div style={{ minWidth: 0 }}>
           <div className="queue-brand">{record.app_brand}</div>
           <div className="queue-sub">{subline}</div>
@@ -478,9 +485,6 @@ function QueueItem({
                 <Link className="btn" to={`/records/${record.id}${queueSearch}`}>
                   Open full determination
                 </Link>
-                <div className="push mono" style={{ fontSize: 11.5, color: 'var(--ink-6)' }}>
-                  {engineLine(record)}
-                </div>
               </div>
             </div>
           ) : (
@@ -503,6 +507,26 @@ function QueueItem({
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {zoomed && (
+        <div
+          className="dialog-backdrop"
+          role="dialog"
+          aria-label={`Label image for ${record.app_brand}`}
+          tabIndex={-1}
+          autoFocus
+          onClick={() => setZoomed(false)}
+          onKeyDown={(e) => e.key === 'Escape' && setZoomed(false)}
+        >
+          <figure className="lightbox">
+            <img
+              src={imageUrl(record.specimen || record.filename)}
+              alt={`Label image for ${record.app_brand}`}
+            />
+            <figcaption className="mono">{record.filename}</figcaption>
+          </figure>
         </div>
       )}
     </div>
