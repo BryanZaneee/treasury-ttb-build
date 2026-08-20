@@ -171,6 +171,47 @@ def get_record(record_id: str) -> RecordDetail:
     )
 
 
+def _specimen_path(specimen: str) -> Path:
+    """Where a specimen actually is: the store's image directory, or the bundled
+    fixture of the same name for a seeded record whose image was never copied."""
+    path = db.data_dir() / "images" / Path(specimen).name
+    return path if path.exists() else Path("fixtures") / Path(specimen).name
+
+
+def _cache_key(path: Path) -> str | None:
+    """PRD §5.2: the key carries the image hash and every setting that can change
+    a reading, so switching model or provider cannot serve the previous one."""
+    with suppress(OSError):
+        return "|".join(
+            [
+                hashlib.sha256(path.read_bytes()).hexdigest(),
+                PROMPT_VERSION,
+                settings.reader_provider,
+                settings.reader_model,
+                settings.reader_effort,
+            ]
+        )
+    return None
+
+
+def cached_reading(specimen: str) -> tuple[LabelReading, str, str] | None:
+    """The reading already on file for this specimen, without asking a reader.
+
+    Correcting the application is a rules question, not a reading one: the label
+    has not changed, so re-adjudicating must never spend a call on it. Returns
+    None when nothing has read this image at these settings - a fallback OCR
+    reading is deliberately never cached (PRD §5.2), so a record read that way
+    stays unverified until a reviewer asks for it again.
+    """
+    key = _cache_key(_specimen_path(specimen))
+    if key is None:
+        return None
+    cached = db.extraction_cache_get(key)
+    if cached is None:
+        return None
+    return LabelReading(**cached["reading"]), cached["engine"], cached["reader"]
+
+
 def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, str, int]:
     """Read a specimen, falling back to local OCR when the reader fails.
 
@@ -196,19 +237,7 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
         prepare(path)
     prep_ms = round((time.perf_counter_ns() - prep_started) / 1_000_000)
 
-    # PRD §5.2: the key carries the image hash and every setting that can change
-    # a reading, so switching model or provider cannot serve the previous one.
-    key: str | None = None
-    with suppress(OSError):
-        key = "|".join(
-            [
-                hashlib.sha256(path.read_bytes()).hexdigest(),
-                PROMPT_VERSION,
-                provider,
-                settings.reader_model,
-                settings.reader_effort,
-            ]
-        )
+    key = _cache_key(path)
     if key is not None:
         cached = db.extraction_cache_get(key)
         if cached is not None:
@@ -383,6 +412,44 @@ def patch_record(record_id: str, body: RecordPatchRequest) -> Record:
         )
         db.clear_field_results(record_id)
         db.append_audit(record_id, "edited", app.model_dump())
+
+        # The verdict above was cleared because the application changed, not
+        # because the label did. The reading already on file is adjudicated
+        # against the corrected application straight away, so a reviewer fixing
+        # a transcription error gets the corrected determination without the
+        # reader being asked to read an unchanged image again.
+        on_file = cached_reading(row["specimen"] or row["filename"])
+        if on_file is not None:
+            reading, engine, reader_used = on_file
+            started = time.perf_counter_ns()
+            results, verdict = adjudicate.adjudicate(record_id, app, reading)
+            rules_ms = round((time.perf_counter_ns() - started) / 1_000_000)
+            db.upsert_field_results(
+                record_id, [r.model_dump(exclude={"record_id"}) for r in results]
+            )
+            db.update_record(
+                record_id,
+                verified=True,
+                result=verdict,
+                quality=reading.quality,
+                engine=engine,
+                rules_ms=rules_ms,
+                # No reader ran, so the only time spent was the rules pass.
+                elapsed_ms=rules_ms,
+                reader_provider=reader_used,
+                reader_model=settings.reader_model if reader_used != "ocr" else None,
+                prompt_version=PROMPT_VERSION if reader_used == "openai" else None,
+            )
+            db.append_audit(
+                record_id,
+                "readjudicated",
+                {
+                    "result": verdict,
+                    "engine": engine,
+                    "fields": {r.field_key: r.verdict for r in results},
+                },
+            )
+            logs.count("readjudications")
 
     elif body.decision is not None:
         overridden = enforce_override(row, body.decision, body.override, body.reviewer_name)

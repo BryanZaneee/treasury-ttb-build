@@ -390,8 +390,21 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 /* The application column doubles as the correction form: the reviewer types
    into the determination itself rather than into a second copy of the seven
    fields kept somewhere else on the page. */
-.fields-edit { width: 100%; font-size: 13px; min-height: 36px; padding: 7px 9px; }
-.fields-row .check-row { padding: 6px 9px; min-height: 36px; font-size: 12px; }
+.fields-edit { font-size: 13px; }
+.fields-row .check-row { padding: 8px 10px; min-height: 40px; font-size: 12px; }
+/* The application cell keeps the input's own box whether or not it holds one,
+   so turning the column into the form moves nothing on the page. */
+.fields-app {
+  display: flex;
+  align-items: center;
+  /* The input's own outer height, so the row is the same height whether it
+     holds a value or the field it is typed into. */
+  min-height: 40px;
+  /* Inset by the input's own padding and pulled back by it, so the value lines
+     up with the column heading and with the input that replaces it. */
+  padding-left: 11px;
+  margin-left: -11px;
+}
 .fields-compact { padding: 10px 12px; }
 .fields-compact.fields-head { padding: 9px 12px; }
 

@@ -50,7 +50,17 @@ const draftFrom = (r: Detail): Draft => ({
   warning: r.app_warning_declared,
 })
 
+/**
+ * Previous and Next change the id without unmounting, which would carry a
+ * half-typed correction - and the confirmation state under it - onto the next
+ * record. Keying on the id makes stepping through the queue a fresh page.
+ */
 export function RecordDetail() {
+  const { id = '' } = useParams()
+  return <Determination key={id} />
+}
+
+function Determination() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
   // The queue the reviewer came from. Deep-linking straight to a record with no
@@ -102,9 +112,12 @@ export function RecordDetail() {
     onError: (e) => toast({ kind: 'error', title: 'Verification failed', body: String(e) }),
   })
 
+  // The correction is only ever adjudicated against the reading already on
+  // file: the application changed, the label did not, so the API re-runs the
+  // rules and never asks a reader to read the same image again.
   const save = useMutation({
-    mutationFn: async ({ draft, recheck }: { draft: Draft; recheck: boolean }) => {
-      await api(`/records/${id}`, {
+    mutationFn: (draft: Draft) =>
+      api<Detail>(`/records/${id}`, {
         method: 'PATCH',
         body: {
           application: {
@@ -113,31 +126,18 @@ export function RecordDetail() {
             origin: draft.origin || null,
           },
         },
-      })
-      // Editing clears the verdict (PRD §5.1), so a record that had one is read
-      // again straight away rather than being left blank. The specimen and the
-      // prompt version have not changed, so this is an extraction-cache hit
-      // (§5.2): correcting a typo re-adjudicates without paying for a new read.
-      // A record that was never verified is left alone, because for that one
-      // the read would be a real paid call the reviewer has not asked for.
-      if (recheck) return api<Detail>(`/records/${id}/verify`, { method: 'POST' })
-      return null
-    },
-    onSuccess: (updated, { recheck }) => {
+      }),
+    onSuccess: (updated) => {
       setDraft(null)
       setError(null)
       refresh()
-      if (updated && readByFallback(updated, health.data?.provider)) {
-        toast({ kind: 'warn', title: FALLBACK_TITLE, body: FALLBACK_BODY })
-      } else if (recheck && updated) {
-        toast({
-          kind: 'success',
-          title: 'Application corrected and re-checked',
-          body: RESULT_COPY[kindOf(updated.result)],
-        })
-      } else {
-        toast({ kind: 'success', title: 'Application corrected' })
-      }
+      toast({
+        kind: 'success',
+        title: 'Application corrected',
+        body: updated.verified
+          ? RESULT_COPY[kindOf(updated.result)]
+          : 'Nothing has read this label yet. Run AI verification to compare it.',
+      })
     },
     onError: (e) => toast({ kind: 'error', title: 'The correction was not saved', body: String(e) }),
   })
@@ -226,7 +226,7 @@ export function RecordDetail() {
               <div className="fields-name">{FIELD_LABEL[key]}</div>
               {result?.note && <div className="fields-note">{result.note}</div>}
             </div>
-            <div className="fields-value">
+            <div className="fields-value fields-app">
               {draft ? (
                 app === 'warning' ? (
                   <label className="check-row">
@@ -321,19 +321,6 @@ export function RecordDetail() {
         <div className="card">
           {header}
 
-          {draft && (
-            <div className="banner" style={{ margin: '14px 20px 0' }}>
-              <div className="banner-mark" aria-hidden="true">
-                !
-              </div>
-              <div className="banner-text">
-                Correct the application as filed, in the middle column. Saving records the
-                edit in the audit log
-                {data.verified ? ' and checks the label against it again.' : '.'}
-              </div>
-            </div>
-          )}
-
           {data.result === 'invalid' && !draft ? (
             /* No fields were adjudicated (PRD §3.2 ext), so the comparison
                table would be four column headers over nothing. */
@@ -368,13 +355,9 @@ export function RecordDetail() {
               </div>
             ) : draft ? (
               <div className="row">
-                <button
-                  className="btn"
-                  disabled={busy}
-                  onClick={() => save.mutate({ draft, recheck: data.verified })}
-                >
+                <button className="btn" disabled={busy} onClick={() => save.mutate(draft)}>
                   {save.isPending && <span className="spinner" />}
-                  {data.verified ? 'Save and check again' : 'Save the correction'}
+                  Save the correction
                 </button>
                 <button className="btn btn-quiet" disabled={busy} onClick={() => setDraft(null)}>
                   Cancel
@@ -387,7 +370,7 @@ export function RecordDetail() {
               <div className="row">
                 {data.verified ? (
                   <button className="btn btn-accept" onClick={() => setConfirming('accepted')}>
-                    Accept determination
+                    Accept
                   </button>
                 ) : (
                   <button
@@ -497,9 +480,11 @@ export function RecordDetail() {
                 lineHeight: 1.5,
               }}
             >
-              {data.verified
-                ? 'A returned record is not reopenable. The applicant files afresh. Every determination appends to the audit log.'
-                : 'Nothing has been read yet. Run AI verification to compare this label against the application as filed.'}
+              {draft
+                ? 'Correct the application as filed, in the middle column. Saving checks it against the label already read.'
+                : data.verified
+                  ? 'A returned record is not reopenable. The applicant files afresh.'
+                  : 'Nothing has been read yet. Run AI verification to compare this label against the application as filed.'}
             </div>
           </div>
         </div>

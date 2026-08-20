@@ -602,14 +602,14 @@ function QueueItem({
               })}
               <div className="row" style={{ marginTop: 14 }}>
                 <Link className="btn" to={`/records/${record.id}${queueSearch}`}>
-                  Open full determination
+                  Review
                 </Link>
                 {/* The confirmation is the shared decision dialog, which names
                     the disagreeing fields before an override is recorded. */}
                 {!record.decision && (
                   <>
                     <button className="btn btn-accept" onClick={() => onDecide('accepted')}>
-                      Accept determination
+                      Accept
                     </button>
                     <button className="btn btn-return" onClick={() => onDecide('returned')}>
                       Return to applicant

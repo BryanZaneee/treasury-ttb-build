@@ -13,6 +13,7 @@ import db
 import seed
 from config import settings
 from main import app
+from routers import records
 
 client = TestClient(app)
 ACCESS = {"Authorization": f"Bearer {settings.access_token}"}
@@ -229,10 +230,23 @@ def test_a_decided_record_is_not_reopenable() -> None:
     assert resp.status_code == 409
 
 
-def test_editing_the_application_invalidates_the_verdict() -> None:
+def test_editing_the_application_readjudicates_without_reading_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An edit changes the application, not the label (PRD §5.1).
+
+    The verdict has to be recomputed, but the reader must not be asked to read
+    an unchanged image again: the reading already on file is adjudicated against
+    the corrected application.
+    """
     record_id = _seed_and_get("old-tom-pass.jpg")
     client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
-    assert client.get(f"/api/records/{record_id}").json()["field_results"]
+    assert client.get(f"/api/records/{record_id}").json()["result"] == "match"
+
+    def no_reading(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("editing the application must not call a reader")
+
+    monkeypatch.setattr(records, "read_specimen", no_reading)
 
     resp = client.patch(
         f"/api/records/{record_id}",
@@ -250,13 +264,39 @@ def test_editing_the_application_invalidates_the_verdict() -> None:
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["verified"] is False
-    assert body["result"] is None
     assert body["app_alcohol_content"] == "40%"
-    assert client.get(f"/api/records/{record_id}").json()["field_results"] == []
+    # The correction is adjudicated on the spot, and catches the mismatch it
+    # introduced.
+    assert body["verified"] is True
+    assert body["result"] == "fail"
+    fields = {
+        f["field_key"]: f["verdict"]
+        for f in client.get(f"/api/records/{record_id}").json()["field_results"]
+    }
+    assert fields["abv"] == "fail"
 
-    # Re-verifying now catches the mismatch the edit introduced.
-    assert client.post(f"/api/records/{record_id}/verify", headers=ACCESS).json()["result"] == "fail"
+
+def test_editing_a_record_nothing_has_read_leaves_it_unverified() -> None:
+    """With no reading on file there is nothing to adjudicate against, and the
+    reader is still only run when a reviewer asks for it."""
+    record_id = _seed_and_get("old-tom-pass.jpg")
+    resp = client.patch(
+        f"/api/records/{record_id}",
+        headers=ACCESS,
+        json={
+            "application": {
+                "brand": "Old Tom Distillery",
+                "class_type": "Kentucky Straight Bourbon Whiskey",
+                "abv": "40%",
+                "net": "750 mL",
+                "warning": True,
+            }
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["verified"] is False
+    assert resp.json()["result"] is None
+    assert client.get(f"/api/records/{record_id}").json()["field_results"] == []
 
 
 def test_verification_appends_audit_rows_without_overwriting() -> None:
