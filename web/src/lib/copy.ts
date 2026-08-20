@@ -30,7 +30,7 @@ export const RESULT_COPY: Record<string, string> = {
   review: 'Same content, different presentation. An agent should confirm before closing.',
   fail: 'One or more fields differ in content, are missing, or could not be read.',
   invalid:
-    'The image filed is not an alcohol beverage label. Nothing was adjudicated — ask the applicant for the label image.',
+    'The image filed is not an alcohol beverage label. Nothing was adjudicated. Ask the applicant for the label image.',
   pending: 'Not yet verified.',
 }
 
@@ -49,7 +49,7 @@ export function received(record: RecordRow) {
 export function fieldValues(field: { app_value: string | null; label_value: string | null }) {
   const recorded = field.app_value != null || field.label_value != null
   return {
-    app: field.app_value || (recorded ? '—' : 'Not recorded'),
+    app: field.app_value || (recorded ? 'Not stated' : 'Not recorded'),
     label: field.label_value || (recorded ? 'Not on label' : 'Not recorded'),
     recorded,
   }

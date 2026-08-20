@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, imageUrl } from '../api/client'
 import type { Health, RecordDetail, RecordRow, SpecimenSummary } from '../api/client'
 import type { Toast } from '../lib/toast'
+import { useEscape } from '../lib/dialog'
 import { useToast } from '../lib/toast'
 import { FIELD_LABEL, RESULT_COPY } from '../lib/copy'
 import { PILL_TEXT, kindOf } from '../lib/verdict'
@@ -103,6 +104,7 @@ export function CheckLabel() {
   const [sample, setSample] = useState(() => saved?.sample ?? '')
   const [dragging, setDragging] = useState(false)
   const [zoomed, setZoomed] = useState(false)
+  useEscape(() => setZoomed(false))
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -220,7 +222,7 @@ export function CheckLabel() {
     const kind = kindOf(record.result)
     toast({
       kind: TOAST_KIND[kind] ?? 'info',
-      title: `${record.app_brand || record.filename} — ${PILL_TEXT[kind]}`,
+      title: `${record.app_brand || record.filename}: ${PILL_TEXT[kind]}`,
       body: (
         <>
           {RESULT_COPY[kind]}
@@ -459,7 +461,7 @@ export function CheckLabel() {
                   <option value="">No sample selected</option>
                   {named.map((s) => (
                     <option key={s.filename} value={s.filename}>
-                      {s.title} — expected: {PILL_TEXT[kindOf(s.expected_verdict)]}
+                      {s.title} (expected: {PILL_TEXT[kindOf(s.expected_verdict)]})
                     </option>
                   ))}
                 </select>
@@ -473,11 +475,11 @@ export function CheckLabel() {
         <div
           className="dialog-backdrop"
           role="dialog"
+          aria-modal="true"
           aria-label={`Label image ${source}`}
           tabIndex={-1}
           autoFocus
           onClick={() => setZoomed(false)}
-          onKeyDown={(e) => e.key === 'Escape' && setZoomed(false)}
         >
           <figure className="lightbox">
             <img src={shown} alt={`Label image ${source}`} />

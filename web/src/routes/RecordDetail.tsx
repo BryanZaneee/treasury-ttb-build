@@ -8,6 +8,7 @@ import { kindOf } from '../lib/verdict'
 import { FIELD_LABEL, RESULT_COPY, fieldValues } from '../lib/copy'
 import { REVIEWER } from '../lib/session'
 import { QueueNav } from '../components/QueueNav'
+import { useEscape } from '../lib/dialog'
 import { useToast } from '../lib/toast'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
@@ -32,6 +33,7 @@ export function RecordDetail() {
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<null | 'accepted' | 'returned'>(null)
+  useEscape(() => setZoomed(false))
 
   const toast = useToast()
 
@@ -55,6 +57,7 @@ export function RecordDetail() {
       client.invalidateQueries({ queryKey: ['record', id] })
       client.invalidateQueries({ queryKey: ['records'] })
     },
+    onError: (e) => toast({ kind: 'error', title: 'Verification failed', body: String(e) }),
   })
 
   const decide = useMutation({
@@ -282,7 +285,7 @@ export function RecordDetail() {
                     {data.decided_by || 'unnamed reviewer'}
                     {data.override ? ' · override recorded' : ''} ·{' '}
                     <span className="mono">{data.decided_at?.slice(0, 16).replace('T', ' ')}</span>
-                    {data.note ? ` — ${data.note}` : ''}
+                    {data.note ? ` · ${data.note}` : ''}
                   </div>
                 ) : confirming === null ? (
                   <div className="row">
@@ -375,7 +378,7 @@ export function RecordDetail() {
                     lineHeight: 1.5,
                   }}
                 >
-                  A returned record is not reopenable — the applicant files afresh. Every
+                  A returned record is not reopenable. The applicant files afresh. Every
                   determination appends to the audit log.
                 </div>
               </div>
@@ -397,11 +400,11 @@ export function RecordDetail() {
         <div
           className="dialog-backdrop"
           role="dialog"
+          aria-modal="true"
           aria-label={`Label image for ${data.app_brand}`}
           tabIndex={-1}
           autoFocus
           onClick={() => setZoomed(false)}
-          onKeyDown={(e) => e.key === 'Escape' && setZoomed(false)}
         >
           <figure className="lightbox">
             <img

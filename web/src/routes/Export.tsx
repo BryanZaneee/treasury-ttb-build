@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, freshUrl } from '../api/client'
 import type { Health, RecordsPage } from '../api/client'
+import { useEscape } from '../lib/dialog'
 
 /**
  * Export and store administration. The store is read as a normal web page — CSV
@@ -13,6 +14,7 @@ export function Export() {
   const [confirming, setConfirming] = useState<null | 'reset' | 'empty'>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [showStore, setShowStore] = useState(false)
+  useEscape(() => setConfirming(null))
 
   const records = useQuery({
     queryKey: ['records', ''],
@@ -36,7 +38,7 @@ export function Export() {
       setMessage(
         mode === 'empty'
           ? 'Every record was removed. A copy of the old store was saved first.'
-          : `The example set is loaded — ${data.reset_count} applications to work through. A copy of the old store was saved first.`,
+          : `The example set is loaded: ${data.reset_count} applications to work through. A copy of the old store was saved first.`,
       )
       client.invalidateQueries({ queryKey: ['records'] })
     },
@@ -64,7 +66,7 @@ export function Export() {
           </p>
           <p className="card-note">
             To file a spreadsheet of applications, upload it with its label images on Batch
-            upload — nothing is written until you have checked the pairing.
+            upload. Nothing is written until you have checked the pairing.
           </p>
           <div className="stack" style={{ gap: 10, marginTop: 14 }}>
             <a className="btn btn-wide" href={freshUrl('/export/records.csv')} download>
@@ -104,14 +106,14 @@ export function Export() {
           </div>
           <p className="card-note">
             The AI reads the label and reports what it can see. The result is then decided by a
-            fixed set of checks against the application as filed — the AI can raise a problem,
+            fixed set of checks against the application as filed. The AI can raise a problem,
             never clear one.
           </p>
           <div className="readout">
             <div>
               <strong>Reader:</strong>{' '}
               <span className="mono">
-                {health.data?.provider ?? '—'}
+                {health.data?.provider ?? 'None'}
                 {health.data?.model ? ` / ${health.data.model}` : ''}
               </span>
               <div style={{ fontWeight: 400, marginTop: 4 }}>
@@ -171,7 +173,7 @@ export function Export() {
                   ) : (
                     <>
                       Everything on file is replaced with thirteen example applications to
-                      practise on — three still to check, three that matched, three in review,
+                      practise on: three still to check, three that matched, three in review,
                       four that failed, and three already decided.
                     </>
                   )}{' '}
@@ -227,10 +229,10 @@ export function Export() {
                     <td>{r.app_class_type}</td>
                     <td className="mono">{r.app_alcohol_content}</td>
                     <td className="mono">{r.app_net_contents}</td>
-                    <td>{r.result ?? '—'}</td>
-                    <td>{r.decision ?? '—'}</td>
+                    <td>{r.result ?? 'Pending'}</td>
+                    <td>{r.decision ?? 'Not decided'}</td>
                     <td className="mono" style={{ fontSize: 11.5 }}>
-                      {r.engine ?? '—'}
+                      {r.engine ?? 'None'}
                     </td>
                   </tr>
                 ))}

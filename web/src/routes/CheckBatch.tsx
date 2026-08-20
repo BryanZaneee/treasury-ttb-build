@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, apiUrl, imageUrl } from '../api/client'
 import type { Job, StagedBatch, StagedRow } from '../api/client'
+import { useEscape } from '../lib/dialog'
 import { useToast } from '../lib/toast'
 
 /** "1 matched · 7 to review · 17 failed", in the order a reviewer works a
@@ -51,6 +52,12 @@ export function CheckBatch() {
   const [clearing, setClearing] = useState(false)
   const csvRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
+  useEscape(() => {
+    setPreview(null)
+    setPicking(null)
+    setClearing(false)
+    setDropWarn(null)
+  })
   const [csvName, setCsvName] = useState('No file selected')
   const [imgCount, setImgCount] = useState('No images selected')
   const [imgFiles, setImgFiles] = useState(0)
@@ -237,7 +244,7 @@ export function CheckBatch() {
               <div style={{ marginTop: 4 }}>{verdicts}</div>
             </>
           ) : (
-            'Filed without verification — run it from the inbox when you are ready.'
+            'Filed without verification. Run it from the inbox when you are ready.'
           )}
           {job.failed > 0 && (
             <div style={{ marginTop: 4 }}>
@@ -397,7 +404,7 @@ export function CheckBatch() {
                       !
                     </div>
                     <div className="banner-text">
-                      Some rows still need a label picked for them — see Pairing below. You can
+                      Some rows still need a label picked for them. See Pairing below. You can
                       file the batch anyway; rows left unresolved are dropped from the upload.
                     </div>
                   </div>
@@ -562,10 +569,10 @@ export function CheckBatch() {
           className="dialog-backdrop"
           role="dialog"
           aria-label={preview}
+          aria-modal="true"
           tabIndex={-1}
           autoFocus
           onClick={() => setPreview(null)}
-          onKeyDown={(e) => e.key === 'Escape' && setPreview(null)}
         >
           <figure className="lightbox">
             <img src={imageUrl(preview)} alt={preview} />
@@ -609,7 +616,7 @@ export function CheckBatch() {
               <p className="card-note">
                 {batch.rows.length} staged row{batch.rows.length === 1 ? '' : 's'} and the
                 pairing work done on them are discarded. Nothing has been filed yet, so nothing
-                is removed from the store — but the CSV and its images have to be uploaded again.
+                is removed from the store, but the CSV and its images have to be uploaded again.
               </p>
             </div>
             <div className="dialog-foot">
@@ -655,7 +662,7 @@ export function CheckBatch() {
               {unresolved(dropWarn.rows).map((r) => (
                 <div className="staged-drop-row" key={r.row}>
                   <span className="num">{batch.rows.indexOf(r) + 1}</span>
-                  <span>{r.applicant || r.brand || '—'}</span>
+                  <span>{r.applicant || r.brand || 'No applicant'}</span>
                   <span>{r.bucket === 'ambiguous' ? 'More than one match' : 'No label'}</span>
                 </div>
               ))}
@@ -851,7 +858,7 @@ function ImagePicker({
           <p className="card-note">
             Filed as <span className="mono">{row.filename || 'no filename'}</span>
             {row.bucket === 'ambiguous' &&
-              ' — more than one upload matches this name, so pick the right one.'}
+              '. More than one upload matches this name, so pick the right one.'}
           </p>
         </div>
 
@@ -865,7 +872,7 @@ function ImagePicker({
             <>
               <div className="picker-group">
                 {conflicting.length} uploads normalise to this row&rsquo;s filename. Pick the one
-                that belongs to it — and remove the other with its × so it stops matching.
+                that belongs to it, and remove the other with its × so it stops matching.
               </div>
               <ImageChoices
                 names={conflicting}

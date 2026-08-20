@@ -7,7 +7,7 @@ export function readByFallback(record: Pick<RecordRow, 'reader_provider'>, confi
   return record.reader_provider === 'ocr'
 }
 
-export const FALLBACK_TITLE = 'Read by local OCR — accuracy may be lower'
+export const FALLBACK_TITLE = 'Read by local OCR: accuracy may be lower'
 
 export const FALLBACK_BODY =
   'The vision reader was unavailable, so the label was read by local OCR. ' +

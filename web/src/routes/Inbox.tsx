@@ -8,6 +8,7 @@ import { DOT_COLOR, kindOf } from '../lib/verdict'
 import { FIELD_LABEL, QUALITY_LABEL, fieldValues } from '../lib/copy'
 import { matchesQuery } from '../lib/search'
 import { BulkDecisionDialog } from '../components/BulkDecisionDialog'
+import { useEscape } from '../lib/dialog'
 import { useToast } from '../lib/toast'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 import { REVIEWER } from '../lib/session'
@@ -47,6 +48,11 @@ export function Inbox() {
   >(null)
   const client = useQueryClient()
   const toast = useToast()
+  useEscape(() => {
+    setExporting(false)
+    setVerifyingAll(false)
+    setConfirming(null)
+  })
 
   const health = useQuery({
     queryKey: ['health'],
@@ -73,6 +79,7 @@ export function Inbox() {
         toast({ kind: 'warn', title: FALLBACK_TITLE, body: FALLBACK_BODY })
       }
     },
+    onError: (e) => toast({ kind: 'error', title: 'Verification failed', body: String(e) }),
     onSettled: () => {
       setBusy(null)
       invalidate()
@@ -96,6 +103,7 @@ export function Inbox() {
         })
       }
     },
+    onError: (e) => toast({ kind: 'error', title: 'Verification failed', body: String(e) }),
   })
 
   const bulkVerify = useMutation({
@@ -104,13 +112,14 @@ export function Inbox() {
       clearSelection()
       invalidate()
       toast({
-        kind: 'info',
+        kind: job.completed < job.total ? 'warn' : 'success',
         title: `Verified ${job.completed} of ${job.total}`,
         body: Object.entries(job.verdicts)
           .map(([k, v]) => `${v} ${k}`)
           .join(' · '),
       })
     },
+    onError: (e) => toast({ kind: 'error', title: 'Verification failed', body: String(e) }),
   })
 
   const bulkDecide = useMutation({
@@ -150,11 +159,13 @@ export function Inbox() {
       clearSelection()
       invalidate()
       toast({
-        kind: skipped > 0 ? 'warn' : 'info',
+        kind: skipped > 0 ? 'warn' : 'success',
         title: `${applied} ${decision === 'accepted' ? 'accepted' : 'returned'}`,
-        body: skipped > 0 ? `${skipped} skipped — already closed, or rejected by the store.` : undefined,
+        body: skipped > 0 ? `${skipped} skipped: already closed, or rejected by the store.` : undefined,
       })
     },
+    onError: (e) =>
+      toast({ kind: 'error', title: 'Nothing was recorded', body: String(e) }),
   })
 
   const counts = all.data?.counts
@@ -433,8 +444,10 @@ export function Inbox() {
           >
             <div className="dialog-head">
               <h2 id="export-title">Export the review inbox</h2>
+            </div>
+            <div className="dialog-body">
               <p className="card-note">
-                Downloads every application in the store as it stands right now — all {total},
+                Downloads every application in the store as it stands right now: all {total},
                 not only the {rows.length} this filter is showing. Each row carries the
                 application as filed, the result, any fields that did not match, and the
                 decision.
@@ -495,6 +508,7 @@ function QueueItem({
 }) {
   const kind = kindOf(record.result)
   const [zoomed, setZoomed] = useState(false)
+  useEscape(() => setZoomed(false))
   const detail = useQuery({
     queryKey: ['record', record.id],
     queryFn: () => api<RecordDetail>(`/records/${record.id}`),
@@ -632,10 +646,10 @@ function QueueItem({
           className="dialog-backdrop"
           role="dialog"
           aria-label={`Label image for ${record.app_brand}`}
+          aria-modal="true"
           tabIndex={-1}
           autoFocus
           onClick={() => setZoomed(false)}
-          onKeyDown={(e) => e.key === 'Escape' && setZoomed(false)}
         >
           <figure className="lightbox">
             <img

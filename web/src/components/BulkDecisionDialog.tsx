@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import type { RecordDetail, RecordRow } from '../api/client'
 import { FIELD_LABEL } from '../lib/copy'
 import { REVIEWER } from '../lib/session'
+import { useEscape } from '../lib/dialog'
 import { Pill } from './Pill'
 
 /**
@@ -30,6 +31,7 @@ export function BulkDecisionDialog({
   pending: boolean
 }) {
   const [reason, setReason] = useState('')
+  useEscape(onCancel)
   const overrides = records.filter((r) => r.result !== 'match')
   const needsOverrideDetail = decision === 'accepted' && overrides.length > 0
 
@@ -70,7 +72,7 @@ export function BulkDecisionDialog({
                   !
                 </div>
                 <div className="banner-text">
-                  A returned record is not reopenable — the applicant files afresh.
+                  A returned record is not reopenable. The applicant files afresh.
                 </div>
               </div>
               <label className="field">
