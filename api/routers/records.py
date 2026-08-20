@@ -199,16 +199,32 @@ def _cache_key(path: Path) -> str | None:
     return None
 
 
-def cached_reading(specimen: str) -> tuple[LabelReading, str, str] | None:
-    """The reading already on file for this specimen, without asking a reader.
+def reading_on_file(row: sqlite3.Row) -> tuple[LabelReading, str, str] | None:
+    """The reading behind this record's verdict, without asking a reader.
 
     Correcting the application is a rules question, not a reading one: the label
-    has not changed, so re-adjudicating must never spend a call on it. Returns
-    None when nothing has read this image at these settings - a fallback OCR
-    reading is deliberately never cached (PRD §5.2), so a record read that way
-    stays unverified until a reviewer asks for it again.
+    has not changed, so re-adjudicating must never spend a call on it.
+
+    The record's own `reading_json` is the answer wherever there is one, because
+    it is the reading that produced the verdict being corrected. The extraction
+    cache is the fallback for records verified before that column existed. The
+    cache alone was not enough: it is keyed on provider, model, effort and
+    prompt version - right for a new verification, wrong here, since changing
+    any of them would strand every existing record - and it deliberately never
+    holds a fallback OCR reading (PRD §5.2), nor anything at all in a store
+    restored from CSV.
+
+    Returns None only when nothing has ever read this label, which is the one
+    case where a correction genuinely leaves the record awaiting verification.
     """
-    key = _cache_key(_specimen_path(specimen))
+    stored = row["reading_json"]
+    if stored:
+        return (
+            LabelReading.model_validate_json(stored),
+            row["engine"] or "deterministic rules engine",
+            row["reader_provider"] or "ocr",
+        )
+    key = _cache_key(_specimen_path(row["specimen"] or row["filename"]))
     if key is None:
         return None
     cached = db.extraction_cache_get(key)
@@ -423,7 +439,7 @@ def patch_record(record_id: str, body: RecordPatchRequest) -> Record:
         # against the corrected application straight away, so a reviewer fixing
         # a transcription error gets the corrected determination without the
         # reader being asked to read an unchanged image again.
-        on_file = cached_reading(row["specimen"] or row["filename"])
+        on_file = reading_on_file(row)
         if on_file is not None:
             reading, engine, reader_used = on_file
             started = time.perf_counter_ns()
@@ -521,6 +537,9 @@ def verify_record(record_id: str) -> Record:
         # Only a vision reading comes from a prompt, and it is the reader that
         # actually ran that fixes the version.
         prompt_version=PROMPT_VERSION if reader_used == "openai" else None,
+        # Kept on the record so correcting the application never has to ask a
+        # reader to read an unchanged image again (migrations/005).
+        reading_json=reading.model_dump_json(),
     )
     db.append_audit(
         record_id,

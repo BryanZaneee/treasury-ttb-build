@@ -1,0 +1,15 @@
+-- The reading that produced the record's current verdict, kept on the record.
+--
+-- Correcting the application re-adjudicates against the label already read
+-- (PRD §5.1: editing invalidates the verdict, not the reading). That lookup
+-- went through the extraction cache, which is keyed on provider, model, effort
+-- and prompt version so that a configuration change cannot serve a stale
+-- reading to a *new* verification - correct there, wrong here. It also misses
+-- for a fallback OCR reading, which is deliberately never cached, and for any
+-- store restored from CSV, which carries no cache at all. In every one of those
+-- cases a reviewer fixing a typo watched the record fall back to "awaiting AI
+-- verification" and had to spend another reader call on an unchanged image.
+--
+-- DB-only, like the other reader_* columns: it is not a CSV column (PRD §4.2)
+-- and is not exported.
+ALTER TABLE records ADD COLUMN reading_json TEXT;

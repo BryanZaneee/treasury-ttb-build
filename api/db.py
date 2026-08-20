@@ -32,6 +32,9 @@ RECORD_COLUMNS = [
     "decided_at", "note",
     "override", "supersedes_id", "reader_provider", "reader_model",
     "prompt_version", "prep_ms", "reader_ms", "rules_ms",
+    # The reading behind the current verdict, so correcting the application can
+    # be adjudicated against the label already read (migrations/005).
+    "reading_json",
 ]
 
 FIELD_RESULT_COLUMNS = [

@@ -1403,3 +1403,63 @@ def test_counts_only_skips_the_rows() -> None:
     assert body["records"] == []
     assert body["counts"]["total"] >= 1
     assert body["counts"]["total"] == len(client.get("/api/records", headers=ACCESS).json()["records"])
+
+
+def test_a_correction_survives_an_empty_extraction_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The reading of record lives on the record, not only in the cache.
+
+    The cache is keyed on provider, model, effort and prompt version, and it
+    deliberately never holds a fallback OCR reading (PRD §5.2). Every one of
+    those misses used to drop a corrected record back to "awaiting AI
+    verification" and charge the reviewer another reader call for a label
+    nobody had changed.
+    """
+    record_id = _seed_and_get("old-tom-pass.jpg")
+    client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
+    assert client.get(f"/api/records/{record_id}").json()["result"] == "match"
+
+    # Whatever the cache held, it is gone: a config change, an OCR fallback, or
+    # a store restored from CSV all look like this.
+    with db.transaction() as conn:
+        conn.execute("DELETE FROM extraction_cache")
+
+    def no_reading(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("a correction must not call a reader")
+
+    monkeypatch.setattr(records, "read_specimen", no_reading)
+
+    body = client.patch(
+        f"/api/records/{record_id}",
+        headers=ACCESS,
+        json={
+            "application": {
+                "brand": "Old Tom Distillery",
+                "class_type": "Kentucky Straight Bourbon Whiskey",
+                "abv": "40%",
+                "net": "750 mL",
+                "producer": "Old Tom Distillery, Bardstown, KY",
+                "warning": True,
+            }
+        },
+    ).json()
+
+    assert body["verified"] is True, "the correction stayed adjudicated"
+    assert body["result"] == "fail", "and caught the ABV the correction introduced"
+
+
+def test_the_reading_behind_a_verdict_is_kept_on_the_record() -> None:
+    """It is what a correction is adjudicated against, so it has to outlive the
+    cache entry that produced it."""
+    record_id = _seed_and_get("old-tom-pass.jpg")
+    client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
+
+    row = db.get_record(record_id)
+    assert row is not None
+    reading = json.loads(row["reading_json"])
+    assert reading["brand"]["value"] == "Old Tom Distillery"
+    assert reading["warning"]["present"] is True
+    # The composite the field results cannot carry: a header-case defect has to
+    # survive a correction, or re-adjudicating would quietly upgrade it.
+    assert "header_case" in reading["warning"]
