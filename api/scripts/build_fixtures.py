@@ -1,27 +1,19 @@
 """Generate api/fixtures/expectations.json and api/fixtures/applications.csv
-from design_handoff_label_verification/fixtures-manifest.csv and
-label-image-generation-prompt.md.
+from design_handoff_label_verification/fixtures-manifest.csv.
 
-Ground truth for each row is hand-derived by applying PRD §3.2's match/review/
-fail rules to fixtures-manifest.csv's `intended_defect` column, cross-checked
-against label-image-generation-prompt.md (the actual generation instructions)
-and PRD §11's acceptance-test examples where one names a specific fixture.
+Ground truth per row is hand-derived by applying PRD §3.2's match/review/fail
+rules to the manifest's `intended_defect` column.
 
-One correction from the source documents: fixtures-manifest.csv and the PRD
-§13 appendix both label row 6 (vinos-del-sol-abv.jpg) "none - clean reference",
-but label-image-generation-prompt.md's row 6 states the intended defect as
-"ABV differs from filing (12.5 vs 13.5)", the filename itself encodes an "abv"
-defect (every other "-pass" suffixed fixture is the clean one in its group),
-and PRD acceptance test 6 says verbatim "12.5% on label vs 13.5% filed ->
-fail". Direct inspection of tests/labels/vinos-del-sol-abv.jpg confirms the
-label prints 12.5% Alc./Vol. cleanly (nothing else on it is defective) - so
-this is an application-vs-label content mismatch, not a manifest typo. Row 6
-is treated here as the ABV-mismatch fixture, matching two of three sources
-plus the direct image read; the "clean reference" label is the outlier.
+Row 6 (vinos-del-sol-abv.jpg) deliberately contradicts its sources. The manifest
+and the PRD §13 appendix both call it "none - clean reference", but the filename
+encodes an "abv" defect (every other clean fixture is suffixed "-pass"), PRD
+acceptance test 6 says verbatim "12.5% on label vs 13.5% filed -> fail", and the
+image prints 12.5% Alc./Vol. cleanly with nothing else wrong. So it is an
+application-vs-label content mismatch, not a manifest typo, and is treated here
+as the ABV-mismatch fixture.
 
-Run once, by hand, when fixtures change: `uv run python scripts/build_fixtures.py`
-Output is committed - this script documents provenance, it isn't invoked
-by the running app.
+Run by hand when fixtures change: `uv run python scripts/build_fixtures.py`.
+Output is committed; the running app never invokes this.
 """
 
 from __future__ import annotations

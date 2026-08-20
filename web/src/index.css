@@ -1,6 +1,5 @@
-/* Design tokens and component styles transcribed from the approved prototype
-   `Label Verification.dc.html`, whose colours, type and copy are normative
-   (PRD §6.2). Values here are the prototype's, not approximations. */
+/* Design tokens transcribed verbatim from PRD §6.2 — the prototype's values,
+   not approximations. */
 
 :root {
   /* surfaces */
