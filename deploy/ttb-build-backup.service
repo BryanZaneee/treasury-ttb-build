@@ -1,0 +1,25 @@
+# Nightly off-box backup of the record store (PRD §8). Driven by the timer
+# beside it, not enabled on its own.
+#
+# Install:  cp deploy/ttb-build-backup.{service,timer} /etc/systemd/system/
+#           systemctl daemon-reload && systemctl enable --now ttb-build-backup.timer
+#
+# BACKUP_DEST and BACKUP_RECIPIENT belong in /var/www/ttb-build/.env alongside
+# the app's own settings. The script refuses to run without them rather than
+# writing an unencrypted copy or leaving it on the same disk.
+
+[Unit]
+Description=Off-box backup of the TTB label store
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/var/www/ttb-build/.env
+ExecStart=/var/www/ttb-build/deploy/backup.sh
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/backups/ttb-build

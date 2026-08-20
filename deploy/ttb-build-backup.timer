@@ -1,0 +1,16 @@
+# Nightly backup (PRD §8). Install alongside ttb-build.service:
+#   cp deploy/ttb-build-backup.{service,timer} /etc/systemd/system/
+#   systemctl enable --now ttb-build-backup.timer
+[Unit]
+Description=Nightly off-box backup of the TTB label store
+
+[Timer]
+# 03:20 UTC, after the daily vision call cap resets and well clear of the
+# working day. Randomised so several hosts do not hit the backup target at once.
+OnCalendar=*-*-* 03:20:00 UTC
+RandomizedDelaySec=600
+# A box that was off overnight still gets its backup rather than skipping a day.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

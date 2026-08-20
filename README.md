@@ -258,3 +258,9 @@ The service runs on a VPS behind Caddy, served under a `/ttb-build` subpath.
 rolls back to the previous commit if the health endpoint does not come up. `PUBLIC_BASE_PATH` is
 defined once in the root `.env` and threads from there into the Vite `base`, the Router
 `basename` and the front-host proxy path, so the subpath is never written down twice.
+
+`deploy/backup.sh` takes a nightly encrypted copy of the store off the box, driven by
+`ttb-build-backup.timer`, and prunes both ends to 30 days. Operating the service — health
+checks, deploys, restores, and what to do when the reader misbehaves — is
+[`docs/runbook.md`](docs/runbook.md). Reader accuracy and latency figures are in
+[`docs/benchmark.md`](docs/benchmark.md).
