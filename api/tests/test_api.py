@@ -1,5 +1,6 @@
 """Contract and behaviour tests for the documented API surface (PRD §5.1)."""
 
+import json
 import sqlite3
 import time
 from typing import Any
@@ -950,3 +951,54 @@ def test_filing_with_verify_now_adjudicates_without_a_second_request() -> None:
         time.sleep(0.05)
     assert body["verified"] is True
     assert body["result"] == "match"
+
+
+def test_filing_without_verify_now_calls_no_reader() -> None:
+    """Deviation from PRD §5.2, deliberate: extraction costs money, so nothing
+    is read until a reviewer asks for it."""
+    seed.copy_fixture_images()
+    record_id = _create_record()
+    time.sleep(0.5)  # generous: a background read would have landed by now
+
+    body = client.get(f"/api/records/{record_id}").json()
+    assert body["verified"] is False
+    assert body["result"] is None
+
+    conn = sqlite3.connect(db.db_path())
+    cached = conn.execute("SELECT COUNT(*) FROM extraction_cache").fetchone()[0]
+    conn.close()
+    assert cached == 0, "filing alone must not populate the extraction cache"
+
+
+def test_overriding_a_failure_must_be_attributed() -> None:
+    """The audit row is the whole point of an override, so it needs a name."""
+    record_id = _seed_and_get("harbor-mist-nowarning.jpg")
+    client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
+
+    anonymous = client.patch(
+        f"/api/records/{record_id}",
+        headers=ACCESS,
+        json={"decision": "accepted", "override": True},
+    )
+    assert anonymous.status_code == 422
+    assert anonymous.json()["detail"]["error"] == "reviewer_name_required"
+    assert client.get(f"/api/records/{record_id}").json()["decision"] is None
+
+    named = client.patch(
+        f"/api/records/{record_id}",
+        headers=ACCESS,
+        json={"decision": "accepted", "override": True, "reviewer_name": "R. Mills"},
+    )
+    assert named.status_code == 200, "a named reviewer may still accept a failed record"
+    assert named.json()["decision"] == "accepted"
+    assert named.json()["result"] == "fail", "the verdict of record is not rewritten"
+
+    conn = sqlite3.connect(db.db_path())
+    payload = conn.execute(
+        "SELECT payload_json FROM audit WHERE record_id = ? AND event = 'decision'", (record_id,)
+    ).fetchone()[0]
+    conn.close()
+    entry = json.loads(payload)
+    assert entry["override"] is True
+    assert entry["decided_by"] == "R. Mills"
+    assert entry["result"] == "fail"

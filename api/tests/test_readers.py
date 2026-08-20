@@ -91,3 +91,19 @@ def test_daily_call_cap_stops_paid_requests_and_does_not_retry() -> None:
     vision._charge_one_call(0)
     assert reader.daily_call_cap == 2
     vision._calls.clear()
+
+
+def test_a_reader_cannot_express_a_verdict() -> None:
+    """PRD §3.2 holds by construction, not by a runtime check.
+
+    The reader reports what is printed; the rules engine decides. If a verdict
+    field ever appears in the reading or the schema, that guarantee is gone and
+    every reading has to go through adjudicate.guard() instead.
+    """
+    from readers.prompts import SCHEMA
+
+    assert "verdict" not in str(SCHEMA).lower(), "the reader schema must not expose a verdict"
+    assert SCHEMA.get("additionalProperties") is False, "an open schema lets a verdict back in"
+
+    verdict_fields = [f for f in LabelReading.model_fields if "verdict" in f.lower()]
+    assert verdict_fields == [], f"LabelReading gained a verdict field: {verdict_fields}"

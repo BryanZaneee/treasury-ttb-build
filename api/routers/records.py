@@ -133,27 +133,19 @@ def create_record(
         "result": None,
     }
     db.insert_record(record)
-    # PRD §5.2: extraction begins on upload, not on Verify. By the time the
-    # reviewer presses Verify the reading is cached and adjudication is a
-    # rules-engine call, which is what makes the §8 latency target reachable.
+    # Deviation from PRD §5.2, deliberate: nothing calls a reader on upload.
+    # Extraction only happens when a reviewer asks for it, so a filing that is
+    # never verified never costs a paid call.
     #
-    # verify_now goes further and adjudicates here too. Filing and verifying
-    # used to be two round trips from the browser, so a reviewer who moved on
-    # after the first left a record that would never be verified by anyone.
-    # Once this request lands the determination happens whatever the client
-    # does next.
+    # verify_now IS that ask - the single-label page's button reads "Submit for
+    # verification". Running it here rather than as a second request from the
+    # browser is what stops a reviewer who moves on from leaving a record that
+    # nobody would ever verify.
     if verify_now:
         db.run_in_background(_verify_on_arrival, record_id)
-    else:
-        db.run_in_background(_warm_extraction, specimen)
     row = db.get_record(record_id)
     assert row is not None  # just inserted, must exist
     return _row_to_record(row)
-
-
-def _warm_extraction(specimen: str) -> None:
-    with suppress(Exception):
-        read_specimen(specimen, db.data_dir() / "images" / Path(specimen).name)
 
 
 def _verify_on_arrival(record_id: str) -> None:
@@ -292,7 +284,9 @@ def disagreeing_fields(record_id: str) -> list[str]:
     ]
 
 
-def enforce_override(record: sqlite3.Row, decision: str | None, override: bool) -> bool:
+def enforce_override(
+    record: sqlite3.Row, decision: str | None, override: bool, reviewer_name: str | None
+) -> bool:
     """PRD §5.1: accepting a non-`match` verdict requires an explicit override.
 
     Deliberately its own function with its own test - the PRD calls out that
@@ -311,6 +305,19 @@ def enforce_override(record: sqlite3.Row, decision: str | None, override: bool) 
                     "This record did not pass verification. Accepting it requires "
                     "an explicit override."
                 ),
+                "result": record["result"],
+                "fields": fields,
+            },
+        )
+    # An override is the one decision where the audit row is the whole point, so
+    # it may not be anonymous. PRD §8 accepts a free-text name because there is
+    # no identity system; it does not accept no name at all.
+    if not (reviewer_name or "").strip():
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "reviewer_name_required",
+                "message": "Overriding a failed verification has to be attributed to a reviewer.",
                 "result": record["result"],
                 "fields": fields,
             },
@@ -361,7 +368,7 @@ def patch_record(record_id: str, body: RecordPatchRequest) -> Record:
         db.append_audit(record_id, "edited", app.model_dump())
 
     elif body.decision is not None:
-        overridden = enforce_override(row, body.decision, body.override)
+        overridden = enforce_override(row, body.decision, body.override, body.reviewer_name)
         decided_at = datetime.now(UTC).isoformat()
         db.update_record(
             record_id,

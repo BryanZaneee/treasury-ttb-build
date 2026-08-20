@@ -163,8 +163,16 @@ def roll_up(verdicts: list[Verdict]) -> Verdict:
 def guard(rules_verdict: Verdict, reader_verdict: Verdict | None) -> tuple[Verdict, bool]:
     """The reader may downgrade a verdict, never improve one (PRD §3.2).
 
-    Returns the verdict of record and whether an improvement was rejected -
-    a rejected improvement is a governance event and is written to `audit`.
+    Returns the verdict of record and whether an improvement was rejected.
+
+    Deliberately unreachable from the pipeline, and that is the stronger
+    guarantee: no reader can express a verdict at all. `LabelReading` has no
+    verdict field and `prompts.SCHEMA` is closed with `additionalProperties`
+    false, so §3.2's rule holds by construction rather than by this check.
+    Kept, with its tests, as the executable statement of the rule - if a reader
+    ever gains a verdict, this is what it must be routed through, and the
+    rejection flag is the governance event §3.2 wants in `audit`.
+    See tests/test_readers.py::test_a_reader_cannot_express_a_verdict.
     """
     if reader_verdict is None:
         return rules_verdict, False
