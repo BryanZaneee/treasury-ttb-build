@@ -33,6 +33,9 @@ class JobCreateRequest(BaseModel):
     # the inbox, so the set is theirs to choose - the server does not re-derive
     # it from a filter that may have moved on since.
     record_ids: list[str] = []
+    # scope "batch": file only these staged rows. The reviewer selected them in
+    # the staged table; the rest stay staged for a later commit.
+    rows: list[int] = []
     verify_now: bool = True
 
 
@@ -63,15 +66,23 @@ def load_job(job_id: str) -> Job | None:
     return Job.model_validate_json(body) if body is not None else None
 
 
-def _commit_batch(job: Job, batch_id: str) -> list[str]:
-    """File every non-ambiguous staged row. Ambiguous rows block the whole
-    commit (PRD §5.5); missing-image rows file and are simply not verifiable."""
+def _commit_batch(job: Job, batch_id: str, only: list[int] | None = None) -> list[str]:
+    """File the staged rows. Ambiguous rows block the whole commit (PRD §5.5);
+    missing-image rows file and are simply not verifiable.
+
+    `only` files a subset - the reviewer accepted part of the staged table -
+    and the rows that were filed are then removed from the staged document, so
+    committing the remainder later cannot file them twice."""
     entry = batches.get_staged(batch_id)
     if entry is None:
         raise KeyError(f"unknown batch {batch_id!r}")
 
+    chosen = [r for r in entry.rows if only is None or r.row in set(only)]
+    if not chosen:
+        raise ValueError("no staged rows to file")
+
     # Block, don't skip: a caller bypassing the UI must not lose rows silently.
-    unresolved = batching.unresolved(entry.rows)
+    unresolved = batching.unresolved(chosen)
     if unresolved:
         raise ValueError(
             "resolve the ambiguous row(s) before committing: "
@@ -80,7 +91,7 @@ def _commit_batch(job: Job, batch_id: str) -> list[str]:
 
     record_ids = []
     received = datetime.now(UTC).isoformat()
-    for row in entry.rows:
+    for row in chosen:
         values = row.values
         record_id = db.next_record_id()
         db.insert_record(
@@ -109,6 +120,11 @@ def _commit_batch(job: Job, batch_id: str) -> list[str]:
         # A row with no image files, but there is nothing to verify against.
         if row.image:
             record_ids.append(record_id)
+
+    if only is not None:
+        filed = {r.row for r in chosen}
+        entry.rows = [r for r in entry.rows if r.row not in filed]
+        batches.put_staged(batch_id, entry)
     return record_ids
 
 
@@ -150,7 +166,7 @@ def _run(job: Job, body: JobCreateRequest) -> None:
         if body.scope == "batch":
             if not body.batch_id:
                 raise ValueError("batch_id is required for scope 'batch'")
-            record_ids = _commit_batch(job, body.batch_id)
+            record_ids = _commit_batch(job, body.batch_id, body.rows or None)
         elif body.scope == "ids":
             if not body.record_ids:
                 raise ValueError("record_ids is required for scope 'ids'")

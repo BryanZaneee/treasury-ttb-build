@@ -151,6 +151,13 @@ def _require(batch_id: str) -> Staged:
     return staged
 
 
+@router.get("/batches/{batch_id}", response_model=StagedBatch)
+def read_batch(batch_id: str) -> StagedBatch:
+    """Re-read a staged batch. A partial commit files some rows and leaves the
+    rest, so the table needs a way to ask what is still staged."""
+    return to_response(batch_id, _require(batch_id))
+
+
 class AssignRequest(BaseModel):
     image: str | None = None
 
@@ -197,6 +204,19 @@ def discard_image(batch_id: str, name: str) -> StagedBatch:
         batching.discard(staged.rows, staged.images, uploads.safe_basename(name))
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc).strip("\"'")) from exc
+    return to_response(batch_id, put_staged(batch_id, staged))
+
+
+@router.delete("/batches/{batch_id}/rows/{row_no}", response_model=StagedBatch)
+def drop_row(batch_id: str, row_no: int) -> StagedBatch:
+    """Drop a staged row before it is filed. A reviewer looking at a row they
+    are not going to file - a duplicate, a withdrawn application, one with no
+    specimen - should not have to re-upload the CSV without it."""
+    staged = _require(batch_id)
+    remaining = [r for r in staged.rows if r.row != row_no]
+    if len(remaining) == len(staged.rows):
+        raise HTTPException(status_code=404, detail=f"no row {row_no} in this batch")
+    staged.rows = remaining
     return to_response(batch_id, put_staged(batch_id, staged))
 
 

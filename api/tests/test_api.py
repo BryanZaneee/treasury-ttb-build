@@ -1123,3 +1123,68 @@ def test_discarding_an_unwanted_image_removes_it_from_the_batch() -> None:
 
     gone = client.delete(f"/api/batches/{staged['batch_id']}/images/stray.png", headers=ACCESS)
     assert gone.status_code == 404
+
+
+TWO_ROW_CSV = (
+    b"filename,brand_name,class_type,alcohol_content,net_contents,applicant\n"
+    b"old-tom.png,Old Tom,Bourbon,45%,750 mL,Acme\n"
+    b"harbor.png,Harbor Mist,Lager,5%,355 mL,Harbor\n"
+)
+
+
+def _two_row_batch() -> dict[str, Any]:
+    body: dict[str, Any] = client.post(
+        "/api/batches/stage",
+        headers=ACCESS,
+        files=[
+            ("applications_csv", ("apps.csv", TWO_ROW_CSV, "text/csv")),
+            ("images", ("old-tom.png", _png(), "image/png")),
+            ("images", ("harbor.png", _png("red"), "image/png")),
+        ],
+    ).json()
+    return body
+
+
+def test_dropping_a_staged_row_removes_it_before_anything_is_filed() -> None:
+    staged = _two_row_batch()
+    resp = client.delete(f"/api/batches/{staged['batch_id']}/rows/1", headers=ACCESS)
+    assert resp.status_code == 200
+    assert [r["row"] for r in resp.json()["rows"]] == [2]
+    # Its image is nobody's now, so another row can still claim it.
+    assert resp.json()["summary"]["unused_images"] == ["old-tom.png"]
+
+    gone = client.delete(f"/api/batches/{staged['batch_id']}/rows/1", headers=ACCESS)
+    assert gone.status_code == 404
+
+
+def test_committing_a_selection_files_only_those_rows_and_leaves_the_rest() -> None:
+    staged = _two_row_batch()
+    resp = client.post(
+        "/api/jobs",
+        headers=ACCESS,
+        json={
+            "scope": "batch",
+            "batch_id": staged["batch_id"],
+            "rows": [2],
+            "verify_now": False,
+        },
+    )
+    job = _await_job(resp.json()["id"])
+    assert job["state"] == "done"
+    assert job["committed"] == 1
+    filed = client.get("/api/records", headers=ACCESS).json()["records"]
+    assert [r["app_brand"] for r in filed] == ["Harbor Mist"]
+
+    # Row 1 is still staged; filing the whole batch now does not re-file row 2.
+    again = client.post(
+        "/api/jobs",
+        headers=ACCESS,
+        json={
+            "scope": "batch",
+            "batch_id": staged["batch_id"],
+            "rows": [1, 2],
+            "verify_now": False,
+        },
+    )
+    assert _await_job(again.json()["id"])["committed"] == 1
+    assert len(client.get("/api/records", headers=ACCESS).json()["records"]) == 2

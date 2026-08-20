@@ -26,7 +26,7 @@ _ACCESS_ROUTES = [
     ("PATCH", "/api/records/"),
     ("POST", "/api/records/"),  # covers /api/records/{id}/verify
     ("POST", "/api/batches/"),  # stage, per-row assign, per-row upload
-    ("DELETE", "/api/batches/"),
+    ("DELETE", "/api/batches/"),  # discard an image, drop a staged row
     ("POST", "/api/jobs"),
     ("POST", "/api/fixtures"),
 ]
