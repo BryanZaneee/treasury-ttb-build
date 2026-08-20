@@ -1,10 +1,19 @@
 """csv_io round-trip and formula-injection prefixing (PRD §4.3)."""
 
+import csv
+import io
 from typing import Any
 
 import pytest
 
-from csv_io import MIRROR_COLUMNS, CsvImportError, from_csv, to_csv
+from csv_io import (
+    MIRROR_COLUMNS,
+    REVIEW_COLUMNS,
+    CsvImportError,
+    from_csv,
+    to_csv,
+    to_review_csv,
+)
 
 
 def _row(**overrides: str) -> dict[str, Any]:
@@ -74,3 +83,34 @@ def test_a_batch_intake_csv_is_named_as_such_not_as_a_missing_column() -> None:
     data = (",".join(batching.INTAKE_COLUMNS) + "\na.png,Old Tom,Gin,40% ALC/VOL,750 ML,,,,\n")
     with pytest.raises(CsvImportError, match="batch-intake CSV"):
         from_csv(data.encode())
+
+
+def test_the_review_export_names_the_fields_that_did_not_match() -> None:
+    """What a reviewer takes away says which fields disagreed, in words - not a
+    packed `abv:fail` cell they have to decode."""
+    rows = [
+        _row(id="rec-1", field_results="brand:match|abv:fail|warning:review"),
+        _row(id="rec-2", field_results="brand:match|abv:match"),
+    ]
+    lines = to_review_csv(rows).decode().splitlines()
+
+    assert lines[0] == ",".join(REVIEW_COLUMNS)
+    assert "elapsed_ms" not in lines[0] and "field_results" not in lines[0]
+    assert "engine" not in lines[0]
+    # The intake header names, so the file can be re-uploaded as a batch.
+    assert "brand_name" in lines[0] and "country_of_origin" in lines[0]
+
+    assert '"Alcohol content, Government warning"' in lines[1]
+    assert lines[2].endswith(",,,,,,")  # rec-2 matched: no issues, no decision
+
+
+def test_the_review_export_carries_the_application_as_filed() -> None:
+    row = _row(app_producer="Acme, Bardstown, KY", app_origin="France", note="Refile")
+    parsed = list(csv.DictReader(io.StringIO(to_review_csv([row]).decode())))
+    values = parsed[0]
+    assert values["brand_name"] == "Old Tom"
+    assert values["net_contents"] == "750 mL"
+    assert values["country_of_origin"] == "France"
+    assert values["producer"] == "Acme, Bardstown, KY"
+    # `note` is the return reason; the column says so.
+    assert values["reason"] == "Refile"

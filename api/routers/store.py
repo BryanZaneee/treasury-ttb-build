@@ -18,11 +18,11 @@ router = APIRouter(tags=["store"])
 
 
 class FixturesRequest(BaseModel):
-    mode: Literal["stage", "reset"]
+    mode: Literal["stage", "reset", "empty"]
 
 
 class FixturesResponse(BaseModel):
-    mode: Literal["stage", "reset"]
+    mode: Literal["stage", "reset", "empty"]
     staged_count: int = 0
     reset_count: int = 0
     batch: StagedBatch | None = None
@@ -40,16 +40,30 @@ def _require_admin(authorization: str | None) -> None:
         raise HTTPException(status_code=401, detail="admin token required")
 
 
+# Generated here rather than read back off disk: the mirror file is written by
+# a debounced background timer, so reading it races that writer. (The mirror on
+# disk is a backup artifact and is not web-exposed - the front proxy only serves
+# the built SPA and proxies /api.)
 @router.get("/export/records.csv")
 def export_records_csv() -> Response:
-    """The CSV mirror (PRD §4.2). Caddy serves this straight off the data volume
-    in production; locally there is no Caddy, so the API stands in."""
-    # Generated here rather than read back off disk: the mirror file is written
-    # by a debounced background timer, so reading it races that writer.
+    """What a reviewer takes away: the applications, the results and who decided
+    what. See csv_io.REVIEW_COLUMNS for why this is not the mirror."""
+    return Response(
+        content=csv_io.to_review_csv(db.mirror_rows()),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="records.csv"'},
+    )
+
+
+@router.get("/export/backup.csv")
+def export_backup_csv() -> Response:
+    """The full mirror (PRD §4.2), which is what `POST /store/import` reads back.
+    Kept as its own download so the review export can drop columns without
+    breaking the restore path (S11)."""
     return Response(
         content=csv_io.to_csv(db.mirror_rows()),
         media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="records.csv"'},
+        headers={"Content-Disposition": 'attachment; filename="records-backup.csv"'},
     )
 
 
@@ -69,6 +83,10 @@ def export_template_csv() -> Response:
 def fixtures(
     body: FixturesRequest, authorization: str | None = Header(None)
 ) -> FixturesResponse:
+    if body.mode == "empty":
+        _require_admin(authorization)
+        seed.empty_store()
+        return FixturesResponse(mode="empty")
     if body.mode == "reset":
         # ADMIN_TOKEN is checked here, not in TokenMiddleware, because the
         # requirement depends on the request body (PRD §5.1/§8) - "stage"
@@ -131,6 +149,7 @@ def import_store(
                 "elapsed_ms": _as_int(row.get("elapsed_ms")),
                 "engine": row.get("engine"),
                 "decision": row.get("decision"),
+                "override": csv_io.parse_bool(row.get("override")),
                 "decided_by": row.get("decided_by"),
                 "decided_at": row.get("decided_at"),
                 "note": row.get("note"),

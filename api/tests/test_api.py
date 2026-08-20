@@ -111,10 +111,29 @@ def test_verify_record_not_found() -> None:
 
 
 def _seed_and_get(filename: str) -> str:
-    """Seed the fixture store and return the record id for one specimen."""
+    """Seed the example store and return one specimen's record, reopened.
+
+    The example set ships some records already verified or decided, which is the
+    point of it - but a test that starts from one wants the state it would have
+    had on arrival, not the state the demo store dresses it in.
+    """
     seed.seed_store()
     rows = client.get("/api/records").json()["records"]
-    return str(next(r["id"] for r in rows if r["filename"] == filename))
+    record_id = str(next(r["id"] for r in rows if r["filename"] == filename))
+    db.clear_field_results(record_id)
+    db.update_record(
+        record_id,
+        verified=False,
+        result=None,
+        quality=None,
+        engine=None,
+        decision=None,
+        override=False,
+        decided_by=None,
+        decided_at=None,
+        note=None,
+    )
+    return record_id
 
 
 def test_verify_unknown_specimen_is_rejected() -> None:
@@ -131,7 +150,7 @@ def test_verify_clean_fixture_matches() -> None:
     assert body["result"] == "match"
     assert body["verified"] is True
     assert body["quality"] == "normal"
-    assert body["engine"] == "deterministic rules engine (fake reader)"
+    assert body["engine"] == "rules check (fake reader)"
     assert body["elapsed_ms"] is not None
 
     detail = client.get(f"/api/records/{record_id}").json()
@@ -388,7 +407,9 @@ def test_store_import() -> None:
 
 
 def _export() -> bytes:
-    resp = client.get("/api/export/records.csv")
+    """The full mirror, which is the half of the export that round-trips. The
+    reviewer-facing /export/records.csv drops columns on purpose."""
+    resp = client.get("/api/export/backup.csv")
     assert resp.status_code == 200
     return resp.content
 
@@ -419,7 +440,7 @@ def test_export_import_export_is_byte_identical() -> None:
     assert b"brand:match" in before, "the export carries packed field results"
 
     summary = _import(before, mode="replace")
-    assert summary["imported"] == 25
+    assert summary["imported"] == 13
     assert summary["skipped"] == 0
 
     assert _export() == before
@@ -476,7 +497,41 @@ def test_importing_the_same_file_twice_is_idempotent() -> None:
     first = _import(exported)
     second = _import(exported)
     assert first == second
-    assert len(client.get("/api/records").json()["records"]) == 25
+    assert len(client.get("/api/records").json()["records"]) == 13
+
+
+def test_a_decision_and_its_override_survive_the_exports() -> None:
+    """S8/S9/S11: the override flag is the evidence that a failed record was
+    waived deliberately, and the return reason is what the applicant was told.
+    An export that drops either one destroys the only record of it."""
+    failed = _seed_and_get("harbor-mist-nowarning.jpg")
+    client.post(f"/api/records/{failed}/verify", headers=ACCESS)
+    accepted = client.patch(
+        f"/api/records/{failed}",
+        headers=ACCESS,
+        json={"decision": "accepted", "override": True, "reviewer_name": "R. Mills"},
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    returned_id = _seed_and_get("vinos-del-sol-abv.jpg")
+    client.post(f"/api/records/{returned_id}/verify", headers=ACCESS)
+    client.patch(
+        f"/api/records/{returned_id}",
+        headers=ACCESS,
+        json={"decision": "returned", "reviewer_name": "R. Mills", "reason": "ABV differs"},
+    )
+
+    review = client.get("/api/export/records.csv").content.decode()
+    assert "ABV differs" in review, "the reason a record was returned"
+    assert "Government warning" in review, "the fields that disagreed, in words"
+
+    backup = _export().decode()
+    assert "ABV differs" in backup
+    # Round-trips: the flag comes back, rather than reading as a clean accept.
+    _import(backup.encode(), mode="replace")
+    restored = client.get(f"/api/records/{failed}").json()
+    assert restored["override"] is True
+    assert restored["decision"] == "accepted"
 
 
 def test_import_reports_rows_it_could_not_take() -> None:
@@ -509,7 +564,35 @@ def test_fixtures_reset() -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["mode"] == "reset"
-    assert body["reset_count"] == 25
+    assert body["reset_count"] == 13
+
+
+def test_the_example_set_covers_every_state_a_reviewer_meets() -> None:
+    """S12: the store someone is trained on has to show more than one state."""
+    client.post("/api/fixtures", headers=ADMIN, json={"mode": "reset"})
+    rows = client.get("/api/records").json()["records"]
+    assert len(rows) == 13
+    assert len([r for r in rows if not r["verified"]]) == 3, "some await verification"
+    assert {r["result"] for r in rows if r["verified"]} == {"match", "review", "fail"}
+    assert [r["decision"] for r in rows].count("accepted") == 2
+    assert [r["decision"] for r in rows].count("returned") == 1
+    returned = next(r for r in rows if r["decision"] == "returned")
+    assert returned["decided_by"] and returned["decided_at"]
+    # One of the accepted ones was a fail, so it carries the override flag.
+    assert any(r["override"] for r in rows), "an override is there to be seen"
+
+    counts = client.get("/api/records").json()["counts"]
+    assert counts["pending"] == 3 and counts["closed"] == 3
+
+
+def test_fixtures_empty_clears_the_store() -> None:
+    client.post("/api/fixtures", headers=ADMIN, json={"mode": "reset"})
+    assert client.post("/api/fixtures", headers=ACCESS, json={"mode": "empty"}).status_code == 401
+
+    resp = client.post("/api/fixtures", headers=ADMIN, json={"mode": "empty"})
+    assert resp.status_code == 200
+    assert resp.json()["mode"] == "empty"
+    assert client.get("/api/records").json()["records"] == []
 
 
 def test_verification_falls_back_to_ocr_when_the_vision_reader_fails(
@@ -579,18 +662,22 @@ def test_specimen_prefill_rejects_an_unknown_filename() -> None:
 
 def test_bulk_verify_runs_exactly_the_selected_records() -> None:
     seed.seed_store()
-    ids = [r["id"] for r in client.get("/api/records").json()["records"][:3]]
+    rows = client.get("/api/records").json()["records"]
+    # The example set arrives part-verified; only the untouched rows are a
+    # selection this can prove anything about.
+    already = {r["id"] for r in rows if r["verified"]}
+    ids = [r["id"] for r in rows if not r["verified"]]
     resp = client.post(
         "/api/jobs", headers=ACCESS, json={"scope": "ids", "record_ids": ids}
     )
     assert resp.status_code == 200
     job = _await_job(resp.json()["id"])
     assert job["state"] == "done"
-    assert job["completed"] == 3
+    assert job["completed"] == len(ids) == 3
     assert job["failed"] == 0
 
     verified = [r for r in client.get("/api/records").json()["records"] if r["verified"]]
-    assert {r["id"] for r in verified} == set(ids), "nothing outside the selection ran"
+    assert {r["id"] for r in verified} == already | set(ids), "nothing outside the selection ran"
 
 
 def test_bulk_verify_survives_an_id_that_does_not_exist() -> None:

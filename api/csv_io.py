@@ -17,7 +17,7 @@ MIRROR_COLUMNS = [
     "app_brand", "app_class_type", "app_alcohol_content", "app_net_contents",
     "app_producer", "app_origin", "app_warning_declared",
     "verified", "result", "field_results", "field_notes", "field_values", "elapsed_ms",
-    "engine", "decision", "decided_by", "decided_at", "note",
+    "engine", "decision", "override", "decided_by", "decided_at", "note",
 ]
 
 # One column beyond PRD §4.2's fixed set, and the reason is worth stating: the
@@ -26,6 +26,46 @@ MIRROR_COLUMNS = [
 # recorded" - a determination with its evidence deleted. JSON in a single cell
 # rather than two more `key:value|...` columns because observed label values
 # routinely contain both `|` and `:`, which the packed format cannot survive.
+
+# `override` is the second column beyond PRD §4.2's set, and it has to be here:
+# accepting a record that did not pass is the one determination a reviewer makes
+# against the engine, and an export that drops the flag destroys the only
+# evidence that the waiver was deliberate - which is what S8 exists to produce.
+
+# What a reviewer downloads. The mirror above is a restore artifact and reads
+# like one; this is the same store without the machine-facing half - no packed
+# JSON, no timings, no engine string. The application columns deliberately use
+# the batch-intake header names (batching.INTAKE_COLUMNS) so a downloaded export
+# can be re-uploaded on Check a batch without being translated first.
+REVIEW_COLUMNS = [
+    "id", "received", "applicant", "filename",
+    "brand_name", "class_type", "alcohol_content", "net_contents",
+    "producer", "country_of_origin", "government_warning",
+    "result", "issues", "decision", "override", "decided_by", "decided_at", "reason",
+]
+
+_REVIEW_SOURCE = {
+    "brand_name": "app_brand",
+    "class_type": "app_class_type",
+    "alcohol_content": "app_alcohol_content",
+    "net_contents": "app_net_contents",
+    "producer": "app_producer",
+    "country_of_origin": "app_origin",
+    "government_warning": "app_warning_declared",
+    "reason": "note",
+}
+
+# The reviewer-facing name for each verified field, so `issues` reads as words
+# rather than as the keys the engine compares on.
+FIELD_LABEL = {
+    "brand": "Brand name",
+    "classType": "Class / type",
+    "abv": "Alcohol content",
+    "net": "Net contents",
+    "producer": "Bottler / producer",
+    "origin": "Country of origin",
+    "warning": "Government warning",
+}
 
 _FORMULA_PREFIXES = ("=", "+", "-", "@")
 
@@ -62,13 +102,38 @@ def unpack_field_values(packed: str) -> dict[str, dict[str, str | None]]:
     return loaded if isinstance(loaded, dict) else {}
 
 
-def to_csv(rows: list[dict[str, Any]]) -> bytes:
+def _write(columns: list[str], rows: list[dict[str, Any]], cell: Any) -> bytes:
     buffer = io.StringIO(newline="")
     writer = csv.writer(buffer, quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
-    writer.writerow(MIRROR_COLUMNS)
+    writer.writerow(columns)
     for row in rows:
-        writer.writerow(_sanitize_cell(row.get(col)) for col in MIRROR_COLUMNS)
+        writer.writerow(_sanitize_cell(cell(row, col)) for col in columns)
     return buffer.getvalue().encode("utf-8")
+
+
+def to_csv(rows: list[dict[str, Any]]) -> bytes:
+    return _write(MIRROR_COLUMNS, rows, lambda row, col: row.get(col))
+
+
+def issues(packed_field_results: str) -> str:
+    """The fields that did not match, named in full. Empty when every field
+    agreed, which is the common case and should read as blank, not as "none"."""
+    out = []
+    for chunk in (packed_field_results or "").split("|"):
+        key, sep, verdict = chunk.partition(":")
+        key, verdict = key.strip(), verdict.strip()
+        if sep and key and verdict and verdict != "match":
+            out.append(FIELD_LABEL.get(key, key))
+    return ", ".join(out)
+
+
+def to_review_csv(rows: list[dict[str, Any]]) -> bytes:
+    def cell(row: dict[str, Any], col: str) -> Any:
+        if col == "issues":
+            return issues(row.get("field_results", ""))
+        return row.get(_REVIEW_SOURCE.get(col, col))
+
+    return _write(REVIEW_COLUMNS, rows, cell)
 
 
 class CsvImportError(Exception):

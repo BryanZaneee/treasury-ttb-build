@@ -218,7 +218,7 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
 
     try:
         reading = get_reader(provider).read(specimen, path)
-        engine = f"deterministic rules engine ({provider} reader)"
+        engine = f"rules check ({provider} reader)"
         if key is not None:
             # Only the configured reader's own answer is cached. A fallback
             # reading is degraded by definition and must not become sticky.
@@ -257,7 +257,7 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
     reason = "daily spend cap reached" if capped else f"{provider} unavailable"
     return (
         reading,
-        f"deterministic rules engine ({reason}, read by local OCR)",
+        f"rules check ({reason}, read by local OCR)",
         "ocr",
         prep_ms,
     )
