@@ -1,7 +1,7 @@
 """Environment configuration, parsed once at import time.
 
-Mirrors the variables in .env.example verbatim. Per-provider effort clamping and
-spend accounting (PRD §5.2, §8) are M3 concerns and are not implemented here.
+Mirrors .env.example verbatim. Per-provider effort clamping (PRD §5.2) is an M3
+concern and is not implemented here.
 """
 
 from pathlib import Path
@@ -26,8 +26,6 @@ class Settings(BaseSettings):
     reader_effort: str = "low"
     reader_service_tier: str = "standard"
     reader_timeout_s: int = 25
-    reader_concurrency: int = 10
-    daily_spend_cap_usd: float = 50
     # Paid vision calls allowed per UTC day, enforced in the reader layer.
     # 0 disables the backstop. See readers/vision.py for why calls, not dollars.
     daily_vision_call_cap: int = 300
@@ -36,7 +34,6 @@ class Settings(BaseSettings):
     admin_token: str = ""
 
     auto_approve_matches: bool = False
-    qa_sample_rate: float = 0.05
 
     data_dir: str = str(_ROOT_ENV.parent / "data")
     public_base_path: str = ""

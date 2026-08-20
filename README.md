@@ -6,8 +6,7 @@ adjudicates the two field by field into `match` / `review` / `fail`. Every deter
 written to an auditable system of record.
 
 The authoritative spec is [`design_handoff_label_verification/PRD.md`](design_handoff_label_verification/PRD.md).
-The approved visual design is `Label Verification.dc.html` in the same folder; its colours,
-type and copy are normative.
+Its §6.2 carries the approved design tokens — colours, type and copy are normative.
 
 **All data in this deployment is synthetic.** The 25 label specimens are generated, the brands
 are fictional, and no real applicant information exists anywhere in the system.
@@ -78,8 +77,7 @@ own.
 | `READER_MODEL` | Vision model. `gpt-4.1-mini` in production. |
 | `READER_API_KEY` | Key for the vision reader. `OPENAI_API_KEY` overrides it for that one provider. |
 | `READER_TIMEOUT_S` | Per-call timeout before the service degrades to local OCR. |
-| `READER_CONCURRENCY` | Parallel reader calls during a batch run. |
-| `DAILY_SPEND_CAP_USD` | Spend backstop. Once breached, records finish with rules-only verdicts rather than failing. |
+| `DAILY_VISION_CALL_CAP` | Paid vision calls allowed per UTC day. Once breached, records finish with rules-only verdicts rather than failing. `0` disables it. |
 | `ACCESS_TOKEN` / `ADMIN_TOKEN` | Shared bearer tokens. There are no user accounts (PRD §8). |
 | `VITE_ACCESS_TOKEN` / `VITE_ADMIN_TOKEN` | The same two tokens, exposed to the browser bundle for local dev. |
 | `AUTO_APPROVE_MATCHES` | Whether clean matches close themselves. Defaults to off (PRD §5.3). |
@@ -227,7 +225,7 @@ string names what actually read the label.
 | `web/src/routes/` | Inbox, CheckLabel, CheckBatch, RecordDetail, Export |
 | `data/` | Runtime store: SQLite database, uploaded images, snapshots, CSV mirror. Gitignored. |
 | `deploy/` | Caddyfile, systemd unit and the deploy script for the VPS |
-| `design_handoff_label_verification/` | The PRD, the approved prototype and the fixture manifest |
+| `design_handoff_label_verification/` | The normative PRD and the fixture manifest |
 
 ---
 

@@ -70,7 +70,6 @@ class HealthResponse(BaseModel):
     prompt_version: str | None
     provider: str
     model: str
-    spend_today_usd: float | None
     # Paid vision calls made since UTC midnight, against daily_vision_call_cap.
     calls_today: int = 0
 
@@ -135,10 +134,8 @@ def create_app() -> FastAPI:
             prompt_version=PROMPT_VERSION if settings.reader_provider == "openai" else None,
             provider=settings.reader_provider,
             model=settings.reader_model,
-            # PRD §5.1 asks for dollars, which needs a per-model price table to
-            # report honestly; the enforced backstop counts calls (see
-            # readers/vision.py), so that is what is reported.
-            spend_today_usd=None,
+            # PRD §5.1 asks for dollars; reporting those honestly needs a
+            # per-model price table, so the enforced backstop counts calls.
             calls_today=calls_today(),
         )
 

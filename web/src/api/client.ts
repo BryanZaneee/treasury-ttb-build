@@ -102,7 +102,6 @@ export type Health = {
   prompt_version: string | null
   provider: string
   model: string
-  spend_today_usd: number | null
   calls_today: number
 }
 
