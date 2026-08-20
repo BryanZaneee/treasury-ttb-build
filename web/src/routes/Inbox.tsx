@@ -285,11 +285,23 @@ export function Inbox() {
       </div>
 
       <div className="card">
-        {selected.size > 0 && (
+        {/* One or the other, never both: inserting the bar above the header
+            pushed the whole table down the moment a box was ticked. It carries
+            the select-all box so that does not move either. */}
+        {selected.size > 0 ? (
           <div className="bulkbar">
-            <span className="bulkbar-count">
-              {selected.size} selected
+            <span className="bulkbar-check">
+              <input
+                type="checkbox"
+                aria-label={allSelected ? 'Clear selection' : 'Select all visible records'}
+                checked={allSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = selected.size > 0 && !allSelected
+                }}
+                onChange={toggleAll}
+              />
             </span>
+            <span className="bulkbar-count">{selected.size} selected</span>
             <button
               className="btn btn-quiet btn-sm"
               onClick={() => bulkVerify.mutate([...selected])}
@@ -316,27 +328,25 @@ export function Inbox() {
               Clear
             </button>
           </div>
-        )}
-        <div className="queue-head">
-          <input
-            type="checkbox"
-            aria-label={allSelected ? 'Clear selection' : 'Select all visible records'}
-            checked={allSelected}
-            ref={(el) => {
-              if (el) el.indeterminate = selected.size > 0 && !allSelected
-            }}
-            onChange={toggleAll}
-          />
-          <div />
-          <div>Label</div>
-          <div className="queue-head-main">
-            <div>Application</div>
-            <div className="hide-sm">Applicant</div>
-            <div className="hide-sm">Received</div>
-            <div>Result</div>
+        ) : (
+          <div className="queue-head">
+            <input
+              type="checkbox"
+              aria-label="Select all visible records"
+              checked={false}
+              onChange={toggleAll}
+            />
             <div />
+            <div>Label</div>
+            <div className="queue-head-main">
+              <div>Application</div>
+              <div className="hide-sm">Applicant</div>
+              <div className="hide-sm">Received</div>
+              <div>Result</div>
+              <div />
+            </div>
           </div>
-        </div>
+        )}
 
         {rows.map((r) => (
           <QueueItem

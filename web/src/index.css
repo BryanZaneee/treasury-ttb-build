@@ -295,12 +295,18 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 .queue-head {
   display: grid; grid-template-columns: 34px 30px 76px minmax(0, 1fr); gap: 14px;
   align-items: center;
+  /* Shared with .bulkbar, which replaces this row while a selection is active:
+     equal heights are what stop the table jumping when the first box is ticked. */
+  min-height: 44px;
   padding-left: 16px;
   background: var(--sunk); border-bottom: 1px solid var(--rule);
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--ink-4);
 }
 .queue-item { border-bottom: 1px solid var(--rule-soft); }
+/* The header and the row share the same 34px track, so the box is centred in it
+   rather than left-aligned with the browser's asymmetric default margin. */
+.queue-head > :first-child, .queue-row > :first-child { justify-self: center; margin: 0; }
 .dot { width: 11px; height: 11px; border-radius: 50%; margin: 0 auto; }
 .thumb {
   width: 68px; height: 46px; border: 1px solid var(--rule); background: #faf7f0;
@@ -425,18 +431,24 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
   grid-template-areas:
-    'step1 run'
-    'step2 nofiles';
+    'step1 nofiles'
+    'step2 run';
   gap: 20px;
   align-items: start;
 }
 .area-step1 { grid-area: step1; }
 .area-step2 { grid-area: step2; align-self: stretch; display: flex; flex-direction: column; }
-/* The empty state grows into whatever height the row has, so "Step 2" and
-   "No files handy?" end flush even before a batch is staged. */
+/* The empty state grows into whatever height the row has, so the staged table
+   and the card beside it end flush even before a batch is staged. */
 .batch-empty { flex: 1; display: flex; align-items: center; justify-content: center; }
 .area-run { grid-area: run; }
-.area-nofiles { grid-area: nofiles; }
+.area-nofiles {
+  grid-area: nofiles;
+  /* Ends flush with the Application CSV card beside it rather than floating
+     short of it. */
+  align-self: stretch; display: flex; flex-direction: column;
+}
+.area-nofiles .btn:first-of-type { margin-top: auto; }
 .dropzone {
   border: 1px dashed var(--field); border-radius: 4px; background: var(--sunk-2);
   padding: 26px; text-align: center;
@@ -511,11 +523,15 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  padding: 10px 16px;
+  min-height: 44px;
+  padding: 4px 16px;
   background: var(--navy);
   color: #fff;
   border-bottom: 1px solid var(--rule);
 }
+/* Mirrors the header/row checkbox track, so the select-all box does not move
+   sideways when the bar replaces the header. */
+.bulkbar-check { width: 34px; display: flex; justify-content: center; }
 .bulkbar-count { font-size: 13px; font-weight: 600; }
 .bulkbar .btn-quiet { border-color: rgba(255, 255, 255, 0.35); }
 
@@ -660,7 +676,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
   .grid-2 { grid-template-columns: minmax(0, 1fr); }
   .batch-grid {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'step1' 'run' 'step2' 'nofiles';
+    grid-template-areas: 'step1' 'nofiles' 'step2' 'run';
   }
   .queue-head { display: none; }
   .queue-main { grid-template-columns: minmax(0, 1fr) 172px 26px; }
@@ -766,6 +782,22 @@ button.thumb { border: 1px solid var(--rule); cursor: zoom-in; }
 
 button.caret { appearance: none; border: 0; background: none; cursor: pointer; padding: 0 4px; }
 tr.staged-selected > td { background: var(--sunk-2); }
+/* Scoped, not global: the export and determination tables want the top
+   alignment that long field values read better in. */
+.staged-table td { vertical-align: middle; }
+.staged-table thead th { height: 44px; }
+.staged-table th:first-child, .staged-table td:first-child {
+  width: 44px; padding-left: 0; padding-right: 0; text-align: center;
+}
+.staged-table th:first-child input, .staged-table td:first-child input { margin: 0; }
+/* The bar replaces the header row inside the table, so it scrolls with the
+   columns instead of drifting from them. */
+.staged-table th.bulkbar-cell {
+  /* thead th is uppercase, letter-spaced and 10.5px; the bar is not a header. */
+  padding: 0; text-transform: none; letter-spacing: normal; font-weight: 400;
+}
+.staged-table .bulkbar { padding-left: 0; }
+.staged-table .bulkbar-check { width: 44px; }
 /* The image the row is paired with, marked in the picker. */
 .thumb-current { outline: 2px solid var(--navy); outline-offset: 1px; }
 .staged-drop-row {
