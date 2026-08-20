@@ -481,11 +481,9 @@ function Determination() {
                 lineHeight: 1.5,
               }}
             >
-              {draft
-                ? 'Correct the application as filed, in the middle column. Saving checks it against the label already read.'
-                : data.verified
-                  ? 'A returned record is not reopenable. The applicant files afresh.'
-                  : 'Nothing has been read yet. Run AI verification to compare this label against the application as filed.'}
+              {data.verified
+                ? 'A returned record is not reopenable. The applicant files afresh.'
+                : 'Nothing has been read yet. Run AI verification to compare this label against the application as filed.'}
             </div>
           </div>
         </div>
