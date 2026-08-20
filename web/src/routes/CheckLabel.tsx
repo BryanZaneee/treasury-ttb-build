@@ -188,7 +188,6 @@ export function CheckLabel() {
     toast({
       kind: 'warn',
       title: 'This record did not pass',
-      sticky: true,
       body: (
         <>
           Accepting it overrides {disagreeing.length} disagreeing field
@@ -222,7 +221,6 @@ export function CheckLabel() {
     toast({
       kind: TOAST_KIND[kind] ?? 'info',
       title: `${record.app_brand || record.filename} — ${PILL_TEXT[kind]}`,
-      sticky: true,
       body: (
         <>
           {RESULT_COPY[kind]}

@@ -16,8 +16,6 @@ export type Toast = {
   title: string
   body?: ReactNode
   actions?: ToastAction[]
-  /** Stays until dismissed. A toast carrying actions has to wait to be read. */
-  sticky?: boolean
 }
 
 export const ToastContext = createContext<(t: Omit<Toast, 'id'>) => void>(() => {})

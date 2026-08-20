@@ -35,6 +35,7 @@ export function Inbox() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [verifyingAll, setVerifyingAll] = useState(false)
   // Selection is scoped to what the reviewer can currently see. Changing the
   // filter or the search clears it, so a bulk action can never reach a record
   // that has scrolled out of the view they chose it from.
@@ -236,7 +237,7 @@ export function Inbox() {
           </div>
           <button
             className="btn btn-gold push"
-            onClick={() => verifyAll.mutate()}
+            onClick={() => setVerifyingAll(true)}
             disabled={verifyAll.isPending}
           >
             {verifyAll.isPending && <span className="spinner spinner-dark" />}
@@ -379,6 +380,47 @@ export function Inbox() {
           </div>
         )}
       </div>
+
+      {/* Reading a label costs a paid call per record, so a run over the whole
+          queue says how many before it starts one. */}
+      {verifyingAll && (
+        <div className="dialog-backdrop" role="presentation" onClick={() => setVerifyingAll(false)}>
+          <div
+            className="dialog dialog-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="verify-all-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="dialog-head">
+              <h2 id="verify-all-title">
+                Verify {counts?.pending} application{counts?.pending === 1 ? '' : 's'}?
+              </h2>
+            </div>
+            <div className="dialog-body">
+              <p className="card-note">
+                The AI reads each label and every field is checked against the application as
+                filed. Applications already verified are left alone, and a label that cannot be
+                read stays unverified rather than stopping the run.
+              </p>
+            </div>
+            <div className="dialog-foot">
+              <button
+                className="btn"
+                onClick={() => {
+                  setVerifyingAll(false)
+                  verifyAll.mutate()
+                }}
+              >
+                Run verification
+              </button>
+              <button className="btn btn-quiet" onClick={() => setVerifyingAll(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {exporting && (
         <div className="dialog-backdrop" role="presentation" onClick={() => setExporting(false)}>

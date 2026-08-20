@@ -170,9 +170,9 @@ export function Export() {
                     </>
                   ) : (
                     <>
-                      Everything on file is replaced with six example applications to practise
-                      on — two still to check, one accepted, one in review, one failed, one sent
-                      back.
+                      Everything on file is replaced with thirteen example applications to
+                      practise on — three still to check, three that matched, three in review,
+                      four that failed, and three already decided.
                     </>
                   )}{' '}
                   A copy of the current store is saved first.

@@ -1,8 +1,26 @@
 import { useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, apiUrl, imageUrl } from '../api/client'
 import type { Job, StagedBatch, StagedRow } from '../api/client'
+import { useToast } from '../lib/toast'
+
+/** "1 matched · 7 to review · 17 failed", in the order a reviewer works a
+    queue. Past participles rather than the pill words, which do not take a
+    count: "7 needs review" is not a sentence. */
+const VERDICT_WORD: Record<string, string> = {
+  match: 'matched',
+  review: 'to review',
+  fail: 'failed',
+  invalid: 'not a label',
+}
+
+function verdictSummary(verdicts: Record<string, number>): string {
+  return Object.keys(VERDICT_WORD)
+    .filter((v) => verdicts[v])
+    .map((v) => `${verdicts[v]} ${VERDICT_WORD[v]}`)
+    .join(' · ')
+}
 
 const BUCKET: Record<string, { label: string; pill: string }> = {
   matched: { label: 'Matched', pill: 'pill-match' },
@@ -46,6 +64,8 @@ export function CheckBatch() {
     if (imgRef.current) imgRef.current.value = ''
   }
   const client = useQueryClient()
+  const toast = useToast()
+  const navigate = useNavigate()
 
   const stagedBatch = useQuery({
     queryKey: ['batch', batchId],
@@ -191,6 +211,7 @@ export function CheckBatch() {
       setJob(finished)
       setSelected(new Set())
       client.invalidateQueries({ queryKey: ['records'] })
+      reportJob(finished)
       // The filed rows are gone from the staged document; re-read what is left
       // rather than guessing at it client side.
       const left = await api<StagedBatch>(`/batches/${batchId}`)
@@ -199,6 +220,42 @@ export function CheckBatch() {
     },
     onError: (e) => setError(String(e)),
   })
+
+  /** What the batch did, once it has done it. Sticky, because it carries the
+      way into the queue it just filled. */
+  const reportJob = (job: Job) => {
+    const verdicts = verdictSummary(job.verdicts)
+    toast({
+      kind: job.failed > 0 ? 'warn' : 'success',
+      title: `${job.committed} application${job.committed === 1 ? '' : 's'} filed`,
+      body: (
+        <>
+          {verdicts ? (
+            <>
+              Verified {job.completed} of {job.total}.
+              <div style={{ marginTop: 4 }}>{verdicts}</div>
+            </>
+          ) : (
+            'Filed without verification — run it from the inbox when you are ready.'
+          )}
+          {job.failed > 0 && (
+            <div style={{ marginTop: 4 }}>
+              {job.failed} could not be read and stayed unverified.
+            </div>
+          )}
+        </>
+      ),
+      actions: [
+        {
+          label: 'Open the inbox',
+          onClick: () => {
+            navigate('/inbox')
+          },
+        },
+        { label: 'Dismiss', tone: 'quiet', onClick: () => {} },
+      ],
+    })
+  }
 
   /** File these rows, first warning about the ones that cannot be filed as they
       stand: a row with no label can never be verified, and an ambiguous row has
@@ -463,13 +520,6 @@ export function CheckBatch() {
             )}
             {/* The staged batch outlives the page now, so there has to be a way
                 to put it down that is not filing it. */}
-            {batch && batch.summary.unused_images.length > 0 && (
-              <p className="card-note">
-                {batch.summary.unused_images.length} uploaded image
-                {batch.summary.unused_images.length === 1 ? '' : 's'} no row claims — pair one
-                from any row's Image picker.
-              </p>
-            )}
             <button
               className="btn btn-quiet btn-wide"
               style={{ marginTop: 10 }}
@@ -478,18 +528,6 @@ export function CheckBatch() {
             >
               Clear staged batch
             </button>
-            {commit.isSuccess && job && (
-              <p className="card-note">
-                Filed {job.committed} record{job.committed === 1 ? '' : 's'}
-                {Object.keys(job.verdicts).length > 0
-                  ? ` · verified ${job.completed}/${job.total} · ${Object.entries(job.verdicts)
-                      .map(([k, v]) => `${v} ${k}`)
-                      .join(' · ')}`
-                  : ' · awaiting verification'}
-                {job.failed > 0 && ` · ${job.failed} failed`}. <Link to="/inbox">Open the inbox</Link>
-                .
-              </p>
-            )}
           </div>
 
         <div className="card card-pad area-nofiles" style={{ background: 'var(--sunk-2)' }}>

@@ -12,6 +12,8 @@ import type { Toast } from '../lib/toast'
  * has no reason to be looking at the bottom-right of the screen (PRD §8).
  */
 
+const TOAST_MS = 5000
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
 
@@ -24,12 +26,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (t: Omit<Toast, 'id'>) => {
       const id = Date.now() + Math.random()
       setToasts((prev) => [...prev, { ...t, id }])
-      // A toast offering an action has to wait to be acted on; one that only
-      // reports gets long enough to read two lines without hunting for a
-      // dismiss control.
-      if (!t.sticky && !t.actions?.length) {
-        setTimeout(() => dismiss(id), 9000)
-      }
+      // Every toast clears itself, including the ones carrying an action: a
+      // reviewer filing one label after another was stacking notices they had
+      // to dismiss by hand, and everything a toast offers is reachable again
+      // from the inbox.
+      setTimeout(() => dismiss(id), TOAST_MS)
     },
     [dismiss],
   )
