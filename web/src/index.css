@@ -410,7 +410,7 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 /* ---------------- layout helpers ---------------- */
 
 .split { display: grid; grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); gap: 20px; align-items: start; }
-.split-right { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 300px); gap: 20px; align-items: start; }
+.split-right { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: 20px; align-items: start; }
 .stack { display: flex; flex-direction: column; gap: 16px; }
 .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .push { margin-left: auto; }
@@ -639,8 +639,11 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 .label-frame img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 .label-frame-sm { aspect-ratio: 3 / 4; width: 84px; flex: none; padding: 6px; }
 
-/* Fixed height so swapping dropzone for preview does not push the form down.
-   Sized to the preview, the taller of the two states. */
+/* Sticky, so the label stays readable while the reviewer works down the form -
+   the fields are transcribed from it. */
+.specimen-side { position: sticky; top: 20px; }
+.specimen-side .label-frame { width: 100%; }
+
 .specimen-slot { height: 132px; margin: 14px 0; display: flex; align-items: stretch; }
 .specimen-slot > * { flex: 1; min-width: 0; }
 .specimen-slot .dropzone {
@@ -762,19 +765,13 @@ button.thumb { border: 1px solid var(--rule); cursor: zoom-in; }
 .image-cell { display: flex; align-items: center; gap: 8px; }
 
 button.caret { appearance: none; border: 0; background: none; cursor: pointer; padding: 0 4px; }
-.staged-expand td { background: var(--sunk-2); }
-.staged-detail {
-  display: grid; grid-template-columns: 240px minmax(0, 1fr);
-  gap: 18px; align-items: start; padding: 4px 0;
+tr.staged-selected > td { background: var(--sunk-2); }
+/* The image the row is paired with, marked in the picker. */
+.thumb-current { outline: 2px solid var(--navy); outline-offset: 1px; }
+.staged-drop-row {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px; font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid var(--rule-soft);
 }
-.staged-preview {
-  appearance: none; border: 1px solid var(--rule); background: #faf7f0; padding: 0;
-  cursor: pointer; display: block; width: 100%;
-}
-.staged-preview img { width: 100%; max-height: 200px; object-fit: contain; display: block; }
-.staged-drop { padding: 22px 14px; }
-.staged-detail-line { display: flex; gap: 10px; font-size: 12.5px; padding: 4px 0; }
-.staged-detail-line span:first-child { color: var(--ink-5); min-width: 92px; }
 
 .lightbox {
   margin: 0; background: var(--paper); border: 1px solid var(--rule); padding: 12px;
@@ -783,9 +780,6 @@ button.caret { appearance: none; border: 0; background: none; cursor: pointer; p
 .lightbox img { display: block; max-width: 100%; max-height: 74vh; object-fit: contain; }
 .lightbox figcaption { font-size: 11.5px; color: var(--ink-6); margin-top: 8px; text-align: center; }
 
-@media (max-width: 720px) {
-  .staged-detail { grid-template-columns: minmax(0, 1fr); }
-}
 
 /* The label frame doubles as the enlarge trigger on a determination. */
 .label-frame-zoom { appearance: none; padding: 0; cursor: zoom-in; width: 100%; }

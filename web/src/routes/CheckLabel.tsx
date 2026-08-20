@@ -50,6 +50,7 @@ export function CheckLabel() {
   const [preview, setPreview] = useState<string>('')
   const [sample, setSample] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [zoomed, setZoomed] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -84,35 +85,32 @@ export function CheckLabel() {
     },
   })
 
+  // Object URLs are created and revoked here, not inside a setPreview updater:
+  // React runs an updater eagerly, again on render, and twice more under
+  // StrictMode, so a side effect in one leaks URLs and can revoke the very URL
+  // the img is showing - which is what left the preview broken.
   const takeFile = (chosen: File | undefined) => {
     if (!chosen) return
+    if (preview) URL.revokeObjectURL(preview)
     setSample('')
     setFile(chosen)
     setError(null)
-    // Revoke the previous object URL rather than leaking one per pick.
-    setPreview((old) => {
-      if (old) URL.revokeObjectURL(old)
-      return URL.createObjectURL(chosen)
-    })
+    setPreview(URL.createObjectURL(chosen))
   }
 
   const takeSample = (filename: string) => {
+    if (preview) URL.revokeObjectURL(preview)
     setSample(filename)
     setFile(null)
-    setPreview((old) => {
-      if (old) URL.revokeObjectURL(old)
-      return ''
-    })
+    setPreview('')
     if (filename) prefill.mutate(filename)
   }
 
   const clearImage = () => {
+    if (preview) URL.revokeObjectURL(preview)
     setFile(null)
     setSample('')
-    setPreview((old) => {
-      if (old) URL.revokeObjectURL(old)
-      return ''
-    })
+    setPreview('')
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -275,33 +273,13 @@ export function CheckLabel() {
         </div>
       </div>
 
-      <div className="card card-pad">
-        <div className="card-title">Label image</div>
+      {/* Once a specimen is chosen it moves to the sticky panel beside the
+          form, where it is big enough to transcribe the application from. */}
+      {!shown && (
+        <div className="card card-pad">
+          <div className="card-title">Label image</div>
 
-        {/* One fixed-height slot for both states — see .specimen-slot. */}
-        <div className="specimen-slot">
-          {shown ? (
-            <div className="row" style={{ alignItems: 'center', height: '100%' }}>
-              <div className="label-frame label-frame-sm">
-                <img src={shown} alt={`Label image ${source}`} />
-              </div>
-              <div>
-                <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
-                  {source}
-                </div>
-                <p className="card-note">
-                  {file ? 'Uploaded from this device.' : 'A sample label, for testing.'}
-                </p>
-                <button
-                  className="btn btn-quiet btn-sm"
-                  style={{ marginTop: 10 }}
-                  onClick={clearImage}
-                >
-                  Choose a different image
-                </button>
-              </div>
-            </div>
-          ) : (
+          <div className="specimen-slot">
             <button
               className={`dropzone${dragging ? ' dragging' : ''}`}
               style={{ width: '100%', height: '100%' }}
@@ -320,35 +298,38 @@ export function CheckLabel() {
               <div className="dropzone-title">Drop a label image, or choose a file</div>
               <div className="dropzone-hint">PNG, JPEG or WebP · up to 12 MB</div>
             </button>
-          )}
+          </div>
+
+          <label className="field" style={{ maxWidth: 460, marginBottom: 0 }}>
+            <span className="field-label">Or use a sample label for testing</span>
+            <select value={sample} onChange={(e) => takeSample(e.target.value)}>
+              <option value="">No sample selected</option>
+              {named.map((s) => (
+                <option key={s.filename} value={s.filename}>
+                  {s.title} — {s.hint}
+                </option>
+              ))}
+            </select>
+            <span className="card-note">
+              Synthetic labels with fictional brands. Each one reproduces a documented verdict,
+              and picking one fills the form below with the application it was filed against.
+            </span>
+          </label>
         </div>
+      )}
 
-        <input
-          ref={fileRef}
-          type="file"
-          accept={ACCEPTED}
-          hidden
-          onChange={(e) => takeFile(e.target.files?.[0])}
-        />
+      <input
+        ref={fileRef}
+        type="file"
+        accept={ACCEPTED}
+        hidden
+        onChange={(e) => {
+          takeFile(e.target.files?.[0])
+          e.target.value = ''
+        }}
+      />
 
-        <label className="field" style={{ maxWidth: 460, marginBottom: 0 }}>
-          <span className="field-label">Or use a sample label for testing</span>
-          <select value={sample} onChange={(e) => takeSample(e.target.value)}>
-            <option value="">No sample selected</option>
-            {named.map((s) => (
-              <option key={s.filename} value={s.filename}>
-                {s.title} — {s.hint}
-              </option>
-            ))}
-          </select>
-          <span className="card-note">
-            Synthetic labels with fictional brands. Each one reproduces a documented verdict, and
-            picking one fills the form below with the application it was filed against.
-          </span>
-        </label>
-      </div>
-
-      <div className="split-right" style={{ marginTop: 16 }}>
+      <div className={shown ? 'split-right' : ''} style={{ marginTop: 16 }}>
         <div className="card card-pad">
           <div className="card-title">Application data as filed</div>
           <div style={{ marginTop: 12 }}>
@@ -391,32 +372,67 @@ export function CheckLabel() {
               />
               <span>Applicant declares the required government warning appears on the label</span>
             </label>
+            {error && (
+              <div className="banner-error" style={{ marginTop: 14 }}>
+                {error}
+              </div>
+            )}
+            <button
+              className="btn btn-wide"
+              style={{ marginTop: 16 }}
+              onClick={() => submit.mutate()}
+              disabled={submit.isPending || !source || !application.brand}
+            >
+              {submit.isPending && <span className="spinner" />}
+              Submit for verification
+            </button>
+            <p className="card-note">
+              {source
+                ? `${source} will be verified and filed to the review inbox.`
+                : 'Add a label image to continue.'}
+            </p>
           </div>
         </div>
 
-        <div className="card card-pad">
-          <div className="card-title">Submit</div>
-          <p className="card-note">
-            {source
-              ? `${source} will be verified and filed to the review inbox.`
-              : 'Add a label image above to continue.'}
-          </p>
-          {error && (
-            <div className="banner-error" style={{ marginTop: 12 }}>
-              {error}
+        {shown && (
+          <div className="card card-pad specimen-side">
+            <div className="card-title">Label image</div>
+            <button
+              className="label-frame label-frame-zoom"
+              onClick={() => setZoomed(true)}
+              aria-label={`Enlarge ${source}`}
+            >
+              <img src={shown} alt={`Label image ${source}`} />
+            </button>
+            <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, marginTop: 10 }}>
+              {source}
             </div>
-          )}
-          <button
-            className="btn btn-wide"
-            style={{ marginTop: 14 }}
-            onClick={() => submit.mutate()}
-            disabled={submit.isPending || !source || !application.brand}
-          >
-            {submit.isPending && <span className="spinner" />}
-            Submit for verification
-          </button>
-        </div>
+            <p className="card-note">
+              {file ? 'Uploaded from this device.' : 'A sample label, for testing.'}
+            </p>
+            <button className="btn btn-quiet btn-sm" onClick={clearImage}>
+              Choose a different image
+            </button>
+          </div>
+        )}
       </div>
+
+      {zoomed && shown && (
+        <div
+          className="dialog-backdrop"
+          role="dialog"
+          aria-label={`Label image ${source}`}
+          tabIndex={-1}
+          autoFocus
+          onClick={() => setZoomed(false)}
+          onKeyDown={(e) => e.key === 'Escape' && setZoomed(false)}
+        >
+          <figure className="lightbox">
+            <img src={shown} alt={`Label image ${source}`} />
+            <figcaption className="mono">{source}</figcaption>
+          </figure>
+        </div>
+      )}
     </div>
   )
 }
