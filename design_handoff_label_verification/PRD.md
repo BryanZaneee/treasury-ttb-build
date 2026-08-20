@@ -749,30 +749,30 @@ field it targets (the zero-false-auto-close bar in §1 and §5.4).
 
 | # | Filename | Brand | Class/Type | Alcohol | Net | Origin | Look | Treatment | Intended defect |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | old-tom-pass.png | OLD TOM DISTILLERY | Kentucky Straight Bourbon Whiskey | 45% Alc./Vol. (90 Proof) | 750 mL | — | classic | normal | none — clean reference |
+| 1 | old-tom-pass.jpg | OLD TOM DISTILLERY | Kentucky Straight Bourbon Whiskey | 45% Alc./Vol. (90 Proof) | 750 mL | — | classic | normal | none — clean reference |
 | 2 | stones-throw-caps.jpg | STONE'S THROW | Kentucky Straight Bourbon Whiskey | 45% Alc./Vol. (90 Proof) | 750 mL | — | industrial | normal | brand rendered in full caps; warning verbatim |
-| 3 | harbor-mist-nowarning.png | HARBOR MIST | India Pale Ale | 6.8% Alc./Vol. | 12 FL OZ | — | botanical | normal | government warning completely absent |
+| 3 | harbor-mist-nowarning.jpg | HARBOR MIST | India Pale Ale | 6.8% Alc./Vol. | 12 FL OZ | — | botanical | normal | government warning completely absent |
 | 4 | cedar-ridge-titlecase.jpg | CEDAR RIDGE | Napa Valley Cabernet Sauvignon | 14.2% Alc./Vol. | 750 mL | — | crest | normal | warning header in Title Case, not ALL CAPS |
-| 5 | lark-hollow-reworded.png | LARK HOLLOW | Small Batch Gin | 44% Alc./Vol. (88 Proof) | 750 mL | — | minimal | normal | warning replaced with non-compliant reworded text |
+| 5 | lark-hollow-reworded.jpg | LARK HOLLOW | Small Batch Gin | 44% Alc./Vol. (88 Proof) | 750 mL | — | minimal | normal | warning replaced with non-compliant reworded text |
 | 6 | vinos-del-sol-abv.jpg | VINOS DEL SOL | Rioja Tempranillo | 12.5% Alc./Vol. | 750 mL | Product of Spain | crest | normal | none — clean reference |
 | 7 | iron-gate-blur.jpg | IRON GATE | Straight Rye Whiskey | 50% Alc./Vol. (100 Proof) | 750 mL | — | band | blurry | mild soft-focus, all text incl. warning still readable |
 | 8 | saltmarsh-glare.jpg | SALTMARSH | Gose Style Ale | 4.5% Alc./Vol. | 16 FL OZ | — | script | glare | glare blows out net contents only |
-| 9 | north-fen-pixel.png | NORTH FEN | Vodka | 40% Alc./Vol. (80 Proof) | 1 L | — | slate | pixelated | brand name illegible |
+| 9 | north-fen-pixel.jpg | NORTH FEN | Vodka | 40% Alc./Vol. (80 Proof) | 1 L | — | slate | pixelated | brand name illegible |
 | 10 | brasserie-verte-origin.jpg | BRASSERIE VERTE | Belgian Style Tripel | 9.2% Alc./Vol. | 330 mL | — | crest | angled | no country-of-origin statement anywhere |
-| 11 | quarry-house-units.png | QUARRY HOUSE | Willamette Valley Pinot Noir | 13.1% Alc./Vol. | 75 cl | — | minimal | normal | net contents in cl, not mL |
+| 11 | quarry-house-units.jpg | QUARRY HOUSE | Willamette Valley Pinot Noir | 13.1% Alc./Vol. | 75 cl | — | minimal | normal | net contents in cl, not mL |
 | 12 | golden-hour-nonbold.jpg | GOLDEN HOUR | Orange Liqueur | 24% Alc./Vol. (48 Proof) | 500 mL | — | script | normal | warning header not bold |
 | 13 | ember-line-heavyblur.jpg | EMBER LINE | Single Malt Whiskey | 58.4% Alc./Vol. (116.8 Proof) | 700 mL | — | slate | heavyBlur | alcohol content and warning unreadable |
 | 14 | stillwater-glare.jpg | STILLWATER LANDING | Finger Lakes Dry Riesling | 11.5% Alc./Vol. | 750 mL | — | botanical | glare | glare blows out alcohol content only |
-| 15 | red-kite-pixel.png | RED KITE | American Pale Ale | 5.2% Alc./Vol. | 16 FL OZ | — | industrial | pixelated | class/type line illegible |
+| 15 | red-kite-pixel.jpg | RED KITE | American Pale Ale | 5.2% Alc./Vol. | 16 FL OZ | — | industrial | pixelated | class/type line illegible |
 | 16 | casa-luz-origin.jpg | CASA LUZ | 100% de Agave Blanco Tequila | 40% Alc./Vol. (80 Proof) | 750 mL | Product of Mexico | band | normal | none — clean reference |
 | 17 | fogbank-dark.jpg | FOGBANK | Baltic Porter | 8.1% Alc./Vol. | 500 mL | — | slate | dark | warning sinks into dark background |
 | 18 | pilgrim-oak-damaged.jpg | PILGRIM OAK | Apple Brandy | 42% Alc./Vol. (84 Proof) | 375 mL | — | classic | damaged | tear/stain removes producer statement |
-| 19 | tallgrass-cropped.png | TALLGRASS UNION | Saison | 6.4% Alc./Vol. | 750 mL | — | minimal | cropped | warning partly/wholly outside frame |
+| 19 | tallgrass-cropped.jpg | TALLGRASS UNION | Saison | 6.4% Alc./Vol. | 750 mL | — | minimal | cropped | warning partly/wholly outside frame |
 | 20 | maison-clair-angled.jpg | MAISON CLAIR | Cotes de Provence Rose | 12.8% Alc./Vol. | 750 mL | Product of France | crest | angled | net contents borderline legible at far edge |
 | 21 | blue-heron-blur.jpg | BLUE HERON | Straight Rye Whiskey | 47% Alc./Vol. (94 Proof) | 750 mL | — | band | blurry | mild soft-focus, all text incl. warning still readable |
-| 22 | copper-kettle-pass.png | COPPER KETTLE | Blended Scotch Whisky | 43% Alc./Vol. (86 Proof) | 1 L | Product of Scotland | classic | normal | none — clean reference |
+| 22 | copper-kettle-pass.jpg | COPPER KETTLE | Blended Scotch Whisky | 43% Alc./Vol. (86 Proof) | 1 L | Product of Scotland | classic | normal | none — clean reference |
 | 23 | wildvine-glare.jpg | WILDVINE | Sonoma Coast Orange Wine | 13.4% Alc./Vol. | 750 mL | — | script | glare | glare blows out brand name only |
-| 24 | south-shoal-pixel.png | SOUTH SHOAL | Flavored Malt Beverage | 5.0% Alc./Vol. | 12 FL OZ | — | minimal | pixelated | net contents illegible |
+| 24 | south-shoal-pixel.jpg | SOUTH SHOAL | Flavored Malt Beverage | 5.0% Alc./Vol. | 12 FL OZ | — | minimal | pixelated | net contents illegible |
 | 25 | abbey-row-pass.jpg | ABBEY ROW | Belgian Style Dubbel | 7.6% Alc./Vol. | 330 mL | — | botanical | normal | none — clean reference |
 
 **Distribution:** treatments — angled 2, blurry 2, cropped 1, damaged 1, dark 1, glare 3,

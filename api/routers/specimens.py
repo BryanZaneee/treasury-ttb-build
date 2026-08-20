@@ -25,17 +25,17 @@ router = APIRouter(tags=["specimens"], prefix="/specimens")
 # The named single-label samples published to the UI (PRD §7). Copy is the
 # prototype's, so the picker reads the same as the approved design.
 SAMPLE_COPY: dict[str, tuple[str, str]] = {
-    "old-tom-pass.png": ("Clean match", "Every field agrees"),
+    "old-tom-pass.jpg": ("Clean match", "Every field agrees"),
     "stones-throw-caps.jpg": ("Casing difference", "Brand set in full caps"),
-    "harbor-mist-nowarning.png": ("Missing warning", "No warning statement"),
+    "harbor-mist-nowarning.jpg": ("Missing warning", "No warning statement"),
     "cedar-ridge-titlecase.jpg": ("Title-case warning", "Header not in all caps"),
-    "lark-hollow-reworded.png": ("Reworded warning", "Statutory text altered"),
+    "lark-hollow-reworded.jpg": ("Reworded warning", "Statutory text altered"),
     "vinos-del-sol-abv.jpg": ("ABV mismatch", "12.5% on label, 13.5% filed"),
     "iron-gate-blur.jpg": ("Blurry capture", "Readable, low confidence"),
     "saltmarsh-glare.jpg": ("Glare on bottle", "Net contents illegible"),
-    "north-fen-pixel.png": ("Pixelated upload", "Brand name illegible"),
+    "north-fen-pixel.jpg": ("Pixelated upload", "Brand name illegible"),
     "brasserie-verte-origin.jpg": ("Missing origin", "Import lacks country of origin"),
-    "quarry-house-units.png": ("Unit difference", "75 cl on label, 750 mL filed"),
+    "quarry-house-units.jpg": ("Unit difference", "75 cl on label, 750 mL filed"),
     "golden-hour-nonbold.jpg": ("Non-bold header", "Warning header not bold"),
 }
 

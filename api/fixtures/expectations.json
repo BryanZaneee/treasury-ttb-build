@@ -1,5 +1,5 @@
 {
-  "old-tom-pass.png": {
+  "old-tom-pass.jpg": {
     "applicant": "Old Tom Distillery LLC",
     "beverage": "Distilled Spirits",
     "app": {
@@ -73,7 +73,7 @@
     },
     "verdict": "review"
   },
-  "harbor-mist-nowarning.png": {
+  "harbor-mist-nowarning.jpg": {
     "applicant": "Harbor Mist Brewing",
     "beverage": "Malt Beverage",
     "app": {
@@ -147,7 +147,7 @@
     },
     "verdict": "review"
   },
-  "lark-hollow-reworded.png": {
+  "lark-hollow-reworded.jpg": {
     "applicant": "Lark Hollow Craft Spirits",
     "beverage": "Distilled Spirits",
     "app": {
@@ -298,7 +298,7 @@
     },
     "verdict": "fail"
   },
-  "north-fen-pixel.png": {
+  "north-fen-pixel.jpg": {
     "applicant": "North Fen Vodka Company",
     "beverage": "Distilled Spirits",
     "app": {
@@ -375,7 +375,7 @@
     },
     "verdict": "fail"
   },
-  "quarry-house-units.png": {
+  "quarry-house-units.jpg": {
     "applicant": "Quarry House Cellars",
     "beverage": "Wine",
     "app": {
@@ -528,7 +528,7 @@
     },
     "verdict": "fail"
   },
-  "red-kite-pixel.png": {
+  "red-kite-pixel.jpg": {
     "applicant": "Red Kite Brewing",
     "beverage": "Malt Beverage",
     "app": {
@@ -683,7 +683,7 @@
     },
     "verdict": "fail"
   },
-  "tallgrass-cropped.png": {
+  "tallgrass-cropped.jpg": {
     "applicant": "Tallgrass Union",
     "beverage": "Malt Beverage",
     "app": {
@@ -799,7 +799,7 @@
     },
     "verdict": "match"
   },
-  "copper-kettle-pass.png": {
+  "copper-kettle-pass.jpg": {
     "applicant": "Copper Kettle Imports",
     "beverage": "Distilled Spirits",
     "app": {
@@ -876,7 +876,7 @@
     },
     "verdict": "fail"
   },
-  "south-shoal-pixel.png": {
+  "south-shoal-pixel.jpg": {
     "applicant": "South Shoal Beverage",
     "beverage": "Malt Beverage",
     "app": {

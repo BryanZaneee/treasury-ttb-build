@@ -57,7 +57,7 @@ WARNING_REWORDED = (
 # )
 ROWS: list[dict[str, Any]] = [
     {
-        "filename": "old-tom-pass.png", "applicant": "Old Tom Distillery LLC", "beverage": "Distilled Spirits",
+        "filename": "old-tom-pass.jpg", "applicant": "Old Tom Distillery LLC", "beverage": "Distilled Spirits",
         "app": {"brand": "Old Tom Distillery", "classType": "Kentucky Straight Bourbon Whiskey",
                   "abv": "45%", "net": "750 mL", "producer": "Old Tom Distillery, Bardstown, KY", "origin": None, "warning": True},
         "label": {"brand": "Old Tom Distillery", "classType": "Kentucky Straight Bourbon Whiskey",
@@ -83,7 +83,7 @@ ROWS: list[dict[str, Any]] = [
         "verdict": "review",
     },
     {
-        "filename": "harbor-mist-nowarning.png", "applicant": "Harbor Mist Brewing", "beverage": "Malt Beverage",
+        "filename": "harbor-mist-nowarning.jpg", "applicant": "Harbor Mist Brewing", "beverage": "Malt Beverage",
         "app": {"brand": "Harbor Mist", "classType": "India Pale Ale",
                   "abv": "6.8%", "net": "12 FL OZ", "producer": "Harbor Mist Brewing, Astoria, OR", "origin": None, "warning": True},
         "label": {"brand": "Harbor Mist", "classType": "India Pale Ale",
@@ -109,7 +109,7 @@ ROWS: list[dict[str, Any]] = [
         "verdict": "review",
     },
     {
-        "filename": "lark-hollow-reworded.png", "applicant": "Lark Hollow Craft Spirits", "beverage": "Distilled Spirits",
+        "filename": "lark-hollow-reworded.jpg", "applicant": "Lark Hollow Craft Spirits", "beverage": "Distilled Spirits",
         "app": {"brand": "Lark Hollow", "classType": "Small Batch Gin",
                   "abv": "44%", "net": "750 mL", "producer": "Lark Hollow Craft Spirits, Asheville, NC", "origin": None, "warning": True},
         "label": {"brand": "Lark Hollow", "classType": "Small Batch Gin",
@@ -161,7 +161,7 @@ ROWS: list[dict[str, Any]] = [
         "verdict": "fail",
     },
     {
-        "filename": "north-fen-pixel.png", "applicant": "North Fen Vodka Company", "beverage": "Distilled Spirits",
+        "filename": "north-fen-pixel.jpg", "applicant": "North Fen Vodka Company", "beverage": "Distilled Spirits",
         "app": {"brand": "North Fen", "classType": "Vodka",
                   "abv": "40%", "net": "1 L", "producer": "North Fen Vodka Co., Duluth, MN", "origin": None, "warning": True},
         "label": {"brand": "ILLEGIBLE", "classType": "Vodka",
@@ -188,7 +188,7 @@ ROWS: list[dict[str, Any]] = [
         "verdict": "fail",
     },
     {
-        "filename": "quarry-house-units.png", "applicant": "Quarry House Cellars", "beverage": "Wine",
+        "filename": "quarry-house-units.jpg", "applicant": "Quarry House Cellars", "beverage": "Wine",
         "app": {"brand": "Quarry House", "classType": "Willamette Valley Pinot Noir",
                   "abv": "13.1%", "net": "750 mL", "producer": "Quarry House Cellars, Dundee, OR", "origin": None, "warning": True},
         "label": {"brand": "Quarry House", "classType": "Willamette Valley Pinot Noir",
@@ -240,7 +240,7 @@ ROWS: list[dict[str, Any]] = [
         "verdict": "fail",
     },
     {
-        "filename": "red-kite-pixel.png", "applicant": "Red Kite Brewing", "beverage": "Malt Beverage",
+        "filename": "red-kite-pixel.jpg", "applicant": "Red Kite Brewing", "beverage": "Malt Beverage",
         "app": {"brand": "Red Kite", "classType": "American Pale Ale",
                   "abv": "5.2%", "net": "16 FL OZ", "producer": "Red Kite Brewing, Fort Collins, CO", "origin": None, "warning": True},
         "label": {"brand": "Red Kite", "classType": "ILLEGIBLE",
@@ -293,7 +293,7 @@ ROWS: list[dict[str, Any]] = [
         "verdict": "fail",
     },
     {
-        "filename": "tallgrass-cropped.png", "applicant": "Tallgrass Union", "beverage": "Malt Beverage",
+        "filename": "tallgrass-cropped.jpg", "applicant": "Tallgrass Union", "beverage": "Malt Beverage",
         "app": {"brand": "Tallgrass Union", "classType": "Saison",
                   "abv": "6.4%", "net": "750 mL", "producer": "Tallgrass Union, Lawrence, KS", "origin": None, "warning": True},
         "label": {"brand": "Tallgrass Union", "classType": "Saison",
@@ -333,7 +333,7 @@ ROWS: list[dict[str, Any]] = [
         "verdict": "match",
     },
     {
-        "filename": "copper-kettle-pass.png", "applicant": "Copper Kettle Imports", "beverage": "Distilled Spirits",
+        "filename": "copper-kettle-pass.jpg", "applicant": "Copper Kettle Imports", "beverage": "Distilled Spirits",
         "app": {"brand": "Copper Kettle", "classType": "Blended Scotch Whisky",
                   "abv": "43%", "net": "1 L", "producer": "Copper Kettle Imports, Boston, MA",
                   "origin": "Product of Scotland", "warning": True},
@@ -360,7 +360,7 @@ ROWS: list[dict[str, Any]] = [
         "verdict": "fail",
     },
     {
-        "filename": "south-shoal-pixel.png", "applicant": "South Shoal Beverage", "beverage": "Malt Beverage",
+        "filename": "south-shoal-pixel.jpg", "applicant": "South Shoal Beverage", "beverage": "Malt Beverage",
         "app": {"brand": "South Shoal", "classType": "Flavored Malt Beverage",
                   "abv": "5.0%", "net": "12 FL OZ", "producer": "South Shoal Beverage, New Bedford, MA", "origin": None, "warning": True},
         "label": {"brand": "South Shoal", "classType": "Flavored Malt Beverage",

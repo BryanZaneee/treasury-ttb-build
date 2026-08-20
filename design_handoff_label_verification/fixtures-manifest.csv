@@ -1,26 +1,26 @@
 id,filename,brand,class_type,alcohol,net_contents,origin,look,treatment,intended_defect
-1,old-tom-pass.png,OLD TOM DISTILLERY,Kentucky Straight Bourbon Whiskey,45% Alc./Vol. (90 Proof),750 mL,,classic,normal,none - clean reference
+1,old-tom-pass.jpg,OLD TOM DISTILLERY,Kentucky Straight Bourbon Whiskey,45% Alc./Vol. (90 Proof),750 mL,,classic,normal,none - clean reference
 2,stones-throw-caps.jpg,STONE'S THROW,Kentucky Straight Bourbon Whiskey,45% Alc./Vol. (90 Proof),750 mL,,industrial,normal,brand name rendered in full caps (only deviation; warning verbatim)
-3,harbor-mist-nowarning.png,HARBOR MIST,India Pale Ale,6.8% Alc./Vol.,12 FL OZ,,botanical,normal,government warning completely absent from the label
+3,harbor-mist-nowarning.jpg,HARBOR MIST,India Pale Ale,6.8% Alc./Vol.,12 FL OZ,,botanical,normal,government warning completely absent from the label
 4,cedar-ridge-titlecase.jpg,CEDAR RIDGE,Napa Valley Cabernet Sauvignon,14.2% Alc./Vol.,750 mL,,crest,normal,warning header reads "Government Warning:" in Title Case instead of ALL CAPS
-5,lark-hollow-reworded.png,LARK HOLLOW,Small Batch Gin,44% Alc./Vol. (88 Proof),750 mL,,minimal,normal,standard warning replaced with non-compliant reworded text
+5,lark-hollow-reworded.jpg,LARK HOLLOW,Small Batch Gin,44% Alc./Vol. (88 Proof),750 mL,,minimal,normal,standard warning replaced with non-compliant reworded text
 6,vinos-del-sol-abv.jpg,VINOS DEL SOL,Rioja Tempranillo,12.5% Alc./Vol.,750 mL,Product of Spain,crest,normal,none - clean reference (import)
 7,iron-gate-blur.jpg,IRON GATE,Straight Rye Whiskey,50% Alc./Vol. (100 Proof),750 mL,,band,blurry,mild focus miss across whole label; all text incl. warning remains readable but soft-edged
 8,saltmarsh-glare.jpg,SALTMARSH,Gose Style Ale,4.5% Alc./Vol.,16 FL OZ,,script,glare,specular glare blows out NET CONTENTS field ("16 FL OZ") only
-9,north-fen-pixel.png,NORTH FEN,Vodka,40% Alc./Vol. (80 Proof),1 L,,slate,pixelated,pixelation/JPEG ringing over BRAND NAME only; illegible
+9,north-fen-pixel.jpg,NORTH FEN,Vodka,40% Alc./Vol. (80 Proof),1 L,,slate,pixelated,pixelation/JPEG ringing over BRAND NAME only; illegible
 10,brasserie-verte-origin.jpg,BRASSERIE VERTE,Belgian Style Tripel,9.2% Alc./Vol.,330 mL,,crest,angled,no country-of-origin statement anywhere on label; 30-45deg off-axis shot with keystoning
-11,quarry-house-units.png,QUARRY HOUSE,Willamette Valley Pinot Noir,13.1% Alc./Vol.,75 cl,,minimal,normal,net contents printed in centiliters (75 cl) instead of mL
+11,quarry-house-units.jpg,QUARRY HOUSE,Willamette Valley Pinot Noir,13.1% Alc./Vol.,75 cl,,minimal,normal,net contents printed in centiliters (75 cl) instead of mL
 12,golden-hour-nonbold.jpg,GOLDEN HOUR,Orange Liqueur,24% Alc./Vol. (48 Proof),500 mL,,script,normal,warning text verbatim but "GOVERNMENT WARNING:" header not bold
 13,ember-line-heavyblur.jpg,EMBER LINE,Single Malt Whiskey,58.4% Alc./Vol. (116.8 Proof),700 mL,,slate,heavyBlur,severe blur; brand readable only in outline, alcohol content and warning unreadable
 14,stillwater-glare.jpg,STILLWATER LANDING,Finger Lakes Dry Riesling,11.5% Alc./Vol.,750 mL,,botanical,glare,specular glare blows out ALCOHOL CONTENT line only
-15,red-kite-pixel.png,RED KITE,American Pale Ale,5.2% Alc./Vol.,16 FL OZ,,industrial,pixelated,pixelation over CLASS/TYPE line ("American Pale Ale") only; illegible
+15,red-kite-pixel.jpg,RED KITE,American Pale Ale,5.2% Alc./Vol.,16 FL OZ,,industrial,pixelated,pixelation over CLASS/TYPE line ("American Pale Ale") only; illegible
 16,casa-luz-origin.jpg,CASA LUZ,100% de Agave Blanco Tequila,40% Alc./Vol. (80 Proof),750 mL,Product of Mexico,band,normal,none - clean reference (import)
 17,fogbank-dark.jpg,FOGBANK,Baltic Porter,8.1% Alc./Vol.,500 mL,,slate,dark,underexposed/muddy photo; warning small print hard to make out against dark background; brand still discernible
 18,pilgrim-oak-damaged.jpg,PILGRIM OAK,Apple Brandy,42% Alc./Vol. (84 Proof),375 mL,,classic,damaged,torn corner / scuff / water stain over PRODUCER/BOTTLER statement only; unreadable
-19,tallgrass-cropped.png,TALLGRASS UNION,Saison,6.4% Alc./Vol.,750 mL,,minimal,cropped,frame cuts off bottom of label; government warning partly or wholly outside frame
+19,tallgrass-cropped.jpg,TALLGRASS UNION,Saison,6.4% Alc./Vol.,750 mL,,minimal,cropped,frame cuts off bottom of label; government warning partly or wholly outside frame
 20,maison-clair-angled.jpg,MAISON CLAIR,Cotes de Provence Rose,12.8% Alc./Vol.,750 mL,Product of France,crest,angled,30-45deg off-axis with keystoning; far edge (net contents) borderline legible
 21,blue-heron-blur.jpg,BLUE HERON,Straight Rye Whiskey,47% Alc./Vol. (94 Proof),750 mL,,band,blurry,mild focus miss across whole label; all text incl. warning remains readable but soft-edged
-22,copper-kettle-pass.png,COPPER KETTLE,Blended Scotch Whisky,43% Alc./Vol. (86 Proof),1 L,Product of Scotland,classic,normal,none - clean reference (import)
+22,copper-kettle-pass.jpg,COPPER KETTLE,Blended Scotch Whisky,43% Alc./Vol. (86 Proof),1 L,Product of Scotland,classic,normal,none - clean reference (import)
 23,wildvine-glare.jpg,WILDVINE,Sonoma Coast Orange Wine,13.4% Alc./Vol.,750 mL,,script,glare,specular glare blows out BRAND NAME ("WILDVINE") only
-24,south-shoal-pixel.png,SOUTH SHOAL,Flavored Malt Beverage,5.0% Alc./Vol.,12 FL OZ,,minimal,pixelated,pixelation over NET CONTENTS field ("12 FL OZ") only; illegible
+24,south-shoal-pixel.jpg,SOUTH SHOAL,Flavored Malt Beverage,5.0% Alc./Vol.,12 FL OZ,,minimal,pixelated,pixelation over NET CONTENTS field ("12 FL OZ") only; illegible
 25,abbey-row-pass.jpg,ABBEY ROW,Belgian Style Dubbel,7.6% Alc./Vol.,330 mL,,botanical,normal,none - clean reference

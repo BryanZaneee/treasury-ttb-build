@@ -119,9 +119,9 @@ def test_a_specimen_that_is_not_a_label_is_invalid_not_fail() -> None:
     """PRD §3.2 extension. An image that is not a label cannot be adjudicated
     field by field: `fail` would tell the reviewer the applicant's label is
     wrong, when the finding is that the wrong file was filed."""
-    fixture = expectations()["old-tom-pass.png"]
+    fixture = expectations()["old-tom-pass.jpg"]
     app = _application(fixture)
-    reading = reader.read("old-tom-pass.png")
+    reading = reader.read("old-tom-pass.jpg")
 
     results, verdict = run("COLA-TEST", app, reading)
     assert verdict == "match" and results, "guard the control case first"

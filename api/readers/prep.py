@@ -19,11 +19,12 @@ from PIL import Image, ImageFilter, ImageOps, ImageStat
 MAX_EDGE = 1024
 JPEG_QUALITY = 85
 
-# Edge-energy below this reads as a soft capture. Calibrated across all 25
-# fixtures: the three blurred ones score 12.4/21.4/32.7, the lowest clean one
-# 37.7. Blur only - glare, pixelation, angle, dark, damage and cropping all land
-# inside the clean range and need the vision reader's own quality call.
-# ponytail: 2.7-point margin, recalibrate if the prep pipeline or MAX_EDGE moves.
+# Edge-energy below this reads as a soft capture. Measured across all 25
+# fixtures: the three blurred ones score 12.4/21.4/32.7, everything else lands
+# in 35.7-62.5. Blur only - glare, pixelation, angle, dark, damage and cropping
+# sit inside that clean range and need the vision reader's own quality call.
+# ponytail: fogbank-dark clears this by 0.7, iron-gate-blur misses by 2.3.
+# Recalibrate if the prep pipeline, MAX_EDGE or the fixture encoding moves.
 SHARP_FLOOR = 35.0
 
 

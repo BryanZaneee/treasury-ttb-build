@@ -1,7 +1,7 @@
 """Validation and storage for client-supplied images (PRD §8).
 
 A filename and a declared content type are both client claims: storing under
-the given name lets `old-tom-pass.png` overwrite a fixture. So the format is
+the given name lets `old-tom-pass.jpg` overwrite a fixture. So the format is
 sniffed from the magic bytes and storage is content-addressed, which the schema
 already allows by separating where an image lives (`specimen`) from what it was
 called (`filename`).

@@ -56,7 +56,7 @@ def test_registry_returns_the_configured_reader() -> None:
         get_reader("gemini")
 
 
-@pytest.mark.parametrize("specimen", ["old-tom-pass.png", "saltmarsh-glare.jpg"])
+@pytest.mark.parametrize("specimen", ["old-tom-pass.jpg", "saltmarsh-glare.jpg"])
 def test_fake_reader_conforms_to_the_reading_schema(specimen: str) -> None:
     """PRD §5.4: the benchmark code path is covered in CI against the fake
     reader, with no network access and no spend."""

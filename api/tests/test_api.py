@@ -48,7 +48,7 @@ def test_create_record_against_a_bundled_specimen() -> None:
                 '{"brand": "Old Tom", "class_type": "Bourbon", "abv": "45%", '
                 '"net": "750 mL"}'
             ),
-            "specimen_key": "old-tom-pass.png",
+            "specimen_key": "old-tom-pass.jpg",
         },
         files={},
     )
@@ -59,7 +59,7 @@ def test_create_record_against_a_bundled_specimen() -> None:
     assert body["result"] is None
 
 
-def _create_record(specimen: str = "old-tom-pass.png") -> str:
+def _create_record(specimen: str = "old-tom-pass.jpg") -> str:
     resp = client.post(
         "/api/records",
         headers=ACCESS,
@@ -122,7 +122,7 @@ def test_verify_unknown_specimen_is_rejected() -> None:
 
 
 def test_verify_clean_fixture_matches() -> None:
-    record_id = _seed_and_get("old-tom-pass.png")
+    record_id = _seed_and_get("old-tom-pass.jpg")
     resp = client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
     assert resp.status_code == 200
     body = resp.json()
@@ -140,7 +140,7 @@ def test_verify_clean_fixture_matches() -> None:
 
 
 def test_verify_defect_fixture_fails_with_a_note() -> None:
-    record_id = _seed_and_get("harbor-mist-nowarning.png")
+    record_id = _seed_and_get("harbor-mist-nowarning.jpg")
     assert client.post(f"/api/records/{record_id}/verify", headers=ACCESS).json()["result"] == "fail"
 
     detail = client.get(f"/api/records/{record_id}").json()
@@ -151,7 +151,7 @@ def test_verify_defect_fixture_fails_with_a_note() -> None:
 
 def test_accepting_a_failed_record_requires_an_override() -> None:
     """PRD §5.1 / acceptance test 8."""
-    record_id = _seed_and_get("harbor-mist-nowarning.png")
+    record_id = _seed_and_get("harbor-mist-nowarning.jpg")
     client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
 
     refused = client.patch(
@@ -180,7 +180,7 @@ def test_accepting_a_failed_record_requires_an_override() -> None:
 
 
 def test_accepting_a_matching_record_needs_no_override() -> None:
-    record_id = _seed_and_get("old-tom-pass.png")
+    record_id = _seed_and_get("old-tom-pass.jpg")
     client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
     resp = client.patch(
         f"/api/records/{record_id}",
@@ -193,7 +193,7 @@ def test_accepting_a_matching_record_needs_no_override() -> None:
 
 def test_a_decided_record_is_not_reopenable() -> None:
     """PRD §12: the applicant files afresh."""
-    record_id = _seed_and_get("old-tom-pass.png")
+    record_id = _seed_and_get("old-tom-pass.jpg")
     client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
     client.patch(
         f"/api/records/{record_id}",
@@ -209,7 +209,7 @@ def test_a_decided_record_is_not_reopenable() -> None:
 
 
 def test_editing_the_application_invalidates_the_verdict() -> None:
-    record_id = _seed_and_get("old-tom-pass.png")
+    record_id = _seed_and_get("old-tom-pass.jpg")
     client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
     assert client.get(f"/api/records/{record_id}").json()["field_results"]
 
@@ -240,7 +240,7 @@ def test_editing_the_application_invalidates_the_verdict() -> None:
 
 def test_verification_appends_audit_rows_without_overwriting() -> None:
     """PRD §12 / acceptance test 18: re-verification appends, never overwrites."""
-    record_id = _seed_and_get("old-tom-pass.png")
+    record_id = _seed_and_get("old-tom-pass.jpg")
     client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
     client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
 
@@ -260,7 +260,7 @@ def test_verification_appends_audit_rows_without_overwriting() -> None:
 SAMPLE_CSV = (
     b"filename,brand_name,class_type,alcohol_content,net_contents,"
     b"producer,country_of_origin,government_warning,applicant\n"
-    b"old-tom-pass.png,Old Tom Distillery,Kentucky Straight Bourbon Whiskey,45%,"
+    b"old-tom-pass.jpg,Old Tom Distillery,Kentucky Straight Bourbon Whiskey,45%,"
     b"750 mL,\"Old Tom Distillery, Bardstown, KY\",,true,Old Tom Distillery LLC\n"
 )
 
@@ -281,7 +281,7 @@ def test_stage_batch_pairs_an_image_and_reports_an_unused_one() -> None:
         headers=ACCESS,
         files=[
             ("applications_csv", ("apps.csv", SAMPLE_CSV, "text/csv")),
-            ("images", ("old-tom-pass.png", b"\x89PNG fake", "image/png")),
+            ("images", ("old-tom-pass.jpg", b"\x89PNG fake", "image/png")),
             ("images", ("nobody-claims-me.png", b"\x89PNG fake", "image/png")),
         ],
     )
@@ -290,7 +290,7 @@ def test_stage_batch_pairs_an_image_and_reports_an_unused_one() -> None:
     assert body["summary"]["matched"] == 1
     assert body["summary"]["unused_images"] == ["nobody-claims-me.png"]
     assert body["blocks_commit"] is False
-    assert body["rows"][0]["image"] == "old-tom-pass.png"
+    assert body["rows"][0]["image"] == "old-tom-pass.jpg"
 
 
 def test_stage_batch_row_with_no_image_files_but_does_not_block() -> None:
@@ -425,7 +425,7 @@ def test_export_import_export_is_byte_identical() -> None:
 
 def test_import_restores_verdicts_and_field_results() -> None:
     seed.seed_store()
-    record_id = _seed_and_get("old-tom-pass.png")
+    record_id = _seed_and_get("old-tom-pass.jpg")
     client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
     exported = _export()
 
@@ -523,7 +523,7 @@ def test_verification_falls_back_to_ocr_when_the_vision_reader_fails(
     import readers
     from routers import records as records_router
 
-    record_id = _seed_and_get("old-tom-pass.png")
+    record_id = _seed_and_get("old-tom-pass.jpg")
     monkeypatch.setattr(config.settings, "reader_provider", "openai")
 
     real = readers.get_reader
@@ -545,7 +545,7 @@ def test_verification_falls_back_to_ocr_when_the_vision_reader_fails(
 
 
 def test_verification_records_the_configured_reader_when_it_works() -> None:
-    record_id = _seed_and_get("old-tom-pass.png")
+    record_id = _seed_and_get("old-tom-pass.jpg")
     body = client.post(f"/api/records/{record_id}/verify", headers=ACCESS).json()
     assert body["reader_provider"] == "fake"
     assert "fake reader" in body["engine"]
@@ -559,12 +559,12 @@ def test_specimen_catalogue_lists_the_named_samples() -> None:
     assert len(body) == 25
     named = [s for s in body if s["title"]]
     assert len(named) == 12, "the named samples lead the catalogue"
-    assert named[0]["filename"] == "old-tom-pass.png"
+    assert named[0]["filename"] == "old-tom-pass.jpg"
     assert named[0]["title"] == "Clean match"
 
 
 def test_specimen_prefill_returns_the_application_as_filed() -> None:
-    resp = client.get("/api/specimens/old-tom-pass.png")
+    resp = client.get("/api/specimens/old-tom-pass.jpg")
     assert resp.status_code == 200
     body = resp.json()
     assert body["applicant"] == "Old Tom Distillery LLC"
@@ -658,9 +658,9 @@ def test_two_uploads_sharing_a_name_do_not_overwrite_each_other() -> None:
 
 def test_an_upload_cannot_overwrite_a_bundled_fixture() -> None:
     seed.seed_store()
-    original = (db.data_dir() / "images" / "old-tom-pass.png").read_bytes()
-    _upload("old-tom-pass.png", _png("blue"))
-    assert (db.data_dir() / "images" / "old-tom-pass.png").read_bytes() == original
+    original = (db.data_dir() / "images" / "old-tom-pass.jpg").read_bytes()
+    _upload("old-tom-pass.jpg", _png("blue"))
+    assert (db.data_dir() / "images" / "old-tom-pass.jpg").read_bytes() == original
 
 
 def test_a_non_image_upload_is_refused() -> None:
@@ -681,7 +681,7 @@ def test_sending_both_an_image_and_a_specimen_key_is_refused() -> None:
             "application": (
                 '{"brand": "Old Tom", "class_type": "Bourbon", "abv": "45%", "net": "750 mL"}'
             ),
-            "specimen_key": "old-tom-pass.png",
+            "specimen_key": "old-tom-pass.jpg",
         },
         files={"image": ("label.png", _png(), "image/png")},
     )
@@ -714,11 +714,11 @@ def test_an_uploaded_label_is_what_verify_resolves() -> None:
     """
     from pathlib import Path
 
-    body = _upload("old-tom-pass.png", _png("blue")).json()  # type: ignore[attr-defined]
+    body = _upload("old-tom-pass.jpg", _png("blue")).json()  # type: ignore[attr-defined]
     stored = db.data_dir() / "images" / body["specimen"]
     assert stored.exists(), "verify resolves this path first"
     assert not (Path("fixtures") / body["specimen"]).exists(), "and cannot fall back to a fixture"
-    assert body["specimen"] != "old-tom-pass.png"
+    assert body["specimen"] != "old-tom-pass.jpg"
 
 
 def test_assigning_an_image_over_the_api_unblocks_a_stuck_batch() -> None:
