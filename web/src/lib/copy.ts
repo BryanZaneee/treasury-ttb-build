@@ -11,6 +11,48 @@ export const FIELD_LABEL: Record<string, string> = {
   warning: 'Government warning',
 }
 
+/* Past tense and plural-agnostic, because it is read after a count:
+   "7 needs review" is not a sentence. */
+const VERDICT_WORD: Record<string, string> = {
+  match: 'matched',
+  review: 'to review',
+  fail: 'failed',
+  invalid: 'not a label',
+}
+
+/**
+ * A run's verdict mix as a sentence — "2 failed and 1 to review".
+ *
+ * Intl.ListFormat rather than a join: it puts in the comma and the "and" that
+ * make it read as prose, where a bulleted "2 fail · 1 review" reads as debug
+ * output of the verdict enum.
+ */
+const LIST = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' })
+
+export function verdictSummary(verdicts: Record<string, number>): string {
+  return LIST.format(
+    Object.keys(VERDICT_WORD)
+      .filter((v) => verdicts[v])
+      .map((v) => `${verdicts[v]} ${VERDICT_WORD[v]}`),
+  )
+}
+
+/**
+ * What the staged batch's per-row image button offers, per pairing bucket
+ * (PRD §5.5).
+ *
+ * Keyed on the bucket rather than on whether the row holds an image: an
+ * ambiguous row has no image *precisely because* more than one matched, so
+ * "Attach" - which image presence alone would pick - names the opposite of the
+ * problem. The reviewer is choosing between candidates, not supplying one.
+ */
+export const PICK_LABEL: Record<string, string> = {
+  matched: 'Change',
+  matched_fuzzy: 'Change',
+  missing_image: 'Attach',
+  ambiguous: 'Select',
+}
+
 /** Capture-quality vocabulary (PRD §5.2) in reviewer-facing words. */
 export const QUALITY_LABEL: Record<string, string> = {
   normal: 'Clean capture',

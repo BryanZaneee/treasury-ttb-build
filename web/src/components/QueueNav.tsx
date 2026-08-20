@@ -13,6 +13,11 @@ import { matchesQuery } from '../lib/search'
  */
 
 function useQueuePlace(currentId: string, filter: string, query: string) {
+  // Deliberately not invalidated by a decision - see RecordDetail's refresh().
+  // Deciding a record drops it out of the `attention` filter (`decision IS
+  // NULL`), so refetching this list mid-review would delete the reviewer's own
+  // position from under them and dead-end both Previous and Next. The inbox
+  // refetches on mount, so it is still truthful when they go back to it.
   const records = useQuery({
     queryKey: ['records', filter],
     queryFn: () => api<RecordsPage>(`/records${filter ? `?filter=${filter}` : ''}`),

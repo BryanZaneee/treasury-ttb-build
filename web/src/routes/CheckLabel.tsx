@@ -32,7 +32,6 @@ const DRAFT_IMAGE_LIMIT = 2_000_000
 
 type Draft = {
   application: typeof BLANK
-  applicant: string
   sample: string
   filename: string
   preview: string
@@ -96,7 +95,6 @@ export function CheckLabel() {
 
   const [saved] = useState(readDraft)
   const [application, setApplication] = useState(() => saved?.application ?? { ...BLANK })
-  const [applicant, setApplicant] = useState(() => saved?.applicant ?? '')
   const [file, setFile] = useState<File | null>(() =>
     saved?.preview && saved.filename ? fileFromDataUrl(saved.preview, saved.filename) : null,
   )
@@ -122,9 +120,7 @@ export function CheckLabel() {
 
   const prefill = useMutation({
     mutationFn: (filename: string) =>
-      api<{ app: Record<string, string>; applicant: string }>(
-        `/specimens/${encodeURIComponent(filename)}`,
-      ),
+      api<{ app: Record<string, string> }>(`/specimens/${encodeURIComponent(filename)}`),
     onSuccess: (data) => {
       setApplication({
         brand: data.app.brand ?? '',
@@ -135,7 +131,6 @@ export function CheckLabel() {
         origin: data.app.origin ?? '',
         warning: Boolean(data.app.warning),
       })
-      setApplicant(data.applicant)
     },
   })
 
@@ -272,7 +267,6 @@ export function CheckLabel() {
   const submit = useMutation({
     mutationFn: async () => {
       const form = new FormData()
-      form.set('applicant', applicant || 'Unnamed applicant')
       form.set('beverage', application.class_type || 'Unclassified')
       form.set(
         'application',
@@ -304,8 +298,7 @@ export function CheckLabel() {
       // job, and being thrown into the record after each one interrupts it.
       // The toast carries the verdict and a way in.
       setApplication({ ...BLANK })
-      setApplicant('')
-      clearImage()
+        clearImage()
       localStorage.removeItem(DRAFT_KEY)
     },
     onError: (e) => setError(String(e)),
@@ -319,8 +312,8 @@ export function CheckLabel() {
   // Written on every change rather than on unmount: a reviewer who closes the
   // tab mid-form has not unmounted anything.
   useEffect(() => {
-    writeDraft({ application, applicant, sample, filename: file?.name ?? '', preview })
-  }, [application, applicant, sample, file, preview])
+    writeDraft({ application, sample, filename: file?.name ?? '', preview })
+  }, [application, sample, file, preview])
 
   const shown = file ? preview : sample ? imageUrl(sample) : ''
 
@@ -352,15 +345,6 @@ export function CheckLabel() {
         <div className="card card-pad">
           <div className="card-title">Application data as filed</div>
           <div style={{ marginTop: 12 }}>
-            <label className="field">
-              <span className="field-label">Applicant</span>
-              <input
-                type="text"
-                value={applicant}
-                onChange={(e) => setApplicant(e.target.value)}
-                placeholder="Harbor Mist Brewing Co."
-              />
-            </label>
             <div className="grid-2">
               {(
                 [
@@ -464,7 +448,7 @@ export function CheckLabel() {
                   <option value="">No sample selected</option>
                   {named.map((s) => (
                     <option key={s.filename} value={s.filename}>
-                      {s.title} (expected: {PILL_TEXT[kindOf(s.expected_verdict)]})
+                      {s.brand} — {s.title}
                     </option>
                   ))}
                 </select>

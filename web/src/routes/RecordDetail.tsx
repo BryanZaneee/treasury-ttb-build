@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api, imageUrl } from '../api/client'
@@ -10,6 +10,7 @@ import { REVIEWER } from '../lib/session'
 import { QueueNav } from '../components/QueueNav'
 import { useEscape } from '../lib/dialog'
 import { useToast } from '../lib/toast'
+import { readPanel, writePanel } from '../lib/review'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
 /**
@@ -74,6 +75,10 @@ function Determination() {
   const backToInbox = `/inbox${params.toString() ? `?${params}` : ''}`
   const client = useQueryClient()
   const [zoomed, setZoomed] = useState(false)
+  // S10: minimised on this device, for this record. `key={id}` on the wrapper
+  // remounts per record, so the initialiser runs against the right id.
+  const [minimised, setMinimised] = useState(() => readPanel(id))
+  useEffect(() => writePanel({ recordId: id, minimised }), [id, minimised])
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<null | 'accepted' | 'returned'>(null)
@@ -96,9 +101,16 @@ function Determination() {
     staleTime: 60_000,
   })
 
+  // Narrow on purpose. Invalidating the whole ['records'] prefix also refetches
+  // the queue QueueNav is stepping through, and deciding a record drops it out
+  // of the default `attention` filter (`decision IS NULL`) - so a broad
+  // invalidation deleted the reviewer's own position mid-review and left both
+  // Previous and Next dead. The inbox refetches on mount, so it is still
+  // truthful on the way back; only the masthead badge, which is cached for 30s,
+  // has to be told.
   const refresh = () => {
     client.invalidateQueries({ queryKey: ['record', id] })
-    client.invalidateQueries({ queryKey: ['records'] })
+    client.invalidateQueries({ queryKey: ['records', 'counts'] })
   }
 
   const verify = useMutation({
@@ -176,6 +188,29 @@ function Determination() {
   // store with an empty list of fields to explain why.
   const needsOverride = data.result !== 'match'
   const closed = data.decision != null
+
+  /**
+   * Accept, challenging it only when the challenge is worth making.
+   *
+   * PRD §5.1 records an override for anything short of a `match`, and that is
+   * unchanged - it is enforced server side and it is what S8 exists to produce.
+   * What is narrower is the interruption: a `review` verdict is a difference in
+   * presentation over content that agrees, which is the ordinary thing the
+   * reviewer is here to wave through. Only a failed check or a specimen that is
+   * not a label earns a confirm step.
+   */
+  const acceptNow = () => {
+    if (contestedAccept(data.result)) {
+      setConfirming('accepted')
+      return
+    }
+    decide.mutate({
+      decision: 'accepted',
+      override: needsOverride,
+      reviewer_name: REVIEWER.name,
+      reason: null,
+    })
+  }
   const busy = save.isPending || verify.isPending
   const results = new Map(data.field_results.map((f) => [f.field_key, f]))
 
@@ -321,7 +356,33 @@ function Determination() {
         <div className="card">
           {header}
 
-          {data.result === 'invalid' && !draft ? (
+          {/* PRD §6.1 puts minimise on the decision bar, but a decided record
+              renders no decision bar - and collapsing one of those is exactly
+              the case S10 describes. It sits above the comparison it collapses,
+              which is where it is true of every record. */}
+          <div className="row" style={{ padding: '10px 14px 0', justifyContent: 'flex-end' }}>
+            <button
+              className="btn btn-quiet btn-sm"
+              aria-expanded={!minimised}
+              disabled={Boolean(draft)}
+              onClick={() => setMinimised((v) => !v)}
+            >
+              {minimised ? 'Expand' : 'Minimise'}
+            </button>
+          </div>
+
+          {minimised && !draft ? (
+            /* S10: the comparison collapses, the verdict header above stays -
+               a minimised panel a reviewer cannot identify is not one they
+               come back to. */
+            <div className="empty">
+              <div className="empty-title">Comparison minimised</div>
+              <div className="empty-hint">
+                {data.app_brand || data.filename} · {data.id}. Expand to read the field-by-field
+                comparison again.
+              </div>
+            </div>
+          ) : data.result === 'invalid' && !draft ? (
             /* No fields were adjudicated (PRD §3.2 ext), so the comparison
                table would be four column headers over nothing. */
             <div className="empty">
@@ -337,21 +398,13 @@ function Determination() {
 
           <div className="result-foot">
             {closed ? (
-              <div
-                style={{
-                  fontSize: 13.5,
-                  color: 'var(--ink-3)',
-                  padding: '10px 14px',
-                  background: '#fff',
-                  border: '1px solid #d9e0e8',
-                  borderRadius: 3,
-                }}
-              >
+              /* Who decided it, and why if they said. The override flag and the
+                 timestamp are recorded and exported, but a reviewer reading a
+                 closed record does not need the machinery restated at them. */
+              <div className="decided-note">
                 {data.decision === 'accepted' ? 'Accepted' : 'Returned to applicant'} by{' '}
                 {data.decided_by || 'unnamed reviewer'}
-                {data.override ? ' · override recorded' : ''} ·{' '}
-                <span className="mono">{data.decided_at?.slice(0, 16).replace('T', ' ')}</span>
-                {data.note ? ` · ${data.note}` : ''}
+                {data.note && <div className="decided-reason">{data.note}</div>}
               </div>
             ) : draft ? (
               <div className="row">
@@ -370,7 +423,12 @@ function Determination() {
                  determination to accept, so verification takes the front. */
               <div className="row">
                 {data.verified ? (
-                  <button className="btn btn-accept" onClick={() => setConfirming('accepted')}>
+                  <button
+                    className="btn btn-accept"
+                    disabled={decide.isPending}
+                    onClick={() => acceptNow()}
+                  >
+                    {decide.isPending && <span className="spinner" />}
                     Accept
                   </button>
                 ) : (
@@ -441,7 +499,7 @@ function Determination() {
                 )}
                 <p className="card-note">
                   This determination will be recorded against <strong>{REVIEWER.name}</strong>,
-                  with the timestamp and, where it applies, the override flag.
+                  with the timestamp.
                 </p>
                 <div className="row">
                   <button

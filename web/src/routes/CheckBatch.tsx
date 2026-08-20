@@ -3,25 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, apiUrl, imageUrl } from '../api/client'
 import type { Job, StagedBatch, StagedRow } from '../api/client'
+import { PICK_LABEL, verdictSummary } from '../lib/copy'
 import { useEscape } from '../lib/dialog'
+import { waitForJob } from '../lib/job'
 import { useToast } from '../lib/toast'
 
-/** "1 matched · 7 to review · 17 failed", in the order a reviewer works a
-    queue. Past participles rather than the pill words, which do not take a
-    count: "7 needs review" is not a sentence. */
-const VERDICT_WORD: Record<string, string> = {
-  match: 'matched',
-  review: 'to review',
-  fail: 'failed',
-  invalid: 'not a label',
-}
-
-function verdictSummary(verdicts: Record<string, number>): string {
-  return Object.keys(VERDICT_WORD)
-    .filter((v) => verdicts[v])
-    .map((v) => `${verdicts[v]} ${VERDICT_WORD[v]}`)
-    .join(' · ')
-}
 
 const BUCKET: Record<string, { label: string; pill: string }> = {
   matched: { label: 'Matched', pill: 'pill-match' },
@@ -207,13 +193,7 @@ export function CheckBatch() {
           verify_now: verify,
         },
       })
-      let state = started
-      while (state.state === 'running') {
-        setJob(state)
-        await new Promise((r) => setTimeout(r, 350))
-        state = await api<Job>(`/jobs/${started.id}`)
-      }
-      return state
+      return waitForJob(started, setJob)
     },
     onSuccess: async (finished) => {
       setJob(finished)
@@ -221,16 +201,22 @@ export function CheckBatch() {
       client.invalidateQueries({ queryKey: ['records'] })
       reportJob(finished)
       // The filed rows are gone from the staged document; re-read what is left
-      // rather than guessing at it client side.
-      const left = await api<StagedBatch>(`/batches/${batchId}`)
-      if (left.rows.length === 0) forget()
-      else staged(left)
+      // rather than guessing at it client side. A fully consumed batch answers
+      // 404, which is the same outcome as an empty one - not an error to raise
+      // after the rows have already filed.
+      try {
+        const left = await api<StagedBatch>(`/batches/${batchId}`)
+        if (left.rows.length === 0) forget()
+        else staged(left)
+      } catch {
+        forget()
+      }
     },
     onError: (e) => setError(String(e)),
   })
 
-  /** What the batch did, once it has done it. Sticky, because it carries the
-      way into the queue it just filled. */
+  /** What the batch did, once it has done it. It carries the way into the queue
+      it just filled, so it is the one toast worth reading before it goes. */
   const reportJob = (job: Job) => {
     const verdicts = verdictSummary(job.verdicts)
     toast({
@@ -266,12 +252,12 @@ export function CheckBatch() {
   }
 
   /** File these rows, first warning about the ones that cannot be filed as they
-      stand: a row with no label can never be verified, and an ambiguous row has
-      no single image to file. Both are dropped rather than quietly filed. */
+      stand. PRD §5.5 blocks commit on `ambiguous` alone - two images normalise
+      to the same stem, so there is no single label to file. A `missing_image`
+      row is not an error: it files and is editable, it just cannot be verified
+      (acceptance test 9 - "1 files as image-missing, no row lost"). */
   const unresolved = (rows: number[]) =>
-    (batch?.rows ?? []).filter(
-      (r) => rows.includes(r.row) && (!r.image || r.bucket === 'ambiguous'),
-    )
+    (batch?.rows ?? []).filter((r) => rows.includes(r.row) && r.bucket === 'ambiguous')
 
   const fileRows = (rows: number[], verify: boolean) => {
     if (!batch || rows.length === 0) return
@@ -282,9 +268,7 @@ export function CheckBatch() {
     commit.mutate({ rows, verify })
   }
 
-  const committable = batch
-    ? batch.rows.filter((r) => r.image && r.bucket !== 'ambiguous').length
-    : 0
+  const committable = batch ? batch.rows.filter((r) => r.bucket !== 'ambiguous').length : 0
   const rowNumbers = batch?.rows.map((r) => r.row) ?? []
   const allSelected = rowNumbers.length > 0 && rowNumbers.every((n) => selected.has(n))
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(rowNumbers))
@@ -404,8 +388,42 @@ export function CheckBatch() {
                       !
                     </div>
                     <div className="banner-text">
-                      Some rows still need a label picked for them. See Pairing below. You can
-                      file the batch anyway; rows left unresolved are dropped from the upload.
+                      More than one image matches these rows, so there is no single label to
+                      file. See Pairing below. Rows with no image at all are not affected -
+                      they file and can be verified once a label is added.
+                    </div>
+                  </div>
+                )}
+                {/* A fuzzy pairing is the one bucket that files silently while
+                    still being a guess, so it says so once at the top rather
+                    than only as an amber pill partway down a 25-row table. */}
+                {batch.summary.matched_fuzzy > 0 && (
+                  <div className="banner" style={{ marginTop: 12, marginBottom: 0 }}>
+                    <div className="banner-mark" aria-hidden="true">
+                      i
+                    </div>
+                    <div className="banner-text">
+                      {batch.summary.matched_fuzzy} row
+                      {batch.summary.matched_fuzzy === 1 ? ' was' : 's were'} paired on the
+                      filename alone, ignoring the extension. Check the image is the right one
+                      and press Confirm, or pick another.
+                    </div>
+                  </div>
+                )}
+                {/* PRD §5.5's fifth bucket. Images nothing claimed are listed
+                    here "so nothing vanishes silently" - the staged table has a
+                    row per application, so an unclaimed image has nowhere else
+                    to appear. */}
+                {batch.summary.unused_images.length > 0 && (
+                  <div className="banner" style={{ marginTop: 12, marginBottom: 0 }}>
+                    <div className="banner-mark" aria-hidden="true">
+                      i
+                    </div>
+                    <div className="banner-text">
+                      {batch.summary.unused_images.length} uploaded image
+                      {batch.summary.unused_images.length === 1 ? '' : 's'} no row claims:{' '}
+                      <span className="mono">{batch.summary.unused_images.join(', ')}</span>. Pick
+                      one from a row&rsquo;s Pairing cell to use it.
                     </div>
                   </div>
                 )}
@@ -479,7 +497,7 @@ export function CheckBatch() {
                           <th>Applicant</th>
                           <th>Filename</th>
                           <th>Pairing</th>
-                          <th>Image</th>
+                          <th className="staged-actions">Image</th>
                           <th />
                         </tr>
                       )}
@@ -495,6 +513,7 @@ export function CheckBatch() {
                           onSelect={() => toggleOne(r.row)}
                           onPreview={() => r.image && setPreview(r.image)}
                           onPick={() => setPicking(r)}
+                          onConfirm={() => r.image && assign.mutate({ row: r.row, image: r.image })}
                           onUpload={(file) => uploadRow.mutate({ row: r.row, file })}
                           onDrop={() => dropRows.mutate([r.row])}
                         />
@@ -647,7 +666,7 @@ export function CheckBatch() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="dialog-head">
-              <h2 id="drop-title">Some rows are unresolved</h2>
+              <h2 id="drop-title">Some rows match more than one image</h2>
             </div>
             <div className="dialog-body">
               <div className="banner">
@@ -655,15 +674,16 @@ export function CheckBatch() {
                   !
                 </div>
                 <div className="banner-text">
-                  These rows will be <strong>dropped, not filed</strong>. Pick a label for them
-                  first if you want to keep them.
+                  Two or more uploaded images normalise to the same filename, so there is no
+                  single label to file. These rows will be <strong>dropped, not filed</strong>.
+                  Pick a label for them first if you want to keep them.
                 </div>
               </div>
               {unresolved(dropWarn.rows).map((r) => (
                 <div className="staged-drop-row" key={r.row}>
                   <span className="num">{batch.rows.indexOf(r) + 1}</span>
                   <span>{r.applicant || r.brand || 'No applicant'}</span>
-                  <span>{r.bucket === 'ambiguous' ? 'More than one match' : 'No label'}</span>
+                  <span>More than one match</span>
                 </div>
               ))}
             </div>
@@ -676,30 +696,16 @@ export function CheckBatch() {
                   const keep = dropWarn.rows.filter((n) => !drop.includes(n))
                   const verify = dropWarn.verify
                   setDropWarn(null)
-                  dropRows.mutateAsync(drop).then(() => {
-                    if (keep.length > 0) commit.mutate({ rows: keep, verify })
-                  })
+                  dropRows
+                    .mutateAsync(drop)
+                    .then(() => {
+                      if (keep.length > 0) commit.mutate({ rows: keep, verify })
+                    })
+                    .catch((e) => setError(String(e)))
                 }}
               >
                 Drop them and file the rest
               </button>
-              {/* PRD §5.5 files a row with no label - it just cannot be
-                  verified. Dropping is the default because a record nobody can
-                  ever verify is usually a mistake, not the intent. An ambiguous
-                  row has no single image to file, so this is not offered. */}
-              {unresolved(dropWarn.rows).every((r) => r.bucket !== 'ambiguous') && (
-                <button
-                  className="btn btn-quiet"
-                  disabled={commit.isPending}
-                  onClick={() => {
-                    const { rows, verify } = dropWarn
-                    setDropWarn(null)
-                    commit.mutate({ rows, verify })
-                  }}
-                >
-                  File them without a label
-                </button>
-              )}
               <button className="btn btn-quiet push" onClick={() => setDropWarn(null)}>
                 Cancel
               </button>
@@ -719,6 +725,7 @@ function StagedTableRow({
   onSelect,
   onPreview,
   onPick,
+  onConfirm,
   onUpload,
   onDrop,
 }: {
@@ -732,6 +739,7 @@ function StagedTableRow({
   onSelect: () => void
   onPreview: () => void
   onPick: () => void
+  onConfirm: () => void
   onUpload: (file: File) => void
   onDrop: () => void
 }) {
@@ -791,10 +799,22 @@ function StagedTableRow({
           </div>
         )}
       </td>
-      <td>
-        <button className="btn btn-quiet btn-sm" disabled={busy} onClick={onPick}>
-          {row.image ? 'Change' : 'Attach'}
-        </button>
+      <td className="staged-actions">
+        <div className="row">
+          {/* PRD §5.5 flags a fuzzy pairing "for visual confirmation before
+              commit", and until now the only answer the preview offered was to
+              change it. Confirming re-sends the image the row already holds:
+              batching.assign treats any human assignment as `matched`, and
+              re-asserting a row's own image is idempotent. */}
+          {row.bucket === 'matched_fuzzy' && (
+            <button className="btn btn-quiet btn-sm" disabled={busy} onClick={onConfirm}>
+              Confirm
+            </button>
+          )}
+          <button className="btn btn-quiet btn-sm" disabled={busy} onClick={onPick}>
+            {PICK_LABEL[row.bucket] ?? (row.image ? 'Change' : 'Attach')}
+          </button>
+        </div>
       </td>
       <td>
         <button

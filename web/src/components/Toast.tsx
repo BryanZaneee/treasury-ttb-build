@@ -12,7 +12,7 @@ import type { Toast } from '../lib/toast'
  * has no reason to be looking at the bottom-right of the screen (PRD §8).
  */
 
-const TOAST_MS = 5000
+const TOAST_MS = 12_000
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])

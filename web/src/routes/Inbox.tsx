@@ -1,18 +1,18 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, freshUrl, imageUrl } from '../api/client'
-import type { RecordRow, RecordsPage, FieldResult, RecordDetail } from '../api/client'
+import type { Job, RecordRow, RecordsPage, FieldResult, RecordDetail } from '../api/client'
 import { Pill } from '../components/Pill'
-import { DOT_COLOR, kindOf } from '../lib/verdict'
-import { FIELD_LABEL, QUALITY_LABEL, fieldValues } from '../lib/copy'
+import { DOT_COLOR, contestedAccept, kindOf } from '../lib/verdict'
+import { FIELD_LABEL, QUALITY_LABEL, fieldValues, verdictSummary } from '../lib/copy'
 import { matchesQuery } from '../lib/search'
 import { BulkDecisionDialog } from '../components/BulkDecisionDialog'
 import { useEscape } from '../lib/dialog'
 import { useToast } from '../lib/toast'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 import { REVIEWER } from '../lib/session'
-import { runJob } from '../lib/job'
+import { waitForJob } from '../lib/job'
 
 const FILTERS = [
   { key: 'attention', label: 'Needs attention' },
@@ -22,6 +22,14 @@ const FILTERS = [
   { key: 'closed', label: 'Closed' },
   { key: '', label: 'All' },
 ] as const
+
+/** What a run produced, as a sentence. */
+function verdictReport(job: Job): string {
+  const verdicts = verdictSummary(job.verdicts)
+  if (job.failed === 0) return verdicts
+  const unread = `${job.failed} could not be read`
+  return verdicts ? `${verdicts}. ${unread}.` : `${unread}.`
+}
 
 export function Inbox() {
   // Seeded from the URL so "Back to review inbox" returns to the queue the
@@ -34,7 +42,11 @@ export function Inbox() {
   )
   const [query, setQueryState] = useState(() => entry.get('q') ?? '')
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [busy, setBusy] = useState<string | null>(null)
+  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set())
+  // The running job, polled. Without it the reviewer watches a single spinner
+  // on a button while nothing else on the page moves for a minute.
+  const [job, setJob] = useState<Job | null>(null)
+  const seen = useRef(0)
   const [exporting, setExporting] = useState(false)
   const [verifyingAll, setVerifyingAll] = useState(false)
   // Selection is scoped to what the reviewer can currently see. Changing the
@@ -60,10 +72,6 @@ export function Inbox() {
     staleTime: 60_000,
   })
 
-  const all = useQuery({
-    queryKey: ['records', ''],
-    queryFn: () => api<RecordsPage>('/records'),
-  })
   const view = useQuery({
     queryKey: ['records', filter],
     queryFn: () => api<RecordsPage>(`/records${filter ? `?filter=${filter}` : ''}`),
@@ -73,50 +81,110 @@ export function Inbox() {
 
   const verify = useMutation({
     mutationFn: (id: string) => api<RecordRow>(`/records/${id}/verify`, { method: 'POST' }),
-    onMutate: (id: string) => setBusy(id),
+    onMutate: (id: string) => setBusy((prev) => new Set(prev).add(id)),
     onSuccess: (record) => {
       if (readByFallback(record, health.data?.provider)) {
         toast({ kind: 'warn', title: FALLBACK_TITLE, body: FALLBACK_BODY })
       }
     },
     onError: (e) => toast({ kind: 'error', title: 'Verification failed', body: String(e) }),
-    onSettled: () => {
-      setBusy(null)
+    onSettled: (_record, _error, id) => {
+      setBusy((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
       invalidate()
     },
   })
 
+  /**
+   * Start a job and follow it, so every row it covers says so while it waits.
+   *
+   * `targets` are marked busy before the request is even sent, rather than
+   * waiting for the job to report them: POST /jobs answers before the worker
+   * thread has filled in `record_ids`, so reading them off the job leaves the
+   * first poll interval with nothing marked - and a cached reading can finish
+   * the whole run inside it. The job's events then release rows one at a time
+   * as each verdict lands.
+   */
+  const followJob = async (body: Record<string, unknown>, targets: string[]) => {
+    seen.current = 0
+    setBusy((prev) => new Set([...prev, ...targets]))
+    const release = (ids: Iterable<string>) =>
+      setBusy((prev) => {
+        const next = new Set(prev)
+        for (const id of ids) next.delete(id)
+        return next
+      })
+    try {
+      const started = await api<Job>('/jobs', { method: 'POST', body })
+      return await waitForJob(started, (tick) => {
+        setJob(tick)
+        const done = tick.events.flatMap((e) => (e.record_id ? [e.record_id] : []))
+        // Refetch on progress, not on every 350ms poll: this is what turns a
+        // row from "Verifying…" into its verdict while the run is still going.
+        if (done.length !== seen.current) {
+          seen.current = done.length
+          release(done)
+          invalidate()
+        }
+      })
+    } finally {
+      setJob(null)
+      release(targets)
+    }
+  }
+
   const verifyAll = useMutation({
-    mutationFn: () => runJob({ scope: 'pending', verify_now: true }),
+    // The rows on screen that the job will pick up. The server derives its own
+    // set, but only rows the reviewer can actually see need to say they are
+    // working - on a tab that lists no unverified records there is nothing to
+    // mark, which is the right answer rather than a missing one.
+    mutationFn: () =>
+      followJob(
+        { scope: 'pending', verify_now: true },
+        (view.data?.records ?? []).filter((r) => !r.verified).map((r) => r.id),
+      ),
     onSuccess: async (job) => {
       invalidate()
-      // One notice for the whole run, not one per record.
-      const page = await api<RecordsPage>('/records')
-      const degraded = page.records.filter((r) =>
-        readByFallback(r, health.data?.provider),
-      ).length
-      if (degraded > 0) {
-        toast({
-          kind: 'warn',
-          title: FALLBACK_TITLE,
-          body: `${degraded} of ${job.completed} labels were read by local OCR because the vision reader was unavailable. ${FALLBACK_BODY}`,
-        })
+      toast({
+        kind: job.failed > 0 ? 'warn' : 'success',
+        title: `Verified ${job.completed} of ${job.total}`,
+        body: verdictReport(job),
+      })
+      // One notice for the whole run, not one per record. The run itself has
+      // already succeeded, so a failure to fetch the follow-up notice must not
+      // reject out of onSuccess as an unhandled rejection.
+      try {
+        const page = await api<RecordsPage>('/records')
+        const degraded = page.records.filter((r) =>
+          readByFallback(r, health.data?.provider),
+        ).length
+        if (degraded > 0) {
+          toast({
+            kind: 'warn',
+            title: FALLBACK_TITLE,
+            body: `${degraded} of ${job.completed} labels were read by local OCR because the vision reader was unavailable. ${FALLBACK_BODY}`,
+          })
+        }
+      } catch {
+        /* the verdicts landed; the advisory is best-effort */
       }
     },
     onError: (e) => toast({ kind: 'error', title: 'Verification failed', body: String(e) }),
   })
 
   const bulkVerify = useMutation({
-    mutationFn: (ids: string[]) => runJob({ scope: 'ids', record_ids: ids, verify_now: true }),
+    mutationFn: (ids: string[]) =>
+      followJob({ scope: 'ids', record_ids: ids, verify_now: true }, ids),
     onSuccess: (job) => {
       clearSelection()
       invalidate()
       toast({
         kind: job.completed < job.total ? 'warn' : 'success',
         title: `Verified ${job.completed} of ${job.total}`,
-        body: Object.entries(job.verdicts)
-          .map(([k, v]) => `${v} ${k}`)
-          .join(' · '),
+        body: verdictReport(job),
       })
     },
     onError: (e) => toast({ kind: 'error', title: 'Verification failed', body: String(e) }),
@@ -168,8 +236,28 @@ export function Inbox() {
       toast({ kind: 'error', title: 'Nothing was recorded', body: String(e) }),
   })
 
-  const counts = all.data?.counts
-  const total = all.data?.records.length ?? 0
+  /**
+   * Ask for confirmation only where confirmation earns its place.
+   *
+   * PRD §5.1's override is still recorded for anything short of a `match` - see
+   * the PATCH body in bulkDecide - but a `review` verdict is a difference in
+   * presentation over content that agrees, which is the ordinary thing the
+   * reviewer is here to wave through. Interrupting them for it is the friction,
+   * not the safeguard. A failed check, a specimen that is not a label, or a
+   * return (which needs a reason typed) all still open the dialog.
+   */
+  const decideOn = (decision: 'accepted' | 'returned', records: RecordRow[]) => {
+    if (decision === 'accepted' && !records.some((r) => contestedAccept(r.result))) {
+      bulkDecide.mutate({ decision, reason: '', records })
+      return
+    }
+    setConfirming({ decision, records })
+  }
+
+  // Counts are whole-store regardless of the active filter, so the filtered
+  // response carries them - there is no second fetch of every record for them.
+  const counts = view.data?.counts
+  const total = counts?.total ?? 0
   const closed = counts?.closed ?? 0
   const rows = (view.data?.records ?? []).filter((r) => matchesQuery(r, query))
 
@@ -230,10 +318,14 @@ export function Inbox() {
           <div className="kpi-hint">Content differs or value missing</div>
         </button>
         <button className="kpi kpi-match" onClick={() => setFilter('closed')}>
-          <div className="kpi-label">Auto-approved</div>
+          <div className="kpi-label">Closed</div>
           <div className="kpi-value">{closed}</div>
-          <div className="kpi-hint">All fields matched on intake</div>
+          <div className="kpi-hint">Accepted or returned by a reviewer</div>
         </button>
+      </div>
+
+      <div className="sr-only" role="status" aria-live="polite">
+        {job && job.state === 'running' ? `Verified ${job.completed} of ${job.total}` : ''}
       </div>
 
       {(counts?.pending ?? 0) > 0 && (
@@ -252,25 +344,16 @@ export function Inbox() {
             disabled={verifyAll.isPending}
           >
             {verifyAll.isPending && <span className="spinner spinner-dark" />}
-            Run AI verification on all
+            {/* The count is the reassurance on a run that can take a minute;
+                aria-live so it is not a sighted-only signal (PRD §8). */}
+            {verifyAll.isPending && job
+              ? `Verifying ${job.completed} of ${job.total}…`
+              : 'Run AI verification on all'}
           </button>
         </div>
       )}
 
-      {verifyAll.data && (
-        <div className="banner">
-          <div className="banner-mark" aria-hidden="true">
-            ✓
-          </div>
-          <div className="banner-text">
-            Verified {verifyAll.data.completed} of {verifyAll.data.total} ·{' '}
-            {Object.entries(verifyAll.data.verdicts)
-              .map(([k, v]) => `${v} ${k}`)
-              .join(' · ')}
-            {verifyAll.data.failed > 0 && ` · ${verifyAll.data.failed} failed`}
-          </div>
-        </div>
-      )}
+
 
       <div className="toolbar">
         <div className="segmented" role="group" aria-label="Filter records">
@@ -325,14 +408,14 @@ export function Inbox() {
             </button>
             <button
               className="btn btn-quiet btn-sm"
-              onClick={() => setConfirming({ decision: 'accepted', records: selectedRows })}
+              onClick={() => decideOn('accepted', selectedRows)}
               disabled={bulkVerify.isPending}
             >
               Accept
             </button>
             <button
               className="btn btn-quiet btn-sm"
-              onClick={() => setConfirming({ decision: 'returned', records: selectedRows })}
+              onClick={() => decideOn('returned', selectedRows)}
               disabled={bulkVerify.isPending}
             >
               Return to applicant
@@ -353,7 +436,6 @@ export function Inbox() {
             <div>Label</div>
             <div className="queue-head-main">
               <div>Application</div>
-              <div className="hide-sm">Applicant</div>
               <div className="hide-sm">Received</div>
               <div>Result</div>
               <div />
@@ -366,13 +448,13 @@ export function Inbox() {
             key={r.id}
             record={r}
             open={expanded === r.id}
-            busy={busy === r.id}
+            busy={busy.has(r.id)}
             onToggle={() => setExpanded(expanded === r.id ? null : r.id)}
             onVerify={() => verify.mutate(r.id)}
             queueSearch={queueSearch}
             checked={selected.has(r.id)}
             onSelect={() => toggleOne(r.id)}
-            onDecide={(decision) => setConfirming({ decision, records: [r] })}
+            onDecide={(decision) => decideOn(decision, [r])}
           />
         ))}
 
@@ -551,7 +633,6 @@ function QueueItem({
           <div className="queue-brand">{record.app_brand}</div>
           <div className="queue-sub">{subline}</div>
         </div>
-        <div className="queue-applicant hide-sm">{record.applicant}</div>
         <div className="queue-received hide-sm">{record.received.slice(0, 10)}</div>
         <div>
           {busy ? (
@@ -560,9 +641,8 @@ function QueueItem({
             <Pill verdict={record.result} />
           )}
           {record.decision && (
-            <div style={{ fontSize: '10.5px', color: 'var(--ink-5)', marginTop: 4 }}>
+            <div className="queue-decided">
               {record.decision === 'accepted' ? 'Accepted' : 'Returned'}
-              {record.override ? ' · override' : ''}
             </div>
           )}
         </div>
@@ -630,7 +710,7 @@ function QueueItem({
             >
               <div style={{ fontSize: 13.5, color: 'var(--ink-3)', maxWidth: 560, lineHeight: 1.55 }}>
                 This application has not been checked. Run verification to read the label
-                label image and compare every required field against the application of record.
+                image and compare every required field against the application of record.
               </div>
               <button className="btn push" onClick={onVerify} disabled={busy}>
                 {busy && <span className="spinner" />}

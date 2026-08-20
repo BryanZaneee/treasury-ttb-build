@@ -153,6 +153,12 @@ h1 { margin: 0; font-size: 27px; font-weight: 700; letter-spacing: -0.022em; col
 .lede { font-size: 14.5px; color: var(--ink-3); line-height: 1.6; max-width: 640px; margin: 10px 0 0; }
 
 .mono { font-family: var(--mono); }
+/* Announced, not shown. PRD §8 asks for a live-region announcement on
+   verification completion, and a bare spinner is a sighted-only signal. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
 
 /* ---------------- KPI cards ---------------- */
 
@@ -338,10 +344,6 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
   font-size: 12px; color: var(--ink-5); margin-top: 3px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.queue-applicant {
-  font-size: 12.5px; color: var(--ink-3);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
 .queue-received { font-family: var(--mono); font-size: 12px; color: var(--ink-5); }
 .caret { font-size: 15px; color: #8b95a1; text-align: center; transition: transform 0.16s ease; }
 .caret.open { transform: rotate(180deg); }
@@ -437,16 +439,18 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
   padding: 18px 20px; display: flex; align-items: center; gap: 12px;
   flex-wrap: wrap; background: var(--sunk-2);
 }
-.placeholder {
-  background: var(--paper); border: 1px dashed #c6d0da; border-radius: 4px;
-  padding: 56px 32px; text-align: center;
+/* The determination once it is closed, in place of the decision bar. Was inline
+   styles with a hardcoded rule colour that had drifted off --rule. */
+.decided-note {
+  flex: 1; min-width: 0;
+  padding: 10px 14px; background: var(--paper);
+  border: 1px solid var(--rule); border-radius: 3px;
+  font-size: 13.5px; color: var(--ink-3); line-height: 1.5;
 }
-/* Inside the determination card the header already draws the border. */
-.placeholder-flush { border: none; border-radius: 0; background: transparent; }
-.placeholder-title { font-size: 17px; font-weight: 700; color: var(--ink-2); letter-spacing: -0.012em; }
-.placeholder-hint {
-  font-size: 13.5px; color: var(--ink-5); margin: 8px auto 0; max-width: 460px; line-height: 1.6;
+.decided-reason {
+  margin-top: 4px; font-size: 12.5px; color: var(--ink-5);
 }
+.queue-decided { margin-top: 4px; font-size: 10.5px; color: var(--ink-5); }
 
 /* ---------------- layout helpers ---------------- */
 
@@ -535,7 +539,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 }
 .queue-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px 118px 172px 26px;
+  grid-template-columns: minmax(0, 1fr) 118px 172px 26px;
   gap: 14px;
   align-items: center;
   width: 100%;
@@ -553,7 +557,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 .queue-item.selected { background: #f2f7fb; }
 .queue-head-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px 118px 172px 26px;
+  grid-template-columns: minmax(0, 1fr) 118px 172px 26px;
   gap: 14px;
   align-items: center;
   padding: 10px 16px 10px 0;
@@ -597,7 +601,6 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
   box-shadow: 0 20px 50px rgba(16, 40, 61, 0.28);
 }
 .dialog-sm { width: min(480px, 100%); }
-.session-action-title { font-size: 13.5px; font-weight: 700; color: var(--fail-fg); }
 
 .dialog-head { padding: 16px 20px; border-bottom: 1px solid var(--rule); }
 .dialog-body { padding: 16px 20px; overflow-y: auto; }
@@ -679,7 +682,10 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 .queue-nav-count {
   font-size: 11.5px;
   font-weight: 600;
-  color: var(--ink-5);
+  /* --ink-4 for the same reason the end-of-queue text above uses it: this bar
+     sits on the tinted verdict header, where --ink-5 is under AA (axe,
+     e2e/a11y.spec.ts). */
+  color: var(--ink-4);
   font-variant-numeric: tabular-nums;
   margin-top: 4px;
 }
@@ -701,7 +707,6 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
   overflow: hidden;
 }
 .label-frame img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
-.label-frame-sm { aspect-ratio: 3 / 4; width: 84px; flex: none; padding: 6px; }
 
 /* The label stays readable while the reviewer works down the form - the fields
    are transcribed from it - and the frame takes whatever height is left rather
@@ -710,12 +715,6 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 .specimen-side .label-frame { width: 100%; aspect-ratio: auto; flex: 1; min-height: 220px; }
 .specimen-side .dropzone { flex: 1; display: flex; flex-direction: column; justify-content: center; }
 
-.specimen-slot { height: 132px; margin: 14px 0; display: flex; align-items: stretch; }
-.specimen-slot > * { flex: 1; min-width: 0; }
-.specimen-slot .dropzone {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 16px;
-}
 
 
 @media (max-width: 1100px) {
@@ -828,7 +827,6 @@ button.thumb { border: 1px solid var(--rule); cursor: zoom-in; }
 .thumb-x { position: absolute; top: -7px; right: -7px; box-shadow: 0 1px 3px rgba(16, 40, 61, 0.2); }
 .thumb-x:hover, .cell-x:hover:not(:disabled) { color: var(--fail-fg); border-color: var(--fail-bd); }
 .cell-x:disabled { opacity: 0.3; cursor: default; }
-.image-cell { display: flex; align-items: center; gap: 8px; }
 
 button.caret { appearance: none; border: 0; background: none; cursor: pointer; padding: 0 4px; }
 tr.staged-selected > td { background: var(--sunk-2); }
@@ -848,6 +846,19 @@ tr.staged-selected > td { background: var(--sunk-2); }
 }
 .staged-table .bulkbar { padding-left: 0; }
 .staged-table .bulkbar-check { width: 44px; }
+/* Room for two buttons, whether or not the row has two.
+   A fuzzy row carries a Confirm alongside the picker button, and in an
+   auto-laid-out table the column re-measures the moment Confirm resolves the
+   row and disappears - which shifted every column in the table sideways.
+   Declaring the full two-button width means the content never exceeds it, so
+   the column never re-measures; anchoring right means the button that is
+   always there does not move either. 2 x 84 + 6 gap + 2 x 14 padding. */
+.staged-actions { width: 202px; text-align: right; white-space: nowrap; }
+.staged-actions .row { justify-content: flex-end; gap: 6px; flex-wrap: nowrap; }
+/* One width for every label - Confirm, Change, Select, Attach - so the buttons
+   line up down the column instead of each being as wide as its own word. */
+.staged-actions .btn { width: 84px; padding-left: 0; padding-right: 0; }
+
 /* The image the row is paired with, marked in the picker. */
 .thumb-current { outline: 2px solid var(--navy); outline-offset: 1px; }
 .picker-group {

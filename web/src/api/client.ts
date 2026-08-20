@@ -148,6 +148,8 @@ export type Counts = {
   review: number
   fail: number
   closed: number
+  /** Whole-store count, so a caller wanting a number need not fetch the rows. */
+  total: number
 }
 
 export type RecordsPage = { records: RecordRow[]; counts: Counts }
@@ -186,6 +188,13 @@ export type StagedBatch = {
   blocks_commit: boolean
 }
 
+/** One record's outcome, appended as the job runs. `record` and `error` both
+ *  name the record, which is how the inbox knows a row has finished. */
+export type JobEvent = {
+  event: 'record' | 'error' | 'done'
+  record_id?: string
+}
+
 export type Job = {
   id: string
   scope: string
@@ -195,6 +204,8 @@ export type Job = {
   committed: number
   failed: number
   verdicts: Record<string, number>
+  record_ids: string[]
+  events: JobEvent[]
   error: string | null
 }
 

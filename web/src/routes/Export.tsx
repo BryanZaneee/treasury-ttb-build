@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, freshUrl } from '../api/client'
-import type { Health, RecordsPage } from '../api/client'
+import type { Health, RecordsPage, StoreImport } from '../api/client'
 import { useEscape } from '../lib/dialog'
 
 /**
@@ -14,6 +14,7 @@ export function Export() {
   const [confirming, setConfirming] = useState<null | 'reset' | 'empty'>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [showStore, setShowStore] = useState(false)
+  const restoreRef = useRef<HTMLInputElement>(null)
   useEscape(() => setConfirming(null))
 
   const records = useQuery({
@@ -24,6 +25,33 @@ export function Export() {
   const health = useQuery({
     queryKey: ['health'],
     queryFn: () => api<Health>('/health'),
+    staleTime: 60_000,
+  })
+
+  // S11's other half. The reviewer export drops columns (csv_io.REVIEW_COLUMNS),
+  // so the file that restores a store is /export/backup.csv, not the one the
+  // Export button serves - which is why both are offered, named for what they
+  // are for rather than for their format.
+  const restore = useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData()
+      form.set('csv_file', file)
+      form.set('mode', 'replace')
+      return api<StoreImport>('/store/import', {
+        method: 'POST',
+        form,
+        admin: true,
+      })
+    },
+    onSuccess: (data) => {
+      client.invalidateQueries({ queryKey: ['records'] })
+      setMessage(
+        data.errors.length > 0
+          ? `Restored ${data.imported} records. ${data.errors.length} row${data.errors.length === 1 ? '' : 's'} could not be read: ${data.errors.slice(0, 3).join('; ')}`
+          : `Restored ${data.imported} record${data.imported === 1 ? '' : 's'} from the backup.`,
+      )
+    },
+    onError: (e) => setMessage(`The backup could not be restored. ${String(e)}`),
   })
 
   const reset = useMutation({
@@ -72,6 +100,17 @@ export function Export() {
             <a className="btn btn-wide" href={freshUrl('/export/records.csv')} download>
               Export records as CSV
             </a>
+            <a className="btn btn-quiet btn-wide" href={freshUrl('/export/backup.csv')} download>
+              Download a restorable backup
+            </a>
+            <button
+              className="btn btn-quiet btn-wide"
+              disabled={restore.isPending}
+              onClick={() => restoreRef.current?.click()}
+            >
+              {restore.isPending && <span className="spinner" />}
+              Restore from a backup
+            </button>
             <button className="btn btn-quiet btn-wide" onClick={() => setShowStore((v) => !v)}>
               {showStore ? 'Hide record table' : 'View record table'}
             </button>
@@ -82,6 +121,17 @@ export function Export() {
               Remove all records
             </button>
           </div>
+          <input
+            ref={restoreRef}
+            type="file"
+            accept=".csv,text/csv"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) restore.mutate(file)
+              e.target.value = ''
+            }}
+          />
           {message && <p className="card-note">{message}</p>}
         </div>
 
@@ -209,7 +259,6 @@ export function Export() {
                 <tr>
                   <th>COLA ID</th>
                   <th>Received</th>
-                  <th>Applicant</th>
                   <th>Brand</th>
                   <th>Class / type</th>
                   <th>ABV</th>
@@ -224,7 +273,6 @@ export function Export() {
                   <tr key={r.id}>
                     <td className="mono">{r.id}</td>
                     <td className="mono">{r.received.slice(0, 10)}</td>
-                    <td>{r.applicant}</td>
                     <td>{r.app_brand}</td>
                     <td>{r.app_class_type}</td>
                     <td className="mono">{r.app_alcohol_content}</td>

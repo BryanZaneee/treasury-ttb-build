@@ -33,7 +33,6 @@ export function BulkDecisionDialog({
 }) {
   const [reason, setReason] = useState('')
   useEscape(onCancel)
-  const overrides = records.filter((r) => r.result !== 'match')
   // Only a failed check is worth naming field by field. A presentation
   // difference is still recorded as an override, without the challenge.
   const contested = records.filter((r) => contestedAccept(r.result))
@@ -63,8 +62,7 @@ export function BulkDecisionDialog({
             {records.length === 1 ? '' : 's'}
           </h2>
           <p className="card-note">
-            Recorded against <strong>{REVIEWER.name}</strong> with a timestamp
-            {accepting && overrides.length > 0 ? ' and an override flag' : ''}.
+            Recorded against <strong>{REVIEWER.name}</strong> with a timestamp.
           </p>
         </div>
 
@@ -131,13 +129,6 @@ export function BulkDecisionDialog({
             </>
           )}
 
-          {accepting && contested.length === 0 && (
-            <p className="card-note">
-              {overrides.length === 0
-                ? `${records.length === 1 ? 'This record' : 'Every selected record'} passed verification. No override is required.`
-                : 'Nothing selected failed its check. A difference in presentation is still recorded as an override.'}
-            </p>
-          )}
         </div>
 
         <div className="dialog-foot">

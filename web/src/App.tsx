@@ -1,4 +1,4 @@
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from './api/client'
 import type { Health, RecordsPage } from './api/client'
@@ -8,14 +8,23 @@ import { CheckBatch } from './routes/CheckBatch'
 import { RecordDetail } from './routes/RecordDetail'
 import { Export } from './routes/Export'
 import { REVIEWER } from './lib/session'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 export function App() {
 
+  const location = useLocation()
+
   // The masthead badge counts what needs an agent, so it is the same number the
-  // inbox leads with rather than a second definition of "outstanding".
+  // inbox leads with rather than a second definition of "outstanding". It asks
+  // for the counts alone: rendering one integer used to pull every record in
+  // the store on each route change, because the query had no staleTime and the
+  // client cache-busts every GET.
   const counts = useQuery({
-    queryKey: ['records', ''],
-    queryFn: () => api<RecordsPage>('/records'),
+    // Under the 'records' prefix so every invalidateQueries(['records']) in the
+    // app refreshes the badge too.
+    queryKey: ['records', 'counts'],
+    queryFn: () => api<RecordsPage>('/records?counts_only=true'),
+    staleTime: 30_000,
   })
   const attention = counts.data?.counts.attention ?? 0
 
@@ -83,6 +92,7 @@ export function App() {
       )}
 
       <main>
+        <ErrorBoundary key={location.pathname}>
         <Routes>
           <Route path="/" element={<Navigate to="/inbox" replace />} />
           <Route path="/inbox" element={<Inbox />} />
@@ -97,6 +107,7 @@ export function App() {
               inbox rather than rendering an empty page. */}
           <Route path="*" element={<Navigate to="/inbox" replace />} />
         </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   )
