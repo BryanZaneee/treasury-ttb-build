@@ -1,5 +1,6 @@
 """Contract and behaviour tests for the documented API surface (PRD §5.1)."""
 
+import sqlite3
 import time
 from typing import Any
 
@@ -792,3 +793,63 @@ def test_committing_an_unresolved_batch_is_refused() -> None:
     job = _await_job(job_id)
     assert job["state"] == "done"
     assert job["committed"] == 2
+
+
+def test_extraction_is_cached_and_keyed_on_the_reader_config() -> None:
+    """PRD §5.2 / acceptance test 15: switching model must not serve the
+    reading the previous model produced."""
+    record_id = _seed_and_get("old-tom-pass.jpg")
+    client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
+
+    conn = sqlite3.connect(db.db_path())
+    keys = [r[0] for r in conn.execute("SELECT key FROM extraction_cache")]
+    conn.close()
+    assert len(keys) == 1, "the reading should have been cached once"
+    assert settings.reader_model in keys[0]
+
+    # Same record, different model - a second entry, not a stale hit.
+    original = settings.reader_model
+    settings.reader_model = "some-other-model"
+    try:
+        client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
+    finally:
+        settings.reader_model = original
+
+    conn = sqlite3.connect(db.db_path())
+    after = [r[0] for r in conn.execute("SELECT key FROM extraction_cache")]
+    conn.close()
+    assert len(after) == 2, "a model change must produce a distinct cache entry"
+
+
+def test_a_fallback_reading_is_never_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A degraded reading must not become sticky for the configured reader.
+
+    Cached under the openai key, one unreachable-provider blip would keep
+    serving the OCR answer long after the provider came back.
+    """
+    import config
+    import readers
+
+    record_id = _seed_and_get("old-tom-pass.jpg")
+    monkeypatch.setattr(config.settings, "reader_provider", "openai")
+
+    real = readers.get_reader
+
+    def flaky(provider: str | None = None, *args: object, **kwargs: object) -> object:
+        if provider == "openai":
+            raise RuntimeError("connection refused")
+        return real("fake")
+
+    monkeypatch.setattr(readers, "get_reader", flaky)
+    from routers import records as records_router
+
+    monkeypatch.setattr(records_router, "get_reader", flaky)
+
+    resp = client.post(f"/api/records/{record_id}/verify", headers=ACCESS)
+    assert resp.status_code == 200
+    assert resp.json()["reader_provider"] == "ocr"
+
+    conn = sqlite3.connect(db.db_path())
+    cached = conn.execute("SELECT COUNT(*) FROM extraction_cache").fetchone()[0]
+    conn.close()
+    assert cached == 0, "the OCR fallback reading must not be cached under openai"

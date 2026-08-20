@@ -7,6 +7,7 @@ eligibility test (PRD §5.3) requires two readers agreeing, so with one reader
 it could never pass.
 """
 
+import hashlib
 import sqlite3
 import time
 from contextlib import suppress
@@ -129,9 +130,18 @@ def create_record(
         "result": None,
     }
     db.insert_record(record)
+    # PRD §5.2: extraction begins on upload, not on Verify. By the time the
+    # reviewer presses Verify the reading is cached and adjudication is a
+    # rules-engine call, which is what makes the §8 latency target reachable.
+    db.run_in_background(_warm_extraction, specimen)
     row = db.get_record(record_id)
     assert row is not None  # just inserted, must exist
     return _row_to_record(row)
+
+
+def _warm_extraction(specimen: str) -> None:
+    with suppress(Exception):
+        read_specimen(specimen, db.data_dir() / "images" / Path(specimen).name)
 
 
 @router.get("/records/{record_id}", response_model=RecordDetail)
@@ -171,9 +181,35 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
         prepare(path)
     prep_ms = round((time.perf_counter_ns() - prep_started) / 1_000_000)
 
+    # PRD §5.2: the key carries the image hash and every setting that can change
+    # a reading, so switching model or provider cannot serve the previous one.
+    key: str | None = None
+    with suppress(OSError):
+        key = "|".join(
+            [
+                hashlib.sha256(path.read_bytes()).hexdigest(),
+                PROMPT_VERSION,
+                provider,
+                settings.reader_model,
+                settings.reader_effort,
+            ]
+        )
+    if key is not None:
+        cached = db.extraction_cache_get(key)
+        if cached is not None:
+            return LabelReading(**cached["reading"]), cached["engine"], cached["reader"], prep_ms
+
     try:
         reading = get_reader(provider).read(specimen, path)
-        return reading, f"deterministic rules engine ({provider} reader)", provider, prep_ms
+        engine = f"deterministic rules engine ({provider} reader)"
+        if key is not None:
+            # Only the configured reader's own answer is cached. A fallback
+            # reading is degraded by definition and must not become sticky.
+            db.extraction_cache_put(
+                key,
+                {"reading": reading.model_dump(mode="json"), "engine": engine, "reader": provider},
+            )
+        return reading, engine, provider, prep_ms
     except Exception as exc:  # noqa: BLE001 - any reader failure degrades, never 500s
         cause = type(exc).__name__ if not str(exc) else str(exc).split("\n")[0][:120]
 

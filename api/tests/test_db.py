@@ -77,9 +77,13 @@ def test_init_db_is_idempotent() -> None:
     db.init_db()
     db.init_db()  # must not error re-applying an already-recorded migration
     conn = sqlite3.connect(db.db_path())
-    versions = conn.execute("SELECT version FROM schema_version").fetchall()
+    versions = [r[0] for r in conn.execute("SELECT version FROM schema_version")]
     conn.close()
-    assert versions == [(1,)]
+    on_disk = sorted(int(p.stem.split("_", 1)[0]) for p in db.MIGRATIONS_DIR.glob("*.sql"))
+    # Every migration applied exactly once - the point is that the second
+    # init_db() recorded nothing new, not which migrations happen to exist.
+    assert sorted(versions) == on_disk
+    assert len(versions) == len(set(versions))
 
 
 def test_concurrent_writes_all_land() -> None:

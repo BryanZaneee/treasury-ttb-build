@@ -290,9 +290,49 @@ def next_record_id() -> str:
     return f"COLA-{datetime.now(UTC).year}-{highest + 1}"
 
 
+_background: list[threading.Thread] = []
+
+
+def run_in_background(fn: Any, *args: Any) -> None:
+    """Fire-and-forget work that writes to the store.
+
+    Tracked so wipe() can wait for it: an unjoined writer lands in the next
+    test's database, the same way a pending mirror timer would.
+    """
+    thread = threading.Thread(target=fn, args=args, daemon=True)
+    _background.append(thread)
+    thread.start()
+
+
+def extraction_cache_get(key: str) -> dict[str, Any] | None:
+    conn = connect()
+    try:
+        row = conn.execute(
+            "SELECT reading_json FROM extraction_cache WHERE key = ?", (key,)
+        ).fetchone()
+        return json.loads(row["reading_json"]) if row is not None else None
+    finally:
+        conn.close()
+
+
+def extraction_cache_put(key: str, payload: dict[str, Any]) -> None:
+    with transaction() as conn:
+        conn.execute(
+            """
+            INSERT INTO extraction_cache (key, reading_json, created_at) VALUES (?, ?, ?)
+            ON CONFLICT (key) DO UPDATE SET
+                reading_json = excluded.reading_json, created_at = excluded.created_at
+            """,
+            (key, json.dumps(payload), datetime.now(UTC).isoformat()),
+        )
+
+
 def wipe() -> None:
     """Delete and recreate the store. Used by reset and by test teardown."""
     global _mirror_timer
+    for thread in _background:
+        thread.join(timeout=5)
+    _background.clear()
     with _mirror_lock:
         if _mirror_timer is not None:
             _mirror_timer.cancel()
