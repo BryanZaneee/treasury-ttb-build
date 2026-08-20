@@ -38,7 +38,11 @@ export function Inbox() {
   // filter or the search clears it, so a bulk action can never reach a record
   // that has scrolled out of the view they chose it from.
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [confirming, setConfirming] = useState<null | 'accepted' | 'returned'>(null)
+  // Carries the records with the decision: the same dialog confirms a bulk
+  // action and a single row's accept/return, and the row is not in `selected`.
+  const [confirming, setConfirming] = useState<
+    null | { decision: 'accepted' | 'returned'; records: RecordRow[] }
+  >(null)
   const client = useQueryClient()
   const toast = useToast()
 
@@ -108,12 +112,20 @@ export function Inbox() {
   })
 
   const bulkDecide = useMutation({
-    mutationFn: async ({ decision, reason }: { decision: 'accepted' | 'returned'; reason: string }) => {
+    mutationFn: async ({
+      decision,
+      reason,
+      records,
+    }: {
+      decision: 'accepted' | 'returned'
+      reason: string
+      records: RecordRow[]
+    }) => {
       let applied = 0
       let skipped = 0
       // One PATCH per record: the override rule is enforced per record server
       // side, and a record already decided answers 409 rather than reopening.
-      for (const record of selectedRows) {
+      for (const record of records) {
         try {
           await api(`/records/${record.id}`, {
             method: 'PATCH',
@@ -288,14 +300,14 @@ export function Inbox() {
             </button>
             <button
               className="btn btn-quiet btn-sm"
-              onClick={() => setConfirming('accepted')}
+              onClick={() => setConfirming({ decision: 'accepted', records: selectedRows })}
               disabled={bulkVerify.isPending}
             >
               Accept
             </button>
             <button
               className="btn btn-quiet btn-sm"
-              onClick={() => setConfirming('returned')}
+              onClick={() => setConfirming({ decision: 'returned', records: selectedRows })}
               disabled={bulkVerify.isPending}
             >
               Return to applicant
@@ -337,6 +349,7 @@ export function Inbox() {
             queueSearch={queueSearch}
             checked={selected.has(r.id)}
             onSelect={() => toggleOne(r.id)}
+            onDecide={(decision) => setConfirming({ decision, records: [r] })}
           />
         ))}
 
@@ -358,11 +371,13 @@ export function Inbox() {
 
       {confirming && (
         <BulkDecisionDialog
-          decision={confirming}
-          records={selectedRows}
+          decision={confirming.decision}
+          records={confirming.records}
           pending={bulkDecide.isPending}
           onCancel={() => setConfirming(null)}
-          onConfirm={(reason) => bulkDecide.mutate({ decision: confirming, reason })}
+          onConfirm={(reason) =>
+            bulkDecide.mutate({ decision: confirming.decision, reason, records: confirming.records })
+          }
         />
       )}
     </div>
@@ -378,6 +393,7 @@ function QueueItem({
   queueSearch,
   checked,
   onSelect,
+  onDecide,
 }: {
   record: RecordRow
   open: boolean
@@ -387,6 +403,7 @@ function QueueItem({
   queueSearch: string
   checked: boolean
   onSelect: () => void
+  onDecide: (decision: 'accepted' | 'returned') => void
 }) {
   const kind = kindOf(record.result)
   const [zoomed, setZoomed] = useState(false)
@@ -485,6 +502,18 @@ function QueueItem({
                 <Link className="btn" to={`/records/${record.id}${queueSearch}`}>
                   Open full determination
                 </Link>
+                {/* The confirmation is the shared decision dialog, which names
+                    the disagreeing fields before an override is recorded. */}
+                {!record.decision && (
+                  <>
+                    <button className="btn btn-accept" onClick={() => onDecide('accepted')}>
+                      Accept determination
+                    </button>
+                    <button className="btn btn-return" onClick={() => onDecide('returned')}>
+                      Return to applicant
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ) : (

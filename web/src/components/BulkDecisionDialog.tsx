@@ -93,9 +93,13 @@ export function BulkDecisionDialog({
                 </div>
                 <div className="banner-text">
                   <strong>
-                    {overrides.length} of these did not pass verification.
+                    {records.length === 1
+                      ? 'This record did not pass verification.'
+                      : `${overrides.length} of these did not pass verification.`}
                   </strong>{' '}
-                  Accepting them overrides the fields listed below, on each record.
+                  {records.length === 1
+                    ? 'Accepting it overrides the fields listed below.'
+                    : 'Accepting them overrides the fields listed below, on each record.'}
                 </div>
               </div>
               {details.isLoading && (
@@ -123,7 +127,8 @@ export function BulkDecisionDialog({
 
           {accepting && overrides.length === 0 && (
             <p className="card-note">
-              Every selected record passed verification. No override is required.
+              {records.length === 1 ? 'This record' : 'Every selected record'} passed
+              verification. No override is required.
             </p>
           )}
         </div>
