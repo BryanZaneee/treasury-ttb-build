@@ -100,6 +100,9 @@ export function Export() {
             <a className="btn btn-wide" href={freshUrl('/export/records.csv')} download>
               Export records as CSV
             </a>
+            <button className="btn btn-wide" onClick={() => setConfirming('reset')}>
+              Load the example set
+            </button>
             <a className="btn btn-quiet btn-wide" href={freshUrl('/export/backup.csv')} download>
               Download a restorable backup
             </a>
@@ -113,9 +116,6 @@ export function Export() {
             </button>
             <button className="btn btn-quiet btn-wide" onClick={() => setShowStore((v) => !v)}>
               {showStore ? 'Hide record table' : 'View record table'}
-            </button>
-            <button className="btn btn-quiet btn-wide" onClick={() => setConfirming('reset')}>
-              Load the example set
             </button>
             <button className="btn btn-danger btn-wide" onClick={() => setConfirming('empty')}>
               Remove all records
