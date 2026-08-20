@@ -1,5 +1,8 @@
 """App factory: FastAPI instance, CORS, token middleware, health, routers."""
 
+import time
+from typing import Any
+
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -8,6 +11,7 @@ from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 import db
+import logs
 from config import settings
 from readers import get_reader
 from readers.prompts import VERSION as PROMPT_VERSION
@@ -63,6 +67,30 @@ class TokenMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    """Stamp every request with an id and log its outcome (PRD §8).
+
+    Sits outside TokenMiddleware so a rejected request is logged too - a burst
+    of 401s is exactly the thing you want a request id for.
+    """
+
+    async def dispatch(self, request: Request, call_next: Any) -> Any:
+        request_id = request.headers.get("x-request-id") or logs.new_request_id()
+        logs.set_request_id(request_id)
+        started = time.perf_counter_ns()
+        response = await call_next(request)
+        # The path, not the URL: a query string carries reviewer search terms.
+        logs.event(
+            "request",
+            method=request.method,
+            path=request.url.path,
+            status=response.status_code,
+            ms=round((time.perf_counter_ns() - started) / 1_000_000),
+        )
+        response.headers["x-request-id"] = request_id
+        return response
+
+
 class HealthResponse(BaseModel):
     store_readable: bool | None
     images_writable: bool | None
@@ -72,14 +100,18 @@ class HealthResponse(BaseModel):
     model: str
     # Paid vision calls made since UTC midnight, against daily_vision_call_cap.
     calls_today: int = 0
+    # PRD §8 service counters, since this process started.
+    counters: dict[str, int] = {}
 
 
 def create_app() -> FastAPI:
+    logs.configure()
     db.init_db()
 
     app = FastAPI(title="TTB Label Verification API")
 
     app.add_middleware(TokenMiddleware)
+    app.add_middleware(RequestIdMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173"],
@@ -137,6 +169,7 @@ def create_app() -> FastAPI:
             # PRD §5.1 asks for dollars; reporting those honestly needs a
             # per-model price table, so the enforced backstop counts calls.
             calls_today=calls_today(),
+            counters=logs.counters(),
         )
 
     return app

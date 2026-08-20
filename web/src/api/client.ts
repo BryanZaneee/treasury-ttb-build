@@ -96,6 +96,7 @@ export type Health = {
   provider: string
   model: string
   calls_today: number
+  counters: Record<string, number>
 }
 
 export type RecordRow = {

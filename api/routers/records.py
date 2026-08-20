@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 import adjudicate
 import db
+import logs
 import uploads
 from config import settings
 from models import Application, FieldResult, LabelReading, Record
@@ -198,7 +199,9 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
     if key is not None:
         cached = db.extraction_cache_get(key)
         if cached is not None:
+            logs.count("cache_hits")
             return LabelReading(**cached["reading"]), cached["engine"], cached["reader"], prep_ms
+    logs.count("cache_misses")
 
     try:
         reading = get_reader(provider).read(specimen, path)
@@ -212,6 +215,7 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
             )
         return reading, engine, provider, prep_ms
     except Exception as exc:  # noqa: BLE001 - any reader failure degrades, never 500s
+        logs.count("reader_errors")
         cause = type(exc).__name__ if not str(exc) else str(exc).split("\n")[0][:120]
 
     if provider == "ocr":
@@ -413,6 +417,17 @@ def verify_record(record_id: str) -> Record:
         },
     )
 
+    logs.count("verifications")
+    logs.count(f"verdict_{verdict}")
+    logs.event(
+        "verified",
+        record_id=record_id,
+        result=verdict,
+        reader=reader_used,
+        quality=reading.quality,
+        elapsed_ms=round((finished - started) / 1_000_000),
+    )
+
     if _auto_close_eligible(verdict, reading.quality, reader_used):
         db.update_record(
             record_id,
@@ -427,6 +442,8 @@ def verify_record(record_id: str) -> Record:
             "auto_closed",
             {"result": verdict, "quality": reading.quality, "reader": reader_used},
         )
+        logs.count("auto_closed")
+        logs.event("auto_closed", record_id=record_id, reader=reader_used)
 
     updated = db.get_record(record_id)
     assert updated is not None
