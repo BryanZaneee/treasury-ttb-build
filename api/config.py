@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     reader_effort: str = "low"
     reader_service_tier: str = "standard"
     reader_timeout_s: int = 25
+    # PRD §8: reader calls during a batch run are bounded, not unbounded - 300
+    # simultaneous vision calls would breach the provider's own rate limits.
+    reader_concurrency: int = 10
     # Paid vision calls allowed per UTC day, enforced in the reader layer.
     # 0 disables the backstop. See readers/vision.py for why calls, not dollars.
     daily_vision_call_cap: int = 300

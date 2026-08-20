@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -19,6 +20,7 @@ from pydantic import BaseModel
 import batching
 import csv_io
 import db
+from config import settings
 from routers import batches, records
 
 router = APIRouter(tags=["jobs"])
@@ -110,28 +112,36 @@ def _commit_batch(job: Job, batch_id: str) -> list[str]:
     return record_ids
 
 
-def _verify_one(job: Job, record_id: str) -> None:
+def _verify_one(job: Job, record_id: str, lock: threading.Lock) -> None:
+    """Verify one record. Runs on a pool thread, so every mutation of the job
+    counters and event list is taken under the lock - they are read by the
+    progress bar and the SSE stream while this is still running."""
     row = db.get_record(record_id)
     if row is None:
-        job.failed += 1
+        with lock:
+            job.failed += 1
         return
     try:
         record = records.verify_record(record_id)
     except Exception as exc:  # noqa: BLE001 - one bad record must not abort the job
-        job.failed += 1
-        job.events.append({"event": "error", "record_id": record_id, "detail": str(exc)[:200]})
+        with lock:
+            job.failed += 1
+            job.events.append(
+                {"event": "error", "record_id": record_id, "detail": str(exc)[:200]}
+            )
         return
     verdict = record.result or "unknown"
-    job.verdicts[verdict] = job.verdicts.get(verdict, 0) + 1
-    job.events.append(
-        {
-            "event": "record",
-            "record_id": record_id,
-            "filename": record.filename,
-            "result": verdict,
-            "elapsed_ms": record.elapsed_ms,
-        }
-    )
+    with lock:
+        job.verdicts[verdict] = job.verdicts.get(verdict, 0) + 1
+        job.events.append(
+            {
+                "event": "record",
+                "record_id": record_id,
+                "filename": record.filename,
+                "result": verdict,
+                "elapsed_ms": record.elapsed_ms,
+            }
+        )
 
 
 def _run(job: Job, body: JobCreateRequest) -> None:
@@ -158,12 +168,23 @@ def _run(job: Job, body: JobCreateRequest) -> None:
 
         job.total = len(record_ids)
         save_job(job)
-        for record_id in record_ids:
-            _verify_one(job, record_id)
-            job.completed += 1
-            # Persist per record: this is what the reviewer's progress bar and
-            # the SSE stream read, and they may be served by another worker.
-            save_job(job)
+        # PRD §8: bounded, not unbounded. A 300-record batch one-at-a-time
+        # cannot meet the 10-minute budget, and 300 at once would breach the
+        # provider's rate limits. The readers are synchronous, so a thread pool
+        # is the smaller change than making the whole path async.
+        lock = threading.Lock()
+
+        def verify_and_record(record_id: str) -> None:
+            _verify_one(job, record_id, lock)
+            with lock:
+                job.completed += 1
+                # Persist per record: this is what the progress bar and the SSE
+                # stream read, and they may be served by another worker.
+                save_job(job)
+
+        workers = max(1, settings.reader_concurrency)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            list(pool.map(verify_and_record, record_ids))
         job.state = "done"
     except Exception as exc:  # noqa: BLE001
         job.state = "error"
