@@ -333,14 +333,14 @@ export function CheckBatch() {
                 {/* General, not specific: the Pairing column says what is wrong
                     with each row, and repeating it here was a second list to
                     keep in step with the first. */}
-                {batch.blocks_commit && (
+                {unresolved(rowNumbers).length > 0 && (
                   <div className="banner banner-error" style={{ marginTop: 12, marginBottom: 0 }}>
                     <div className="banner-mark" aria-hidden="true">
                       !
                     </div>
                     <div className="banner-text">
                       Some rows still need a label picked for them — see Pairing below. You can
-                      file the batch anyway; rows that are still unresolved are left out of it.
+                      file the batch anyway; rows left unresolved are dropped from the upload.
                     </div>
                   </div>
                 )}
@@ -420,10 +420,11 @@ export function CheckBatch() {
                       )}
                     </thead>
                     <tbody>
-                      {batch.rows.map((r) => (
+                      {batch.rows.map((r, index) => (
                         <StagedTableRow
                           key={r.row}
                           row={r}
+                          position={index + 1}
                           busy={busy}
                           checked={selected.has(r.row)}
                           onSelect={() => toggleOne(r.row)}
@@ -537,6 +538,7 @@ export function CheckBatch() {
       {picking && batch && (
         <ImagePicker
           row={picking}
+          position={batch.rows.indexOf(picking) + 1}
           unused={batch.summary.unused_images}
           busy={busy}
           onPick={(name) => {
@@ -576,7 +578,7 @@ export function CheckBatch() {
               </div>
               {unresolved(dropWarn.rows).map((r) => (
                 <div className="staged-drop-row" key={r.row}>
-                  <span className="num">{r.row}</span>
+                  <span className="num">{batch.rows.indexOf(r) + 1}</span>
                   <span>{r.applicant || r.brand || '—'}</span>
                   <span>{r.bucket === 'ambiguous' ? 'More than one match' : 'No label'}</span>
                 </div>
@@ -628,6 +630,7 @@ export function CheckBatch() {
 
 function StagedTableRow({
   row,
+  position,
   busy,
   checked,
   onSelect,
@@ -637,6 +640,10 @@ function StagedTableRow({
   onDrop,
 }: {
   row: StagedRow
+  /* Where the row sits in the table. `row.row` is its identity in the staged
+     batch and keeps its number when the rows above it are dropped, which is
+     right for the API and wrong for a column headed #. */
+  position: number
   busy: boolean
   checked: boolean
   onSelect: () => void
@@ -652,11 +659,11 @@ function StagedTableRow({
         <input
           type="checkbox"
           checked={checked}
-          aria-label={`Select row ${row.row}`}
+          aria-label={`Select row ${position}`}
           onChange={onSelect}
         />
       </td>
-      <td className="num">{row.row}</td>
+      <td className="num">{position}</td>
       <td>
         {/* The thumbnail enlarges the specimen, as it does in the review inbox.
             With no specimen it is the shortest way to supply one. */}
@@ -664,7 +671,7 @@ function StagedTableRow({
           type="button"
           className="thumb"
           aria-label={
-            row.image ? `Enlarge ${row.image}` : `Upload a label image for row ${row.row}`
+            row.image ? `Enlarge ${row.image}` : `Upload a label image for row ${position}`
           }
           onClick={() => (row.image ? onPreview() : pick.current?.click())}
         >
@@ -679,7 +686,7 @@ function StagedTableRow({
           type="file"
           accept="image/*"
           hidden
-          aria-label={`Upload an image for row ${row.row}`}
+          aria-label={`Upload an image for row ${position}`}
           onChange={(e) => {
             const file = e.target.files?.[0]
             if (file) onUpload(file)
@@ -710,7 +717,7 @@ function StagedTableRow({
         <button
           type="button"
           className="cell-x"
-          aria-label={`Remove row ${row.row} from this batch`}
+          aria-label={`Remove row ${position} from this batch`}
           disabled={busy}
           onClick={onDrop}
         >
@@ -729,6 +736,7 @@ function StagedTableRow({
  */
 function ImagePicker({
   row,
+  position,
   unused,
   busy,
   onPick,
@@ -737,6 +745,7 @@ function ImagePicker({
   onClose,
 }: {
   row: StagedRow
+  position: number
   unused: string[]
   busy: boolean
   onPick: (name: string | null) => void
@@ -762,7 +771,7 @@ function ImagePicker({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="dialog-head">
-          <h2 id="picker-title">Image for row {row.row}</h2>
+          <h2 id="picker-title">Image for row {position}</h2>
           <p className="card-note">
             Filed as <span className="mono">{row.filename || 'no filename'}</span>
             {row.bucket === 'ambiguous' &&
@@ -813,7 +822,7 @@ function ImagePicker({
             type="file"
             accept="image/*"
             hidden
-            aria-label={`Upload an image for row ${row.row}`}
+            aria-label={`Upload an image for row ${position}`}
             onChange={(e) => {
               const file = e.target.files?.[0]
               if (file) onUpload(file)
@@ -860,7 +869,7 @@ function ImageChoices({
             <button
               type="button"
               className="thumb-open"
-              aria-label={`Pair row ${row.row} with ${name}`}
+              aria-label={`Pair this row with ${name}`}
               disabled={busy}
               onClick={() => onPick(name)}
             >
