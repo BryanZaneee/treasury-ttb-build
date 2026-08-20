@@ -36,7 +36,6 @@ _REASONING_MODEL = re.compile(r"^(gpt-[5-9]|o[1-9])", re.IGNORECASE)
 
 # PRD §5.2 calls the default tier "standard"; the API does not have that value.
 _SERVICE_TIER = {"standard": "auto"}
-MAX_LONG_EDGE_NOTE = "prepared image"
 
 
 class ReaderError(RuntimeError):

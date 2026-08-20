@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, freshUrl, imageUrl } from '../api/client'
-import type { Job, RecordRow, RecordsPage, FieldResult, RecordDetail } from '../api/client'
+import type { RecordRow, RecordsPage, FieldResult, RecordDetail } from '../api/client'
 import { Pill } from '../components/Pill'
 import { DOT_COLOR, kindOf } from '../lib/verdict'
 import { FIELD_LABEL, QUALITY_LABEL, engineLine, fieldValues } from '../lib/copy'
@@ -11,6 +11,7 @@ import { BulkDecisionDialog } from '../components/BulkDecisionDialog'
 import { useToast } from '../lib/toast'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 import { REVIEWER } from '../lib/session'
+import { runJob } from '../lib/job'
 
 const FILTERS = [
   { key: 'attention', label: 'Needs attention' },
@@ -73,18 +74,7 @@ export function Inbox() {
   })
 
   const verifyAll = useMutation({
-    mutationFn: async () => {
-      const job = await api<Job>('/jobs', {
-        method: 'POST',
-        body: { scope: 'pending', verify_now: true },
-      })
-      let state = job
-      while (state.state === 'running') {
-        await new Promise((r) => setTimeout(r, 350))
-        state = await api<Job>(`/jobs/${job.id}`)
-      }
-      return state
-    },
+    mutationFn: () => runJob({ scope: 'pending', verify_now: true }),
     onSuccess: async (job) => {
       invalidate()
       // One notice for the whole run, not one per record.
@@ -103,18 +93,7 @@ export function Inbox() {
   })
 
   const bulkVerify = useMutation({
-    mutationFn: async (ids: string[]) => {
-      const started = await api<Job>('/jobs', {
-        method: 'POST',
-        body: { scope: 'ids', record_ids: ids, verify_now: true },
-      })
-      let state = started
-      while (state.state === 'running') {
-        await new Promise((r) => setTimeout(r, 350))
-        state = await api<Job>(`/jobs/${started.id}`)
-      }
-      return state
-    },
+    mutationFn: (ids: string[]) => runJob({ scope: 'ids', record_ids: ids, verify_now: true }),
     onSuccess: (job) => {
       clearSelection()
       invalidate()
@@ -475,28 +454,26 @@ function QueueItem({
                 <div>Label shows</div>
                 <div>Result</div>
               </div>
-              {(detail.data?.field_results ?? []).map((f: FieldResult) => (
+              {(detail.data?.field_results ?? []).map((f: FieldResult) => {
+                const values = fieldValues(f)
+                const valueClass = `fields-value${values.recorded ? '' : ' fields-unrecorded'}`
+                return (
                 <div className="fields-row fields-compact" key={f.field_key}>
                   <div className="fields-name" style={{ fontSize: 13, fontWeight: 600 }}>
                     {FIELD_LABEL[f.field_key] ?? f.field_key}
                   </div>
-                  <div
-                    className={`fields-value${fieldValues(f).recorded ? '' : ' fields-unrecorded'}`}
-                    style={{ fontSize: 13 }}
-                  >
-                    {fieldValues(f).app}
+                  <div className={valueClass} style={{ fontSize: 13 }}>
+                    {values.app}
                   </div>
-                  <div
-                    className={`fields-value${fieldValues(f).recorded ? '' : ' fields-unrecorded'}`}
-                    style={{ fontSize: 13 }}
-                  >
-                    {fieldValues(f).label}
+                  <div className={valueClass} style={{ fontSize: 13 }}>
+                    {values.label}
                   </div>
                   <div>
                     <Pill verdict={f.verdict} small />
                   </div>
                 </div>
-              ))}
+                )
+              })}
               <div className="row" style={{ marginTop: 14 }}>
                 <Link className="btn" to={`/records/${record.id}${queueSearch}`}>
                   Open full determination

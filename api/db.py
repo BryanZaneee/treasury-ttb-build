@@ -241,24 +241,11 @@ def filter_counts() -> dict[str, int]:
 
 
 def upsert_field_results(record_id: str, results: list[dict[str, Any]]) -> None:
-    with transaction() as conn:
-        for result in results:
-            row = {**result, "record_id": record_id}
-            columns = [c for c in FIELD_RESULT_COLUMNS if c in row]
-            placeholders = ", ".join("?" for _ in columns)
-            updates = ", ".join(f"{c}=excluded.{c}" for c in columns if c not in ("record_id", "field_key"))
-            conn.execute(
-                f"""
-                INSERT INTO field_results ({', '.join(columns)}) VALUES ({placeholders})
-                ON CONFLICT (record_id, field_key) DO UPDATE SET {updates}
-                """,
-                [row[c] for c in columns],
-            )
-    schedule_mirror_write()
+    upsert_field_results_many([{**r, "record_id": record_id} for r in results])
 
 
 def upsert_field_results_many(rows: list[dict[str, Any]]) -> None:
-    """Field results for many records in one transaction, for import."""
+    """Field results for one or many records, in a single transaction."""
     if not rows:
         return
     with transaction() as conn:

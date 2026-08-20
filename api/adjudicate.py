@@ -34,7 +34,6 @@ _APP_ATTR = {
     "producer": "producer",
     "origin": "origin",
 }
-_LABEL_FIELD = dict(_APP_ATTR)
 
 _LABELS = {
     "brand": "Brand name",
@@ -397,7 +396,7 @@ def adjudicate(
             continue
 
         app_raw: str | None = getattr(app, _APP_ATTR[key])
-        field = getattr(reading, _LABEL_FIELD[key])
+        field = getattr(reading, _APP_ATTR[key])
         label_raw: str | None = field.value
 
         # producer is conditional and origin is imports-only: adjudicate them

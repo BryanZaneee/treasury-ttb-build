@@ -156,7 +156,7 @@ export type Counts = {
   closed: number
 }
 
-export type RecordsPage = { records: RecordRow[]; counts: Counts; cursor: string | null }
+export type RecordsPage = { records: RecordRow[]; counts: Counts }
 
 export type SpecimenSummary = {
   filename: string

@@ -30,7 +30,6 @@ def test_list_records_empty() -> None:
     body = resp.json()
     assert body["records"] == []
     assert body["counts"]["attention"] == 0
-    assert body["cursor"] is None
 
 
 def test_create_record_requires_token() -> None:

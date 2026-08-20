@@ -42,7 +42,6 @@ class RecordCounts(BaseModel):
 class RecordsListResponse(BaseModel):
     records: list[Record] = []
     counts: RecordCounts = RecordCounts()
-    cursor: str | None = None
 
 
 class RecordDetail(Record):
@@ -74,14 +73,12 @@ def _row_to_record(row: sqlite3.Row) -> Record:
 def list_records(
     filter: FilterName | None = None,
     q: str | None = None,
-    cursor: str | None = None,
 ) -> RecordsListResponse:
     rows = db.list_records(result_filter=filter, query=q)
     counts = db.filter_counts()
     return RecordsListResponse(
         records=[_row_to_record(r) for r in rows],
         counts=RecordCounts(**counts),
-        cursor=None,
     )
 
 
