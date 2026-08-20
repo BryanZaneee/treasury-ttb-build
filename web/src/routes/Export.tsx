@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, freshUrl } from '../api/client'
-import type { Health, RecordsPage, StoreImport } from '../api/client'
+import type { Health, RecordsPage } from '../api/client'
 
 /**
  * Export and store administration. The store is read as a normal web page — CSV
@@ -22,27 +22,6 @@ export function Export() {
   const health = useQuery({
     queryKey: ['health'],
     queryFn: () => api<Health>('/health'),
-  })
-
-  const csvRef = useRef<HTMLInputElement>(null)
-
-  // Merge upserts by id, so re-importing an export we just downloaded restores
-  // the store instead of colliding with it (PRD §5.1).
-  const restore = useMutation({
-    mutationFn: (file: File) => {
-      const form = new FormData()
-      form.append('csv_file', file)
-      form.append('mode', 'merge')
-      return api<StoreImport>('/store/import', { method: 'POST', form, admin: true })
-    },
-    onSuccess: (data) => {
-      setMessage(
-        `Imported ${data.imported} record${data.imported === 1 ? '' : 's'}` +
-          (data.errors.length ? ` — ${data.errors.length} row(s) skipped: ${data.errors[0]}` : ''),
-      )
-      client.invalidateQueries({ queryKey: ['records'] })
-    },
-    onError: (e) => setMessage(String(e)),
   })
 
   const reset = useMutation({
@@ -82,33 +61,13 @@ export function Export() {
             regenerated after every mutation.
           </p>
           <p className="card-note">
-            An exported CSV imports straight back: rows merge by id, so restoring an export is
-            idempotent. Import requires the admin token. To file <em>new</em> applications from a
-            spreadsheet, use the blank template on Check a batch.
+            To file applications from a spreadsheet, upload the CSV and its specimens on Check a
+            batch — it stages every row for review before anything is written.
           </p>
           <div className="stack" style={{ gap: 10, marginTop: 14 }}>
             <a className="btn btn-wide" href={freshUrl('/export/records.csv')} download>
               Export records as CSV
             </a>
-            <button
-              className="btn btn-quiet btn-wide"
-              onClick={() => csvRef.current?.click()}
-              disabled={restore.isPending}
-            >
-              {restore.isPending && <span className="spinner spinner-dark" />}
-              Import records CSV
-            </button>
-            <input
-              ref={csvRef}
-              type="file"
-              accept=".csv,text/csv"
-              hidden
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                e.target.value = '' // so re-picking the same file fires again
-                if (file) restore.mutate(file)
-              }}
-            />
             <button className="btn btn-quiet btn-wide" onClick={() => setShowStore((v) => !v)}>
               {showStore ? 'Hide record table' : 'View record table'}
             </button>
