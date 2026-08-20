@@ -364,9 +364,10 @@ function Determination() {
                 </button>
               </div>
             ) : confirming === null ? (
-              /* Leading action first: accepting the determination on a record
-                 that has one, running the verification on a record that does
-                 not. Fixing the application sits next to it either way. */
+              /* The two decisions lead, because deciding is the job. Fixing
+                 the application and reading the label again are how a reviewer
+                 gets to one, so they follow. An unverified record has no
+                 determination to accept, so verification takes the front. */
               <div className="row">
                 {data.verified ? (
                   <button className="btn btn-accept" onClick={() => setConfirming('accepted')}>
@@ -382,6 +383,9 @@ function Determination() {
                     Run AI verification
                   </button>
                 )}
+                <button className="btn btn-return" onClick={() => setConfirming('returned')}>
+                  Return to applicant
+                </button>
                 <button className="btn btn-quiet" onClick={startFixing}>
                   Fix results
                 </button>
@@ -395,9 +399,6 @@ function Determination() {
                     Re-run AI verification
                   </button>
                 )}
-                <button className="btn btn-return" onClick={() => setConfirming('returned')}>
-                  Return to applicant
-                </button>
               </div>
             ) : (
               <div style={{ width: '100%' }}>
