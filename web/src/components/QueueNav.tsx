@@ -58,7 +58,18 @@ export function QueueNav({
         direction="back"
       />
 
-      <div className="queue-nav-place">{children}</div>
+      <div className="queue-nav-place">
+        {children}
+        {/* Where this record sits in the queue being stepped through, so the
+            reviewer knows how much of it is left before pressing Next. */}
+        {place.total > 0 && (
+          <div className="queue-nav-count">
+            {place.index >= 0
+              ? `${place.index + 1} of ${place.total} in this queue`
+              : `${place.total} in this queue`}
+          </div>
+        )}
+      </div>
 
       <Step
         to={place.next && `/records/${place.next.id}${place.search}`}
