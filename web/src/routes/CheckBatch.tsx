@@ -243,10 +243,6 @@ export function CheckBatch() {
         <div className="card card-pad area-step1">
             <div className="card-title">Application CSV</div>
             <p className="card-note">Required columns: {REQUIRED}</p>
-            <p className="card-note">
-              An exported records CSV works here too — its column names are recognised and
-              its extra columns ignored.
-            </p>
             <div className="grid-2" style={{ marginTop: 12 }}>
               <button
                 className="dropzone"
@@ -286,7 +282,7 @@ export function CheckBatch() {
             />
             <div className="row" style={{ marginTop: 12 }}>
               <button
-                className="btn btn-quiet"
+                className="btn"
                 onClick={() => stage.mutate()}
                 disabled={staging}
               >
@@ -342,7 +338,7 @@ export function CheckBatch() {
                           columns it acts on. */}
                       {selected.size > 0 ? (
                         <tr>
-                          <th className="bulkbar-cell" colSpan={9}>
+                          <th className="bulkbar-cell" colSpan={8}>
                             <div className="bulkbar">
                               <span className="bulkbar-check">
                                 <input
@@ -400,7 +396,6 @@ export function CheckBatch() {
                           </th>
                           <th>#</th>
                           <th>Label</th>
-                          <th>Brand</th>
                           <th>Applicant</th>
                           <th>Filename</th>
                           <th>Pairing</th>
@@ -452,6 +447,13 @@ export function CheckBatch() {
             )}
             {/* The staged batch outlives the page now, so there has to be a way
                 to put it down that is not filing it. */}
+            {batch && batch.summary.unused_images.length > 0 && (
+              <p className="card-note">
+                {batch.summary.unused_images.length} uploaded image
+                {batch.summary.unused_images.length === 1 ? '' : 's'} no row claims — pair one
+                from any row's Image picker.
+              </p>
+            )}
             <button
               className="btn btn-quiet btn-wide"
               style={{ marginTop: 10 }}
@@ -554,7 +556,7 @@ export function CheckBatch() {
                 </div>
                 <div className="banner-text">
                   These rows will be <strong>dropped, not filed</strong>. A record with no
-                  specimen can never be verified — attach a label first if you want to keep it.
+                  label can never be verified — attach one first if you want to keep it.
                 </div>
               </div>
               {batch.rows
@@ -585,7 +587,21 @@ export function CheckBatch() {
               >
                 Drop them and file the rest
               </button>
-              <button className="btn btn-quiet" onClick={() => setDropWarn(null)}>
+              {/* PRD §5.5 files a row with no specimen - it just cannot be
+                  verified. Dropping is the default because a record nobody can
+                  ever verify is usually a mistake, not the intent. */}
+              <button
+                className="btn btn-quiet"
+                disabled={commit.isPending}
+                onClick={() => {
+                  const { rows, verify } = dropWarn
+                  setDropWarn(null)
+                  commit.mutate({ rows, verify })
+                }}
+              >
+                File them without a label
+              </button>
+              <button className="btn btn-quiet push" onClick={() => setDropWarn(null)}>
                 Cancel
               </button>
             </div>
@@ -657,7 +673,6 @@ function StagedTableRow({
           }}
         />
       </td>
-      <td>{row.brand}</td>
       <td>{row.applicant}</td>
       <td className="mono" style={{ fontSize: 12 }}>
         {row.filename}
@@ -716,9 +731,13 @@ function ImagePicker({
   onClose: () => void
 }) {
   const pick = useRef<HTMLInputElement>(null)
-  const offered = [
+  // The uploads that made this row ambiguous are the answer to the question the
+  // reviewer opened this dialog with, so they lead, under their own heading,
+  // rather than being mixed in with every other unclaimed file.
+  const conflicting = row.bucket === 'ambiguous' ? row.candidate_filenames : []
+  const others = [
     ...new Set([...(row.image ? [row.image] : []), ...row.candidate_filenames, ...unused]),
-  ]
+  ].filter((name) => !conflicting.includes(name))
   return (
     <div className="dialog-backdrop" role="presentation" onClick={onClose}>
       <div
@@ -738,40 +757,39 @@ function ImagePicker({
         </div>
 
         <div className="dialog-body">
-          {offered.length === 0 ? (
+          {conflicting.length === 0 && others.length === 0 && (
             <p className="card-note">
-              No unclaimed images are left in this batch. Upload the specimen instead.
+              No unclaimed images are left in this batch. Upload the label instead.
             </p>
-          ) : (
-            <div className="unused-strip">
-              {offered.map((name) => (
-                <figure key={name}>
-                  <span
-                    className={`thumb thumb-lg${name === row.image ? ' thumb-current' : ''}`}
-                  >
-                    <button
-                      type="button"
-                      className="thumb-open"
-                      aria-label={`Pair row ${row.row} with ${name}`}
-                      disabled={busy}
-                      onClick={() => onPick(name)}
-                    >
-                      <img src={imageUrl(name)} alt="" />
-                    </button>
-                    <button
-                      type="button"
-                      className="thumb-x"
-                      aria-label={`Remove ${name} from this batch`}
-                      disabled={busy}
-                      onClick={() => onDiscard(name)}
-                    >
-                      ×
-                    </button>
-                  </span>
-                  <figcaption className="mono">{name}</figcaption>
-                </figure>
-              ))}
-            </div>
+          )}
+          {conflicting.length > 0 && (
+            <>
+              <div className="picker-group">
+                {conflicting.length} uploads normalise to this row&rsquo;s filename. Pick the one
+                that belongs to it — and remove the other with its × so it stops matching.
+              </div>
+              <ImageChoices
+                names={conflicting}
+                row={row}
+                busy={busy}
+                onPick={onPick}
+                onDiscard={onDiscard}
+              />
+            </>
+          )}
+          {others.length > 0 && (
+            <>
+              {conflicting.length > 0 && (
+                <div className="picker-group">Other unclaimed uploads</div>
+              )}
+              <ImageChoices
+                names={others}
+                row={row}
+                busy={busy}
+                onPick={onPick}
+                onDiscard={onDiscard}
+              />
+            </>
           )}
         </div>
 
@@ -801,6 +819,52 @@ function ImagePicker({
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** The thumbnails one group of the picker offers: click to pair the row with
+    it, × to drop the file from the batch entirely. */
+function ImageChoices({
+  names,
+  row,
+  busy,
+  onPick,
+  onDiscard,
+}: {
+  names: string[]
+  row: StagedRow
+  busy: boolean
+  onPick: (name: string | null) => void
+  onDiscard: (name: string) => void
+}) {
+  return (
+    <div className="unused-strip">
+      {names.map((name) => (
+        <figure key={name}>
+          <span className={`thumb thumb-lg${name === row.image ? ' thumb-current' : ''}`}>
+            <button
+              type="button"
+              className="thumb-open"
+              aria-label={`Pair row ${row.row} with ${name}`}
+              disabled={busy}
+              onClick={() => onPick(name)}
+            >
+              <img src={imageUrl(name)} alt="" />
+            </button>
+            <button
+              type="button"
+              className="thumb-x"
+              aria-label={`Remove ${name} from this batch`}
+              disabled={busy}
+              onClick={() => onDiscard(name)}
+            >
+              ×
+            </button>
+          </span>
+          <figcaption className="mono">{name}</figcaption>
+        </figure>
+      ))}
     </div>
   )
 }
