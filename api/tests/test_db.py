@@ -114,3 +114,41 @@ def test_snapshot_creates_a_backup_file() -> None:
     row = conn.execute("SELECT id FROM records WHERE id = 'rec-4'").fetchone()
     conn.close()
     assert row is not None
+
+
+def test_snapshots_are_pruned_after_the_retention_window() -> None:
+    """PRD §8 keeps 30 days. Snapshots are taken before every import and reset,
+    so without pruning the directory grows for the life of the deployment."""
+    import os
+    import time as _time
+
+    snapshots = db.data_dir() / "snapshots"
+    old = snapshots / "2020-01-01T00-00-00Z.db"
+    old.write_bytes(b"stale")
+    ancient = _time.time() - 40 * 86400
+    os.utime(old, (ancient, ancient))
+
+    recent = snapshots / "2099-01-01T00-00-00Z.db"
+    recent.write_bytes(b"fresh")
+
+    removed = db.prune_snapshots()
+    assert old in removed
+    assert not old.exists()
+    assert recent.exists(), "the newest snapshot is never pruned"
+
+
+def test_pruning_keeps_the_newest_snapshot_however_old() -> None:
+    """A store nobody has touched for a month must still be restorable."""
+    import os
+    import time as _time
+
+    snapshots = db.data_dir() / "snapshots"
+    for f in snapshots.glob("*.db"):
+        f.unlink()
+    only = snapshots / "2020-01-01T00-00-00Z.db"
+    only.write_bytes(b"stale")
+    ancient = _time.time() - 400 * 86400
+    os.utime(only, (ancient, ancient))
+
+    assert db.prune_snapshots() == []
+    assert only.exists()

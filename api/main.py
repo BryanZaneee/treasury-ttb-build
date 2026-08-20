@@ -1,5 +1,6 @@
 """App factory: FastAPI instance, CORS, token middleware, health, routers."""
 
+import threading
 import time
 from typing import Any
 
@@ -35,6 +36,44 @@ _ADMIN_ROUTES = [
 # requirement for mode: "reset" (PRD §5.1, §8) depends on the request body,
 # so that half of the check belongs in the route handler once it exists (M1),
 # not in this path/method-based middleware.
+
+
+# PRD §8: per-IP rate limits on upload and verify. These are the two routes
+# that cost money and disk - everything else is a read against SQLite.
+_LIMITED_ROUTES = (("POST", "/api/records"), ("POST", "/api/jobs"))
+_LIMIT_PER_MINUTE = 60
+_hits: dict[str, list[float]] = {}
+_hits_lock = threading.Lock()
+
+
+def _over_limit(client_ip: str) -> bool:
+    """Fixed 60-second window per IP.
+
+    ponytail: in-process, so the effective ceiling is the limit times the
+    worker count. That is the right order of magnitude for a two-worker
+    single-tenant deployment; move it to SQLite or Redis if the service ever
+    fronts more than one box.
+    """
+    now = time.time()
+    with _hits_lock:
+        recent = [t for t in _hits.get(client_ip, []) if now - t < 60]
+        recent.append(now)
+        _hits[client_ip] = recent
+        return len(recent) > _LIMIT_PER_MINUTE
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next: Any) -> Any:
+        limited = any(
+            request.method == m and request.url.path.startswith(p) for m, p in _LIMITED_ROUTES
+        )
+        if limited and _over_limit(request.client.host if request.client else "unknown"):
+            logs.count("rate_limited")
+            logs.event("rate_limited", path=request.url.path)
+            return JSONResponse(
+                {"detail": "too many requests; slow down and retry"}, status_code=429
+            )
+        return await call_next(request)
 
 
 class TokenMiddleware(BaseHTTPMiddleware):
@@ -111,6 +150,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="TTB Label Verification API")
 
     app.add_middleware(TokenMiddleware)
+    app.add_middleware(RateLimitMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(
         CORSMiddleware,

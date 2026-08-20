@@ -109,7 +109,31 @@ def snapshot(reason: str) -> Path:
     finally:
         conn.close()
     append_audit(None, "snapshot", {"reason": reason, "path": str(dest)})
+    prune_snapshots()
     return dest
+
+
+# PRD §8 keeps backups for 30 days. Snapshots are taken before every import and
+# reset, so without this the directory grows for the life of the deployment.
+SNAPSHOT_RETENTION_DAYS = 30
+
+
+def prune_snapshots(keep_days: int = SNAPSHOT_RETENTION_DAYS) -> list[Path]:
+    """Delete snapshots older than the retention window. Returns what went.
+
+    Never deletes the newest one whatever its age: a store that has sat
+    untouched for a month should still have something to restore from.
+    """
+    snapshots = sorted((data_dir() / "snapshots").glob("*.db"))
+    if not snapshots:
+        return []
+    cutoff = datetime.now(UTC).timestamp() - keep_days * 86400
+    removed = []
+    for path in snapshots[:-1]:
+        if path.stat().st_mtime < cutoff:
+            path.unlink()
+            removed.append(path)
+    return removed
 
 
 def append_audit(record_id: str | None, event: str, payload: dict[str, Any]) -> None:

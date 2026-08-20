@@ -28,6 +28,7 @@ from models import Application, FieldResult, LabelReading, Record
 from readers import get_reader
 from readers.prep import prepare
 from readers.prompts import VERSION as PROMPT_VERSION
+from readers.vision import SpendCapReached
 
 router = APIRouter(tags=["records"])
 
@@ -226,8 +227,17 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
                 {"reading": reading.model_dump(mode="json"), "engine": engine, "reader": provider},
             )
         return reading, engine, provider, prep_ms
+    except SpendCapReached:
+        # Acceptance test 17: the engine string names the cause. "unavailable"
+        # would read as an outage a reviewer should retry, when in fact nothing
+        # is broken and nothing will change until the cap resets at UTC
+        # midnight.
+        logs.count("spend_cap_reached")
+        capped = True
+        cause = "daily paid-call cap reached"
     except Exception as exc:  # noqa: BLE001 - any reader failure degrades, never 500s
         logs.count("reader_errors")
+        capped = False
         cause = type(exc).__name__ if not str(exc) else str(exc).split("\n")[0][:120]
 
     if provider == "ocr":
@@ -238,9 +248,10 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
         raise HTTPException(status_code=422, detail=f"no reader available: {exc}") from exc
     # An OCR-only reading never auto-closes (PRD §5.3); the engine string is
     # what tells the reviewer which reader actually read this label.
+    reason = "daily spend cap reached" if capped else f"{provider} unavailable"
     return (
         reading,
-        f"deterministic rules engine ({provider} unavailable, read by local OCR)",
+        f"deterministic rules engine ({reason}, read by local OCR)",
         "ocr",
         prep_ms,
     )

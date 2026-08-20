@@ -1002,3 +1002,77 @@ def test_overriding_a_failure_must_be_attributed() -> None:
     assert entry["override"] is True
     assert entry["decided_by"] == "R. Mills"
     assert entry["result"] == "fail"
+
+
+def test_the_engine_string_names_a_spend_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Acceptance test 17: on a cap breach the record must say so.
+
+    "openai unavailable" reads as an outage worth retrying. A cap is not - it
+    holds until UTC midnight, and the reviewer needs to be able to tell.
+    """
+    import config
+    import readers
+    from readers.vision import SpendCapReached
+    from routers import records as records_router
+
+    record_id = _seed_and_get("old-tom-pass.jpg")
+    monkeypatch.setattr(config.settings, "reader_provider", "openai")
+
+    real = readers.get_reader
+
+    class Capped:
+        name = "openai"
+
+        def read(self, specimen: str, image_path: Any = None) -> Any:
+            raise SpendCapReached("daily paid-call cap of 300 reached")
+
+    def capped(provider: str | None = None, *args: object, **kwargs: object) -> object:
+        return Capped() if provider == "openai" else real("fake")
+
+    monkeypatch.setattr(records_router, "get_reader", capped)
+
+    body = client.post(f"/api/records/{record_id}/verify", headers=ACCESS).json()
+    assert body["reader_provider"] == "ocr"
+    assert "cap" in body["engine"], f"engine string must name the cap: {body['engine']}"
+    assert "unavailable" not in body["engine"], "a cap is not an outage"
+
+
+def test_upload_is_rate_limited_per_ip(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PRD §8. Verification costs money per call, so nothing should be able to
+    drive it in a loop unthrottled."""
+    import main
+
+    monkeypatch.setattr(main, "_LIMIT_PER_MINUTE", 3)
+    main._hits.clear()
+
+    statuses = [
+        client.post(
+            "/api/records",
+            headers=ACCESS,
+            data={
+                "applicant": "Acme",
+                "beverage": "spirits",
+                "application": (
+                    '{"brand": "Old Tom", "class_type": "Bourbon", '
+                    '"abv": "45%", "net": "750 mL"}'
+                ),
+                "specimen_key": "old-tom-pass.jpg",
+            },
+            files={},
+        ).status_code
+        for _ in range(5)
+    ]
+    assert 429 in statuses, f"expected throttling, got {statuses}"
+    assert statuses.count(429) == 2, f"first three should pass: {statuses}"
+    main._hits.clear()
+
+
+def test_reads_are_never_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only the routes that cost money are limited; a reviewer working the
+    inbox quickly must never be throttled."""
+    import main
+
+    monkeypatch.setattr(main, "_LIMIT_PER_MINUTE", 2)
+    main._hits.clear()
+    assert all(client.get("/api/records").status_code == 200 for _ in range(6))
+    main._hits.clear()
