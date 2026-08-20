@@ -5,6 +5,7 @@ import type { RecordDetail, RecordRow } from '../api/client'
 import { FIELD_LABEL } from '../lib/copy'
 import { REVIEWER } from '../lib/session'
 import { useEscape } from '../lib/dialog'
+import { contestedAccept } from '../lib/verdict'
 import { Pill } from './Pill'
 
 /**
@@ -33,13 +34,16 @@ export function BulkDecisionDialog({
   const [reason, setReason] = useState('')
   useEscape(onCancel)
   const overrides = records.filter((r) => r.result !== 'match')
-  const needsOverrideDetail = decision === 'accepted' && overrides.length > 0
+  // Only a failed check is worth naming field by field. A presentation
+  // difference is still recorded as an override, without the challenge.
+  const contested = records.filter((r) => contestedAccept(r.result))
+  const needsOverrideDetail = decision === 'accepted' && contested.length > 0
 
   const details = useQuery({
-    queryKey: ['bulk-detail', overrides.map((r) => r.id).join(',')],
+    queryKey: ['bulk-detail', contested.map((r) => r.id).join(',')],
     enabled: needsOverrideDetail,
     queryFn: () =>
-      Promise.all(overrides.map((r) => api<RecordDetail>(`/records/${r.id}`))),
+      Promise.all(contested.map((r) => api<RecordDetail>(`/records/${r.id}`))),
   })
 
   const accepting = decision === 'accepted'
@@ -97,7 +101,7 @@ export function BulkDecisionDialog({
                   <strong>
                     {records.length === 1
                       ? 'This record did not pass verification.'
-                      : `${overrides.length} of these did not pass verification.`}
+                      : `${contested.length} of these did not pass verification.`}
                   </strong>{' '}
                   {records.length === 1
                     ? 'Accepting it overrides the fields listed below.'
@@ -127,10 +131,11 @@ export function BulkDecisionDialog({
             </>
           )}
 
-          {accepting && overrides.length === 0 && (
+          {accepting && contested.length === 0 && (
             <p className="card-note">
-              {records.length === 1 ? 'This record' : 'Every selected record'} passed
-              verification. No override is required.
+              {overrides.length === 0
+                ? `${records.length === 1 ? 'This record' : 'Every selected record'} passed verification. No override is required.`
+                : 'Nothing selected failed its check. A difference in presentation is still recorded as an override.'}
             </p>
           )}
         </div>

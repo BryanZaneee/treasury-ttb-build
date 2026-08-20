@@ -7,7 +7,7 @@ import type { Toast } from '../lib/toast'
 import { useEscape } from '../lib/dialog'
 import { useToast } from '../lib/toast'
 import { FIELD_LABEL, RESULT_COPY } from '../lib/copy'
-import { PILL_TEXT, kindOf } from '../lib/verdict'
+import { PILL_TEXT, contestedAccept, kindOf } from '../lib/verdict'
 import { REVIEWER } from '../lib/session'
 import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
@@ -235,8 +235,11 @@ export function CheckLabel() {
         {
           label: 'Accept application',
           onClick: () => {
-            if (record.result === 'match') {
-              decide.mutate({ id: record.id, override: false })
+            if (!contestedAccept(record.result)) {
+              // The override is still recorded for anything short of a match
+              // (PRD §5.1); it is only the challenge that a presentation
+              // difference does not warrant.
+              decide.mutate({ id: record.id, override: record.result !== 'match' })
               return
             }
             confirmOverride(record)

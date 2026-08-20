@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api, imageUrl } from '../api/client'
 import type { Health, RecordDetail as Detail } from '../api/client'
 import { Pill } from '../components/Pill'
-import { kindOf } from '../lib/verdict'
+import { contestedAccept, kindOf } from '../lib/verdict'
 import { FIELD_LABEL, RESULT_COPY, fieldValues } from '../lib/copy'
 import { REVIEWER } from '../lib/session'
 import { QueueNav } from '../components/QueueNav'
@@ -403,7 +403,7 @@ function Determination() {
             ) : (
               <div style={{ width: '100%' }}>
                 {error && <div className="banner-error">{error}</div>}
-                {confirming === 'accepted' && needsOverride && (
+                {confirming === 'accepted' && contestedAccept(data.result) && (
                   <div className="banner">
                     <div className="banner-mark" aria-hidden="true">
                       !
@@ -471,20 +471,21 @@ function Determination() {
                 </div>
               </div>
             )}
-            <div
-              className="push"
-              style={{
-                fontSize: 12,
-                color: 'var(--ink-6)',
-                maxWidth: 360,
-                textAlign: 'right',
-                lineHeight: 1.5,
-              }}
-            >
-              {data.verified
-                ? 'A returned record is not reopenable. The applicant files afresh.'
-                : 'Nothing has been read yet. Run AI verification to compare this label against the application as filed.'}
-            </div>
+            {!data.verified && (
+              <div
+                className="push"
+                style={{
+                  fontSize: 12,
+                  color: 'var(--ink-6)',
+                  maxWidth: 360,
+                  textAlign: 'right',
+                  lineHeight: 1.5,
+                }}
+              >
+                Nothing has been read yet. Run AI verification to compare this label against
+                the application as filed.
+              </div>
+            )}
           </div>
         </div>
       </div>
