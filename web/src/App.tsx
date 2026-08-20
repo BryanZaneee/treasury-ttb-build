@@ -22,9 +22,8 @@ export function App() {
   })
   const attention = counts.data?.counts.attention ?? 0
 
-  // A process started against a stale READER_PROVIDER read every label with the
-  // OCR fallback for an afternoon and nothing on screen said so. Verdict
-  // quality depends on which reader ran, so a degraded one is masthead news.
+  // Verdict quality depends on which reader actually ran, so a degraded one is
+  // masthead news.
   const health = useQuery({
     queryKey: ['health'],
     queryFn: () => api<Health>('/health'),

@@ -19,17 +19,11 @@ from PIL import Image, ImageFilter, ImageOps, ImageStat
 MAX_EDGE = 1024
 JPEG_QUALITY = 85
 
-# Edge-energy below this reads as a soft capture. Calibrated by measuring all 25
-# fixtures: the three blurred ones score 12.4/21.4/32.7 and the lowest clean one
-# scores 37.7, so 35 separates them with no false positive.
-#
-# It is worth being precise about what this does and does not buy. Sharpness is a
-# *blur* detector, not a capture-quality classifier: measured across the fixture
-# set, glare (44-62), pixelation (48-54), angle (45-48), dark (36), damage (51)
-# and cropping (41) all sit inside the clean range of 37.7-61.6 and are simply
-# invisible to it. Those treatments need the vision reader's own quality call.
-# ponytail: blur-only prior, and the margin here is 2.7 points - recalibrate
-# against the fixture set if the prep pipeline or MAX_EDGE ever changes.
+# Edge-energy below this reads as a soft capture. Calibrated across all 25
+# fixtures: the three blurred ones score 12.4/21.4/32.7, the lowest clean one
+# 37.7. Blur only - glare, pixelation, angle, dark, damage and cropping all land
+# inside the clean range and need the vision reader's own quality call.
+# ponytail: 2.7-point margin, recalibrate if the prep pipeline or MAX_EDGE moves.
 SHARP_FLOOR = 35.0
 
 

@@ -6,20 +6,10 @@ import type { RecordRow, RecordsPage } from '../api/client'
 import { matchesQuery } from '../lib/search'
 
 /**
- * Move through the queue the reviewer came from, without going back to the
- * inbox between every label.
- *
- * The filter and search arrive as URL search params, which keeps a link to a
- * record intact across a reload, and this applies the same predicate the inbox
- * does (lib/search) — if the two diverged, Next would walk a different set from
- * the one the reviewer was looking at.
- *
- * `children` sits above the queue position in the centre column, which is how
- * the determination view puts its verdict between the two steps. The component
- * always renders: it used to return null while its own query was in flight and
- * whenever the record was outside the current queue, so the bar vanished and
- * reappeared on every step — and now that it carries the verdict, that would
- * take the verdict with it.
+ * Step through the queue the reviewer came from. Filter and search arrive as
+ * URL params and go through lib/search, the same predicate the inbox uses — if
+ * they diverged, Next would walk a different set. Always renders, including
+ * while loading: it carries the verdict in `children`.
  */
 
 const FILTER_LABEL: Record<string, string> = {

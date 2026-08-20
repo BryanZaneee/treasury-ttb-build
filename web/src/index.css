@@ -345,10 +345,8 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 
 /* ---------------- determination header ---------------- */
 
-/* The header carries Previous / Next as well as the verdict. They used to sit
-   below the field table, where their position moved with the number of
-   per-field notes - a control that walks down the page as the thing it
-   navigates gets longer. */
+/* Previous / Next live in the header, not below the field table: down there
+   their position moved with the number of per-field notes. */
 .result-head {
   padding: 16px 20px; display: grid; gap: 18px;
   align-items: center; border-bottom: 1px solid var(--rule);
@@ -564,9 +562,8 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 
 /* ---------------- queue navigation ---------------- */
 
-/* Previous / Next under the determination, in place of the list that used to
-   sit beside it: the navigation was the point, the list was only how it was
-   delivered, and seventeen rows of chrome competed with one determination. */
+/* Previous / Next under the determination, replacing the worklist that sat
+   beside it — seventeen rows of chrome competing with one determination. */
 .queue-nav {
   display: grid;
   /* Fixed, not `auto`: an auto centre is sized by "1 of 25" and then by
@@ -635,10 +632,8 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 .label-frame img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 .label-frame-sm { aspect-ratio: 3 / 4; width: 84px; flex: none; padding: 6px; }
 
-/* The specimen picker holds its size whether or not an image is chosen: the
-   dropzone and the preview are two states of one control, and swapping them
-   used to move everything below by ~110px. Sized to the preview, which is the
-   taller of the two. */
+/* Fixed height so swapping dropzone for preview does not push the form down.
+   Sized to the preview, the taller of the two states. */
 .specimen-slot { height: 132px; margin: 14px 0; display: flex; align-items: stretch; }
 .specimen-slot > * { flex: 1; min-width: 0; }
 .specimen-slot .dropzone {

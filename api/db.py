@@ -157,12 +157,8 @@ def clear_field_results(record_id: str) -> None:
 
 
 def upsert_records(rows: list[dict[str, Any]]) -> None:
-    """Insert or update many records in ONE transaction.
-
-    Import used to open a transaction per row, so a failure halfway left the
-    store partly overwritten with no way to tell how far it got. Either the
-    whole file lands or none of it does.
-    """
+    """Insert or update many records in ONE transaction, so an import either
+    lands whole or not at all."""
     if not rows:
         return
     with transaction() as conn:
@@ -326,7 +322,6 @@ def _pack_field_results(record_id: str) -> tuple[str, str, str]:
 
 
 def mirror_rows() -> list[dict[str, Any]]:
-    """Records joined with their packed field results, notes and values."""
     conn = connect()
     try:
         records = conn.execute("SELECT * FROM records ORDER BY received").fetchall()

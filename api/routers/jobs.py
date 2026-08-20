@@ -60,9 +60,7 @@ def _commit_batch(job: Job, batch_id: str) -> list[str]:
     if entry is None:
         raise KeyError(f"unknown batch {batch_id!r}")
 
-    # This used to `continue` past ambiguous rows: the docstring promised a
-    # block and the code delivered a silent partial commit, so any caller that
-    # skipped the UI lost rows without being told.
+    # Block, don't skip: a caller bypassing the UI must not lose rows silently.
     unresolved = batching.unresolved(entry.rows)
     if unresolved:
         raise ValueError(

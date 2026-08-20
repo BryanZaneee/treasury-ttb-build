@@ -122,7 +122,6 @@ class AssignRequest(BaseModel):
 
 @router.post("/batches/{batch_id}/rows/{row_no}/image", response_model=StagedBatch)
 def assign_image(batch_id: str, row_no: int, body: AssignRequest) -> StagedBatch:
-    """Pair a staged row with an uploaded image by hand, or clear it."""
     staged = STAGED.get(batch_id)
     if staged is None:
         raise HTTPException(status_code=404, detail=f"unknown batch {batch_id!r}")

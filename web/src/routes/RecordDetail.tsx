@@ -130,9 +130,6 @@ export function RecordDetail() {
     </div>
   )
 
-  /* Previous / Next used to sit below the field table, so their position moved
-     with the number of per-field notes — a control that walks down the page as
-     the thing it navigates gets longer. In the header it is fixed. */
   const header =
     layout === 'b' ? (
       <>

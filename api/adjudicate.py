@@ -134,7 +134,6 @@ def parse_abv(value: str) -> float | None:
 
 
 def parse_net(value: str) -> tuple[float, str] | None:
-    """Net contents as (millilitres, canonical unit)."""
     match = re.search(
         r"(\d+(?:\.\d+)?)\s*(ml|milliliters?|millilitres?|cl|centilitres?|l|liters?|litres?|fl\.?\s*oz|fluid ounces?)",
         value,

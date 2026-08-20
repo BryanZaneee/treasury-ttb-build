@@ -81,12 +81,8 @@ _TRUE = {"1", "true", "yes", "y", "t"}
 
 
 def parse_bool(value: object) -> bool:
-    """A CSV boolean, however it was written.
-
-    The exporter writes SQLite's 1/0, a hand-authored file writes true/false,
-    and Python's str(True) writes True. Import used to compare against the last
-    of those only, so every exported record round-tripped as unverified.
-    """
+    """A CSV boolean, however it was written: the exporter emits SQLite's 1/0, a
+    hand-authored file true/false, and str(True) writes True."""
     return str(value or "").strip().casefold() in _TRUE
 
 
@@ -128,7 +124,7 @@ def unpack_field_results(
 
 
 def from_csv(data: bytes) -> list[dict[str, Any]]:
-    text = data.decode("utf-8-sig")  # tolerates a BOM
+    text = data.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text))
     if reader.fieldnames is None or "app_brand" not in reader.fieldnames:
         raise CsvImportError("app_brand", "missing required column app_brand")

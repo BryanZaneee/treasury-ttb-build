@@ -1,11 +1,5 @@
-/**
- * Inbox search: case- and punctuation-insensitive across ID, applicant, brand
- * and filename (S5).
- *
- * Shared because the determination view's worklist has to reproduce the inbox's
- * filtered set exactly. If the two predicates ever diverged, the list a reviewer
- * clicks through would quietly stop matching the queue they came from.
- */
+/** Inbox search across ID, applicant, brand and filename (S5). Shared so the
+ *  determination view's worklist reproduces the inbox's filtered set exactly. */
 const loosely = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '')
 
 export type Searchable = {

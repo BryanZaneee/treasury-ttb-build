@@ -264,9 +264,7 @@ export function CheckLabel() {
       <div className="card card-pad">
         <div className="card-title">Label image</div>
 
-        {/* One fixed-height slot for both states. Picking a file used to swap a
-            ~90px dropzone for a 200px preview and push the form below it down
-            the page. */}
+        {/* One fixed-height slot for both states — see .specimen-slot. */}
         <div className="specimen-slot">
           {shown ? (
             <div className="row" style={{ alignItems: 'center', height: '100%' }}>

@@ -1,7 +1,8 @@
 """Versioned extraction prompts and the response schema (PRD §5.2, §3.3).
 
-The prompt version is part of the reading cache key, so bumping VERSION
-invalidates every cached reading rather than serving a stale one.
+VERSION is recorded on every record so a reading can be traced to the prompt
+that produced it. There is no extraction cache yet (M3), so bumping it changes
+nothing retroactively.
 """
 
 # Bump on any change to PROMPT or SCHEMA below.

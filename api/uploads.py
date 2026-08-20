@@ -1,17 +1,10 @@
 """Validation and storage for client-supplied images (PRD §8).
 
-Until reviewers could upload their own labels the only images on the volume
-were our own fixtures, so bytes went to disk unexamined at whatever name the
-client asked for. Neither assumption survives a public upload form:
-
-  - a name is a client-supplied string, so `label.jpg` from two people is one
-    file, and `old-tom-pass.png` silently replaces a fixture
-  - a content type is a claim, not evidence, so the format is sniffed from the
-    magic bytes and the image is re-encoded before it is stored
-
-Storage is content-addressed. The schema already separates where an image lives
-(`specimen`) from what it was called (`filename`), so the same bytes uploaded
-twice are one file and two different files can share a name.
+A filename and a declared content type are both client claims: storing under
+the given name lets `old-tom-pass.png` overwrite a fixture. So the format is
+sniffed from the magic bytes and storage is content-addressed, which the schema
+already allows by separating where an image lives (`specimen`) from what it was
+called (`filename`).
 """
 
 from __future__ import annotations
@@ -40,8 +33,6 @@ class UploadError(ValueError):
 
 
 def sniff(data: bytes) -> str:
-    """The image format, from the bytes rather than the filename or the
-    declared content type."""
     for signature, kind in _SIGNATURES:
         if not data.startswith(signature):
             continue
@@ -56,9 +47,8 @@ def sniff(data: bytes) -> str:
 def store(data: bytes, images_dir: Path) -> str:
     """Validate, re-encode and store one image. Returns the storage key.
 
-    Re-encoding through Pillow is what makes the sniff worth doing: whatever
-    was appended to, or hidden inside, the original container does not survive
-    a decode and a re-encode.
+    Re-encoding through Pillow is what makes the sniff worth doing: anything
+    appended to or hidden inside the original container does not survive it.
     """
     if not data:
         raise UploadError("the uploaded file is empty")

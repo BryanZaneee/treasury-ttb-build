@@ -92,9 +92,7 @@ def create_record(
 ) -> Record:
     app = Application.model_validate_json(application)
 
-    # One source for the specimen, or the record would carry an image it never
-    # reads: `specimen` used to prefer specimen_key, so a request with both
-    # wrote the upload to disk and then verified the sample instead.
+    # One source for the specimen, or the record carries an image it never reads.
     uploaded = image if image is not None and image.filename else None
     if uploaded is not None and specimen_key:
         raise HTTPException(
@@ -164,9 +162,8 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
     provider = settings.reader_provider
 
     # Every reader prepares the same image through the same cached function, so
-    # timing it here measures the prep stage once and leaves the reader's own
-    # call a cache hit (PRD §5.4). Reporting it as 0 was a placeholder that
-    # outlived the reader layer it was waiting on.
+    # timing it here measures prep once and leaves the reader's call a cache
+    # hit (PRD §5.4).
     prep_started = time.perf_counter_ns()
     with suppress(Exception):
         # An unreadable file is the reader's error to raise, with its own
@@ -344,10 +341,8 @@ def verify_record(record_id: str) -> Record:
         # not the configured one.
         reader_provider=reader_used,
         reader_model=settings.reader_model if reader_used != "ocr" else None,
-        # Only a vision reading is produced by a prompt, and it is the reader
-        # that actually ran that determines the version - building a second
-        # reader here just to read a constant was also a live call outside the
-        # fallback's try block, so a broken provider raised instead of degrading.
+        # Only a vision reading comes from a prompt, and it is the reader that
+        # actually ran that fixes the version.
         prompt_version=PROMPT_VERSION if reader_used == "openai" else None,
     )
     db.append_audit(

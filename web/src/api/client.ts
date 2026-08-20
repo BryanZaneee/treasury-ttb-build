@@ -17,27 +17,20 @@
 const ROOT = import.meta.env.BASE_URL.replace(/\/$/, '')
 const BASE = `${ROOT}/api`
 
-/** Absolute URL for an API path, base-path aware. */
 export const apiUrl = (path: string) => `${BASE}${path}`
 
 /**
- * The deployed site sits behind a Cloudflare zone with caching turned on for
- * everything, which cached GET /api/records for 27 minutes on first cutover:
- * the inbox kept reporting stale counts and verification looked like it did
- * nothing. Origin `Cache-Control: no-store` is not honoured there.
- *
- * A unique query parameter makes every read a distinct URL, so it can never be
- * answered from a shared cache. The proper fix is a cache-bypass rule for
- * /ttb-build/api/* in the Cloudflare dashboard; until that exists this keeps
- * the store honest from the client side.
+ * The Cloudflare zone in front of the deployment caches everything and ignores
+ * origin `Cache-Control: no-store`, so it served stale inbox counts. A unique
+ * query param makes every read a distinct URL.
+ * ponytail: client-side workaround; the real fix is a cache-bypass rule for
+ * /ttb-build/api/* in the Cloudflare dashboard.
  */
 const uncacheable = (url: string) =>
   `${url}${url.includes('?') ? '&' : '?'}_=${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
-/** Absolute URL for a read that must never be served from a cache. */
 export const freshUrl = (path: string) => uncacheable(apiUrl(path))
 
-/** Absolute URL for a stored specimen image. */
 export const imageUrl = (name: string) => `${BASE}/images/${encodeURIComponent(name)}`
 const ACCESS_TOKEN = import.meta.env.VITE_ACCESS_TOKEN ?? ''
 const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN ?? ''

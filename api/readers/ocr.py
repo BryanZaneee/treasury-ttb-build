@@ -4,11 +4,10 @@ Runs on every specimen: independent second reader for the auto-close gate,
 fallback when the vision provider is unreachable, and an illegibility prior.
 No network, no marginal cost.
 
-What it can and cannot do is worth stating plainly, because the §5.4 agreement
-matrix depends on it: the government warning is plain high-contrast sans-serif
-and OCR reads it near-perfectly, while stylised brand type defeats it regularly.
-Fields it cannot find come back as `None`, which the rules engine treats as
-absent-from-label - never as a guess.
+The §5.4 agreement matrix depends on knowing its reach: it reads the plain
+sans-serif government warning near-perfectly and stylised brand type badly.
+Fields it cannot find return `None`, which the rules engine treats as
+absent-from-label, never as a guess.
 """
 
 from __future__ import annotations
