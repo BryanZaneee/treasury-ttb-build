@@ -200,21 +200,27 @@ export function CheckBatch() {
     onError: (e) => setError(String(e)),
   })
 
-  /** File these rows, first warning about any that have no specimen: those are
-      dropped, not filed - a record with no label cannot ever be verified. */
+  /** File these rows, first warning about the ones that cannot be filed as they
+      stand: a row with no label can never be verified, and an ambiguous row has
+      no single image to file. Both are dropped rather than quietly filed. */
+  const unresolved = (rows: number[]) =>
+    (batch?.rows ?? []).filter(
+      (r) => rows.includes(r.row) && (!r.image || r.bucket === 'ambiguous'),
+    )
+
   const fileRows = (rows: number[], verify: boolean) => {
     if (!batch || rows.length === 0) return
-    const imageless = batch.rows.filter((r) => rows.includes(r.row) && !r.image)
-    if (imageless.length > 0) {
+    if (unresolved(rows).length > 0) {
       setDropWarn({ rows, verify })
       return
     }
     commit.mutate({ rows, verify })
   }
 
-  const committable = batch ? batch.rows.filter((r) => r.bucket !== 'ambiguous').length : 0
+  const committable = batch
+    ? batch.rows.filter((r) => r.image && r.bucket !== 'ambiguous').length
+    : 0
   const rowNumbers = batch?.rows.map((r) => r.row) ?? []
-  const blocking = batch?.rows.filter((r) => r.bucket === 'ambiguous') ?? []
   const allSelected = rowNumbers.length > 0 && rowNumbers.every((n) => selected.has(n))
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(rowNumbers))
   const toggleOne = (row: number) =>
@@ -324,17 +330,18 @@ export function CheckBatch() {
               </div>
             ) : (
               <>
-                {/* Names the rows, not the rule: "any row is ambiguous" leaves the
-                    reviewer to find which one. */}
+                {/* General, not specific: the Pairing column says what is wrong
+                    with each row, and repeating it here was a second list to
+                    keep in step with the first. */}
                 {batch.blocks_commit && (
-                  <div className="banner-error" style={{ marginTop: 12 }}>
-                    <strong>
-                      Upload is blocked by row{blocking.length === 1 ? '' : 's'}{' '}
-                      {blocking.map((r) => r.row).join(', ')}.
-                    </strong>{' '}
-                    More than one uploaded file matches{' '}
-                    {blocking.length === 1 ? 'that row' : 'each of those rows'}. Open the Image
-                    picker and choose which one belongs to it.
+                  <div className="banner banner-error" style={{ marginTop: 12, marginBottom: 0 }}>
+                    <div className="banner-mark" aria-hidden="true">
+                      !
+                    </div>
+                    <div className="banner-text">
+                      Some rows still need a label picked for them — see Pairing below. You can
+                      file the batch anyway; rows that are still unresolved are left out of it.
+                    </div>
                   </div>
                 )}
                 <div className="scroll-x" style={{ marginTop: 12 }}>
@@ -441,12 +448,12 @@ export function CheckBatch() {
               className="btn btn-wide"
               style={{ marginTop: 12 }}
               onClick={() => fileRows(rowNumbers, true)}
-              disabled={
-                !batch || batch.rows.length === 0 || batch.blocks_commit || commit.isPending
-              }
+              disabled={!batch || batch.rows.length === 0 || commit.isPending}
             >
               {commit.isPending && <span className="spinner" />}
-              {batch ? `File and verify ${committable} rows` : 'File and verify batch'}
+              {batch
+                ? `File and verify ${committable} row${committable === 1 ? '' : 's'}`
+                : 'File and verify batch'}
             </button>
             {commit.isPending && job && (
               <p className="card-note">
@@ -555,7 +562,7 @@ export function CheckBatch() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="dialog-head">
-              <h2 id="drop-title">Some rows have no label</h2>
+              <h2 id="drop-title">Some rows are unresolved</h2>
             </div>
             <div className="dialog-body">
               <div className="banner">
@@ -563,29 +570,25 @@ export function CheckBatch() {
                   !
                 </div>
                 <div className="banner-text">
-                  These rows will be <strong>dropped, not filed</strong>. A record with no
-                  label can never be verified — attach one first if you want to keep it.
+                  These rows will be <strong>dropped, not filed</strong>. Pick a label for them
+                  first if you want to keep them.
                 </div>
               </div>
-              {batch.rows
-                .filter((r) => dropWarn.rows.includes(r.row) && !r.image)
-                .map((r) => (
-                  <div className="staged-drop-row" key={r.row}>
-                    <span className="num">{r.row}</span>
-                    <span>{r.brand || r.applicant || '—'}</span>
-                    <span className="mono">{r.filename || 'no filename'}</span>
-                  </div>
-                ))}
+              {unresolved(dropWarn.rows).map((r) => (
+                <div className="staged-drop-row" key={r.row}>
+                  <span className="num">{r.row}</span>
+                  <span>{r.applicant || r.brand || '—'}</span>
+                  <span>{r.bucket === 'ambiguous' ? 'More than one match' : 'No label'}</span>
+                </div>
+              ))}
             </div>
             <div className="dialog-foot">
               <button
                 className="btn"
                 disabled={commit.isPending}
                 onClick={() => {
-                  const keep = batch.rows
-                    .filter((r) => dropWarn.rows.includes(r.row) && r.image)
-                    .map((r) => r.row)
-                  const drop = dropWarn.rows.filter((n) => !keep.includes(n))
+                  const drop = unresolved(dropWarn.rows).map((r) => r.row)
+                  const keep = dropWarn.rows.filter((n) => !drop.includes(n))
                   const verify = dropWarn.verify
                   setDropWarn(null)
                   dropRows.mutateAsync(drop).then(() => {
@@ -595,20 +598,23 @@ export function CheckBatch() {
               >
                 Drop them and file the rest
               </button>
-              {/* PRD §5.5 files a row with no specimen - it just cannot be
+              {/* PRD §5.5 files a row with no label - it just cannot be
                   verified. Dropping is the default because a record nobody can
-                  ever verify is usually a mistake, not the intent. */}
-              <button
-                className="btn btn-quiet"
-                disabled={commit.isPending}
-                onClick={() => {
-                  const { rows, verify } = dropWarn
-                  setDropWarn(null)
-                  commit.mutate({ rows, verify })
-                }}
-              >
-                File them without a label
-              </button>
+                  ever verify is usually a mistake, not the intent. An ambiguous
+                  row has no single image to file, so this is not offered. */}
+              {unresolved(dropWarn.rows).every((r) => r.bucket !== 'ambiguous') && (
+                <button
+                  className="btn btn-quiet"
+                  disabled={commit.isPending}
+                  onClick={() => {
+                    const { rows, verify } = dropWarn
+                    setDropWarn(null)
+                    commit.mutate({ rows, verify })
+                  }}
+                >
+                  File them without a label
+                </button>
+              )}
               <button className="btn btn-quiet push" onClick={() => setDropWarn(null)}>
                 Cancel
               </button>

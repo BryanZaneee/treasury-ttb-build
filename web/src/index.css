@@ -203,6 +203,11 @@ h1 { margin: 0; font-size: 27px; font-weight: 700; letter-spacing: -0.022em; col
   background: var(--fail-head); border: 1px solid var(--fail-bd); color: var(--fail-fg);
   border-radius: 4px; padding: 13px 16px; margin-bottom: 18px; font-size: 13.5px; line-height: 1.5;
 }
+/* Same shape as .banner, in the fail palette, for the times an error wants the
+   mark beside it rather than a wall of red text. */
+.banner-error.banner { background: var(--fail-head); border-color: var(--fail-bd); }
+.banner-error .banner-mark { background: var(--fail-fg); }
+.banner-error .banner-text { color: var(--fail-fg); }
 
 /* ---------------- controls ---------------- */
 
