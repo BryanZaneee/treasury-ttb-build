@@ -356,6 +356,36 @@ def test_stage_batch_pairs_an_image_and_reports_an_unused_one() -> None:
     assert body["rows"][0]["image"] == "old-tom-pass.jpg"
 
 
+def test_a_batch_image_gets_the_same_validation_as_a_single_upload() -> None:
+    """Batch images keep their filename instead of uploads.store's hash key, so
+    the sniff, the cap and the re-encode have to be applied explicitly (PRD §8).
+    Without them data/images - which main.py serves - takes arbitrary bytes."""
+    resp = client.post(
+        "/api/batches/stage",
+        headers=ACCESS,
+        files=[
+            ("applications_csv", ("apps.csv", SAMPLE_CSV, "text/csv")),
+            ("images", ("evil.png", b"<script>alert(1)</script>", "image/png")),
+        ],
+    )
+    assert resp.status_code == 422
+    assert "PNG" in resp.json()["detail"]
+    assert not (db.data_dir() / "images" / "evil.png").exists()
+
+    # And the stored bytes are the re-encode, not whatever was sent.
+    payload = _png() + b"TRAILING-PAYLOAD"
+    ok = client.post(
+        "/api/batches/stage",
+        headers=ACCESS,
+        files=[
+            ("applications_csv", ("apps.csv", SAMPLE_CSV, "text/csv")),
+            ("images", ("clean.png", payload, "image/png")),
+        ],
+    )
+    assert ok.status_code == 200
+    assert b"TRAILING-PAYLOAD" not in (db.data_dir() / "images" / "clean.png").read_bytes()
+
+
 def test_stage_batch_row_with_no_image_files_but_does_not_block() -> None:
     """PRD §5.5 / acceptance test 9: missing_image rows file, they do not block."""
     resp = client.post(

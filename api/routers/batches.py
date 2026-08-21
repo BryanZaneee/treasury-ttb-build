@@ -135,14 +135,20 @@ def to_response(batch_id: str, staged: Staged) -> StagedBatch:
 
 
 # Stored under their own basename, not `uploads.store`'s content-addressed key:
-# pairing is by filename, so the name has to survive the write.
+# pairing is by filename, so the name has to survive the write. That forfeits
+# the hash key's overwrite immunity, so the checks it implies are explicit here.
 def _write_image(image: UploadFile) -> str | None:
     name = uploads.safe_basename(image.filename or "")
     if not name:
         return None
+    # ponytail: keeping the name means an upload can replace a same-named image
+    # in data/images; the route is access-token gated, so that is a trusted-user
+    # footgun, not an attack. Per-batch subdirectories if it ever stops being one.
+    # Read one byte past the cap so an oversized upload is refused, not buffered.
+    clean = uploads.validate(image.file.read(uploads.MAX_BYTES + 1))
     images_dir = db.data_dir() / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
-    (images_dir / name).write_bytes(image.file.read())
+    (images_dir / name).write_bytes(clean)
     return name
 
 
@@ -160,7 +166,10 @@ def stage_batch(
     # unreferenced files the next fixture reset clears.
     names = []
     for image in images:
-        name = _write_image(image)
+        try:
+            name = _write_image(image)
+        except uploads.UploadError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         if name:
             names.append(name)
 
@@ -203,7 +212,10 @@ def assign_image(batch_id: str, row_no: int, body: AssignRequest) -> StagedBatch
 def upload_row_image(batch_id: str, row_no: int, image: UploadFile = File(...)) -> StagedBatch:
     """Supply one row's missing specimen without re-uploading the whole batch."""
     staged = _require(batch_id)
-    name = _write_image(image)
+    try:
+        name = _write_image(image)
+    except uploads.UploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not name:
         raise HTTPException(status_code=422, detail="the upload has no filename")
     if name not in staged.images:

@@ -43,8 +43,8 @@ def sniff(data: bytes) -> str:
     )
 
 
-def store(data: bytes, images_dir: Path) -> str:
-    """Validate, re-encode and store one image, returning the storage key.
+def validate(data: bytes) -> bytes:
+    """Sniff, size-check and re-encode one upload, returning clean bytes.
 
     Re-encoding is what makes the sniff worth doing: anything appended to or
     hidden inside the original container does not survive it.
@@ -74,7 +74,13 @@ def store(data: bytes, images_dir: Path) -> str:
         image.convert("RGB").save(buffer, format="JPEG", quality=92)
     clean = buffer.getvalue()
 
-    key = f"{hashlib.sha256(clean).hexdigest()}{_EXTENSION[kind]}"
+    return clean
+
+
+def store(data: bytes, images_dir: Path) -> str:
+    """Validate and store one image content-addressed, returning its key."""
+    clean = validate(data)
+    key = f"{hashlib.sha256(clean).hexdigest()}{_EXTENSION[sniff(clean)]}"
     images_dir.mkdir(parents=True, exist_ok=True)
     (images_dir / key).write_bytes(clean)
     return key
