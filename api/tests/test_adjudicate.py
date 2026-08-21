@@ -10,9 +10,17 @@ from typing import Any
 
 import pytest
 
+from adjudicate import (
+    _compare_abv,
+    _compare_net,
+    apply_quality,
+    normalise,
+    parse_abv,
+    parse_net,
+    roll_up,
+)
 from adjudicate import adjudicate as run
-from adjudicate import apply_quality, normalise, parse_net, roll_up
-from models import Application
+from models import Application, WarningReading
 from readers.fake import FakeReader, expectations
 
 FIXTURES = sorted(expectations())
@@ -115,3 +123,55 @@ def test_a_specimen_that_is_not_a_label_is_invalid_not_fail() -> None:
     # No field rows: there is nothing to compare, and half-populated evidence
     # against a photograph of something else is worse than none.
     assert results == []
+
+
+def test_a_missing_government_warning_never_matches() -> None:
+    """27 CFR requires the warning, so an absent one fails however it was filed.
+    An empty intake cell makes `declared` false (csv_io.parse_bool), which
+    previously reached `match` - a clean auto-close on a non-compliant label."""
+    for declared in (True, False):
+        app = Application(
+            brand="Old Tom", class_type="Gin", abv="40%", net="750 ml", warning=declared
+        )
+        reading = reader.read("old-tom-pass.jpg")
+        reading.warning = WarningReading(present=False)
+        _, verdict = run("old-tom-pass.jpg", app, reading)
+        assert verdict == "fail", f"declared={declared} reached {verdict}"
+
+
+def test_a_rounded_fl_oz_declaration_is_not_a_mismatch() -> None:
+    """750 mL prints as 25.4 FL OZ, which converts back to 751.2 mL - 1.2 mL
+    past the flat tolerance. The commonest US bottle size must not fail."""
+    assert _compare_net("750 ml", "25.4 fl oz")[0] == "review"
+    assert _compare_net("750 ml", "25 fl oz")[0] == "review"
+    assert _compare_net("1.75 l", "59.2 fl oz")[0] == "review"
+    # A genuinely different fill still fails.
+    assert _compare_net("750 ml", "700 ml")[0] == "fail"
+    assert _compare_net("1 l", "750 ml")[0] == "fail"
+
+
+def test_a_decimal_comma_parses_to_the_stated_strength() -> None:
+    """Imports are in scope (PRD §3.1) and the reader transcribes verbatim, so
+    "0,75 L" arrives intact. It previously read as 75 L and "13,5%" as 5%."""
+    assert parse_abv("13,5%") == 13.5
+    assert parse_net("0,75 L") == (750.0, "l")
+    # A comma before three digits is still a thousands separator.
+    assert parse_net("1,000 ml") == (1000.0, "ml")
+
+
+def test_centilitres_parse_in_either_spelling() -> None:
+    assert parse_net("75 centiliters") == parse_net("75 centilitres") == (750.0, "cl")
+
+
+def test_a_value_the_application_omitted_is_a_review_not_a_parse_failure() -> None:
+    """The numeric comparators must ladder the way _compare_text does: a label
+    value nobody filed is a review, and neither side having one is a match."""
+    assert _compare_abv("", "13.5%")[0] == "review"
+    assert _compare_net("", "750 ml")[0] == "review"
+    assert _compare_abv("", "")[0] == "match"
+    assert _compare_net("", "")[0] == "match"
+
+
+def test_roll_up_ranks_invalid_rather_than_raising() -> None:
+    """`invalid` is not a field verdict (PRD §3.2), but roll_up is public."""
+    assert roll_up(["match", "invalid"]) == "invalid"

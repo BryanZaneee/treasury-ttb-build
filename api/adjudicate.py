@@ -42,7 +42,9 @@ _ALWAYS = ("brand", "classType", "abv", "net", "warning")
 
 ILLEGIBLE = "ILLEGIBLE"
 
-_RANK: dict[Verdict, int] = {"match": 0, "review": 1, "fail": 2}
+# `invalid` is not a field verdict (PRD §3.2) and adjudicate() short-circuits
+# before the roll-up, but roll_up is public: rank it rather than KeyError.
+_RANK: dict[Verdict, int] = {"match": 0, "review": 1, "fail": 2, "invalid": 3}
 
 # Below this, a non-normal capture downgrades an otherwise-matching field (§3.2).
 DEGRADED_CONFIDENCE = 0.7
@@ -53,6 +55,18 @@ NET_TOLERANCE_ML = 1.0
 ABV_TOLERANCE = 0.05
 
 _ML_PER = {"ml": 1.0, "cl": 10.0, "l": 1000.0, "floz": 29.5735295625}
+
+# A number as printed on a label. `[.,]` because imports are in scope (PRD §3.1)
+# and a European label writes "0,75 L"; the reader transcribes it verbatim.
+_NUMBER = r"\d[\d.,]*"
+
+
+def _to_float(raw: str) -> float | None:
+    """A printed number to a float; a comma before three digits is thousands."""
+    try:
+        return float(re.sub(r",(?=\d{3}\b)", "", raw).replace(",", "."))
+    except ValueError:
+        return None
 
 # PRD §3.1: "state abbreviation = full name" on producer.
 _STATES = {
@@ -114,15 +128,16 @@ def normalise(key: str, value: str | None) -> str | float | None:
 
 def parse_abv(value: str) -> float | None:
     """Percent by volume as a float. A proof statement is informational only."""
-    match = re.search(r"(\d+(?:\.\d+)?)\s*%", value)
+    match = re.search(rf"({_NUMBER})\s*%", value)
     if match is None:
         return None
-    return float(match.group(1))
+    return _to_float(match.group(1))
 
 
 def parse_net(value: str) -> tuple[float, str] | None:
     match = re.search(
-        r"(\d+(?:\.\d+)?)\s*(ml|milliliters?|millilitres?|cl|centilitres?|l|liters?|litres?|fl\.?\s*oz|fluid ounces?)",
+        rf"({_NUMBER})\s*(ml|milliliters?|millilitres?|cl|centiliters?|centilitres?|"
+        r"l|liters?|litres?|fl\.?\s*oz|fluid ounces?)",
         value,
         re.IGNORECASE,
     )
@@ -137,7 +152,18 @@ def parse_net(value: str) -> tuple[float, str] | None:
         unit = "ml"
     else:
         unit = "l"
-    return float(match.group(1)) * _ML_PER[unit], unit
+    amount = _to_float(match.group(1))
+    return None if amount is None else (amount * _ML_PER[unit], unit)
+
+
+def rounding_tolerance_ml(raw: str, unit: str) -> float:
+    """A fl oz declaration is a rounded conversion of the metric fill, so it is
+    only as precise as its last printed digit - 25.4 FL OZ means 750 mL."""
+    if unit != "floz":
+        return 0.0
+    match = re.search(r"\d+(?:[.,](\d+))?", raw)
+    places = len(match.group(1)) if match and match.group(1) else 0
+    return 0.5 * 10.0**-places * _ML_PER["floz"]
 
 
 def roll_up(verdicts: list[Verdict]) -> Verdict:
@@ -250,6 +276,15 @@ def _compare_abv(app_raw: str | None, label_raw: str | None) -> tuple[Verdict, s
         return "fail", (
             f"Alcohol content was filed as “{app_raw}” but does not appear on the label."
         )
+    # Same ladder as _compare_text: an undeclared value the label shows is a
+    # review, not a parse failure, and neither side having one is a match.
+    if label_raw and not app_raw:
+        return "review", (
+            f"The label shows an alcohol content of “{label_raw}” that the "
+            "application did not declare. Confirm the filing is complete."
+        )
+    if not app_raw and not label_raw:
+        return "match", None
     filed = parse_abv(app_raw or "")
     shown = parse_abv(label_raw or "")
     if filed is None or shown is None:
@@ -272,6 +307,13 @@ def _compare_net(app_raw: str | None, label_raw: str | None) -> tuple[Verdict, s
         return "fail", (
             f"Net contents were filed as “{app_raw}” but do not appear on the label."
         )
+    if label_raw and not app_raw:
+        return "review", (
+            f"The label shows net contents of “{label_raw}” that the application "
+            "did not declare. Confirm the filing is complete."
+        )
+    if not app_raw and not label_raw:
+        return "match", None
     filed = parse_net(app_raw or "")
     shown = parse_net(label_raw or "")
     if filed is None or shown is None:
@@ -279,7 +321,12 @@ def _compare_net(app_raw: str | None, label_raw: str | None) -> tuple[Verdict, s
             "Net contents could not be read as a volume "
             f"(application “{app_raw}”, label “{label_raw}”)."
         )
-    if abs(filed[0] - shown[0]) > NET_TOLERANCE_ML:
+    tolerance = max(
+        NET_TOLERANCE_ML,
+        rounding_tolerance_ml(app_raw or "", filed[1]),
+        rounding_tolerance_ml(label_raw or "", shown[1]),
+    )
+    if abs(filed[0] - shown[0]) > tolerance:
         return "fail", (
             f"Net contents differ: the application filed “{app_raw}” "
             f"({filed[0]:g} mL), the label shows “{label_raw}” ({shown[0]:g} mL)."
@@ -293,10 +340,10 @@ def _compare_net(app_raw: str | None, label_raw: str | None) -> tuple[Verdict, s
     return "match", None
 
 
-def _compare_warning(declared: bool, reading: WarningReading) -> tuple[Verdict, str | None]:
+def _compare_warning(reading: WarningReading) -> tuple[Verdict, str | None]:
+    # 27 CFR requires the warning on every label, so its absence is a fail even
+    # when the application did not declare one (PRD §3.1: required).
     if not reading.present:
-        if not declared:
-            return "match", None
         return "fail", (
             "The government warning statement is absent from the specimen. A "
             "compliant label must carry it verbatim."
@@ -339,7 +386,7 @@ def adjudicate(
 
     for key in FIELD_KEYS:
         if key == "warning":
-            verdict, note = _compare_warning(app.warning, reading.warning)
+            verdict, note = _compare_warning(reading.warning)
             results.append(
                 FieldResult(
                     record_id=record_id,
