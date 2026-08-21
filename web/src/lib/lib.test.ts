@@ -24,6 +24,15 @@ describe('matchesQuery (S5)', () => {
     expect(matchesQuery(record(), '   ')).toBe(true)
   })
 
+  test('a punctuation-only query is treated as no search', () => {
+    // Pinned because it used to fall out of ''.includes('') rather than being
+    // decided: the guard now says so, and this is what says it stays that way.
+    for (const query of ['---', '...', '///', '-.-']) {
+      expect(matchesQuery(record(), query)).toBe(true)
+      expect(matchesQuery(record({ id: 'ZZZ', applicant: 'ZZZ', app_brand: 'ZZZ', filename: 'ZZZ' }), query)).toBe(true)
+    }
+  })
+
   test('searches all four fields the story names', () => {
     expect(matchesQuery(record(), '4100')).toBe(true)
     expect(matchesQuery(record(), 'Spirits')).toBe(true)

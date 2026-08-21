@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, freshUrl, imageUrl } from '../api/client'
+import { ApiError, api, freshUrl, imageUrl } from '../api/client'
 import type { Job, RecordRow, RecordsPage, FieldResult, RecordDetail } from '../api/client'
 import { Pill } from '../components/Pill'
 import {
@@ -84,7 +84,12 @@ export function Inbox() {
     queryFn: () => api<RecordsPage>(`/records${filter ? `?filter=${filter}` : ''}`),
   })
 
-  const invalidate = () => client.invalidateQueries({ queryKey: ['records'] })
+  const invalidate = () => {
+    void client.invalidateQueries({ queryKey: ['records'] })
+    // Separate key, so the prefix above misses it: an expanded row would keep
+    // rendering the field results it cached while the record was unverified.
+    void client.invalidateQueries({ queryKey: ['record'] })
+  }
 
   const verify = useMutation({
     mutationFn: (id: string) => api<RecordRow>(`/records/${id}/verify`, { method: 'POST' }),
@@ -203,6 +208,10 @@ export function Inbox() {
     }) => {
       let applied = 0
       let skipped = 0
+      // A record the store refuses (409 already closed, 422 override) is
+      // skipped; anything else - 401, 429, a dropped connection - is a real
+      // failure and must not be reported to the reviewer as "already closed".
+      let failed = 0
       // One PATCH per record: the override rule is enforced per record, and an
       // already-decided one answers 409 rather than reopening.
       for (const record of records) {
@@ -217,20 +226,25 @@ export function Inbox() {
             },
           })
           applied += 1
-        } catch {
-          skipped += 1
+        } catch (e) {
+          if (e instanceof ApiError && (e.status === 409 || e.status === 422)) skipped += 1
+          else failed += 1
         }
       }
-      return { applied, skipped, decision }
+      return { applied, skipped, failed, decision }
     },
-    onSuccess: ({ applied, skipped, decision }) => {
+    onSuccess: ({ applied, skipped, failed, decision }) => {
       setConfirming(null)
       clearSelection()
       invalidate()
+      const notes = [
+        skipped > 0 ? `${skipped} skipped: already closed, or rejected by the store.` : '',
+        failed > 0 ? `${failed} could not be recorded — check the connection and retry.` : '',
+      ].filter(Boolean)
       toast({
-        kind: skipped > 0 ? 'warn' : 'success',
+        kind: failed > 0 ? 'error' : skipped > 0 ? 'warn' : 'success',
         title: `${applied} ${decision === 'accepted' ? 'accepted' : 'returned'}`,
-        body: skipped > 0 ? `${skipped} skipped: already closed, or rejected by the store.` : undefined,
+        body: notes.join(' ') || undefined,
       })
     },
     onError: (e) =>
@@ -400,14 +414,14 @@ export function Inbox() {
             <button
               className="btn btn-quiet btn-sm"
               onClick={() => decideOn('accepted', selectedRows)}
-              disabled={bulkVerify.isPending}
+              disabled={bulkVerify.isPending || bulkDecide.isPending}
             >
               Accept
             </button>
             <button
               className="btn btn-quiet btn-sm"
               onClick={() => decideOn('returned', selectedRows)}
-              disabled={bulkVerify.isPending}
+              disabled={bulkVerify.isPending || bulkDecide.isPending}
             >
               Return to applicant
             </button>

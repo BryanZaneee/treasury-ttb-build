@@ -172,6 +172,8 @@ function Determination() {
 
   const data = record.data
   if (record.isLoading) return <div className="empty">Loading…</div>
+  if (record.isError)
+    return <div className="banner-error">Could not load this record. {String(record.error)}</div>
   if (!data) return <div className="banner-error">Record not found.</div>
 
   const kind = kindOf(data.result)
