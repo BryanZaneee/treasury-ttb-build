@@ -8,9 +8,7 @@ written to an auditable system of record.
 **Live:** <https://bryanzane.com/ttb-build>
 
 The authoritative spec is [`docs/PRD.md`](docs/PRD.md); its §6.2 carries the approved design
-tokens. A step-by-step demo script is [`docs/demo.md`](docs/demo.md), operating notes are
-[`docs/runbook.md`](docs/runbook.md), and the measurements behind the model choice are
-[`docs/benchmark.md`](docs/benchmark.md).
+tokens and §5.4 the method behind the reader measurements quoted below.
 
 **All data in this deployment is synthetic.** The 25 label specimens are generated, the brands
 are fictional, and no real applicant information exists anywhere in the system.
@@ -46,7 +44,7 @@ walks up to it and `web/vite.config.ts` sets `envDir: '..'`. There is only ever 
 ```bash
 cd api
 uv sync
-uv run python seed.py                        # prints "seeded 25 records"
+uv run python seed.py                        # prints "seeded 13 records"
 uv run uvicorn main:app --reload --port 8000
 ```
 
@@ -65,9 +63,14 @@ npm run dev
 
 ### 4. Use it
 
-Open <http://localhost:5173>. The inbox opens with 25 unverified applications. Press
-**Run AI verification on all** to work the whole queue — twenty-five labels take about fifteen
-seconds — or open any record and verify it on its own.
+Open <http://localhost:5173>. The inbox opens on the **13-record example set**, deliberately
+part-worked so every filter has something in it: three still awaiting verification, three
+matched, three in review, four failed, and three already decided — one of those accepted over
+the engine's objection, one returned to the applicant.
+
+Press **Run AI verification on all** to work the three unverified ones, or open any record and
+verify it on its own. All 25 fixtures are one click away as a batch, from **Batch upload →
+Load bundled sample batch**.
 
 Nothing is read until you ask. The service never calls the model on upload, so an application
 that is filed and never verified costs nothing.
@@ -82,9 +85,11 @@ that is filed and never verified costs nothing.
 | Variable | Purpose |
 | --- | --- |
 | `READER_PROVIDER` | `fake`, `ocr` or `openai`. Which reader verification uses. |
-| `READER_MODEL` | Vision model. `gpt-5.6-luna` in production — see [`docs/benchmark.md`](docs/benchmark.md). |
+| `READER_MODEL` | Vision model. `gpt-5.6-luna` in production — see *The readers* below. |
+| `READER_BASE_URL` | Override for any OpenAI-compatible endpoint. Empty uses the OpenAI default. |
 | `READER_EFFORT` | Reasoning effort, `gpt-5.x` only. `none` in production. |
-| `READER_API_KEY` | Key for the vision reader. `OPENAI_API_KEY` overrides it for that one provider. |
+| `READER_SERVICE_TIER` | Request tier. `standard` is mapped onto the API's `auto` — it does not accept the literal word. |
+| `READER_API_KEY` | Key for the vision reader. `OPENAI_API_KEY` takes precedence. |
 | `READER_TIMEOUT_S` | Per-call timeout before the service degrades to local OCR. |
 | `READER_CONCURRENCY` | Labels read at once during a batch run. Default 10. |
 | `DAILY_VISION_CALL_CAP` | Paid vision calls allowed per UTC day. Once breached, records finish with rules-only verdicts rather than failing. `0` disables it. |
@@ -94,6 +99,7 @@ that is filed and never verified costs nothing.
 | `QA_SAMPLE_RATE` | Fraction of auto-close-eligible records sent to a human anyway. Default 0.05. |
 | `DATA_DIR` | Where the SQLite store, images and snapshots live. |
 | `PUBLIC_BASE_PATH` | Subpath the app is served under in production. Empty locally. |
+| `BACKUP_DEST` / `BACKUP_RECIPIENT` | Off-box backup target and the `age` public key it is encrypted to. Read by `deploy/backup.sh` from the same `.env`; the script refuses to run without them. |
 
 **Never give the reader API key a `VITE_` prefix.** Anything prefixed `VITE_` is compiled into
 the browser bundle and is therefore public (PRD §8).
@@ -108,14 +114,16 @@ no real applicant data anywhere.
 ### The 25 specimens
 
 `api/fixtures/` holds 25 generated label images with `applications.csv` (what was filed) and
-`expectations.json` (what each should resolve to). `uv run python seed.py` loads them as 25
-unverified records. They are deliberately not all clean — the set covers a title-cased warning,
-a brand in full capitals, a missing warning statement, an ABV that disagrees with the filing,
-net contents in centilitres against millilitres, a missing country of origin, and captures
-degraded by blur, glare, pixelation, angle, darkness, damage and cropping.
+`expectations.json` (what each should resolve to). They are deliberately not all clean — the set
+covers a title-cased warning, a brand in full capitals, a missing warning statement, an ABV that
+disagrees with the filing, net contents in centilitres against millilitres, a missing country of
+origin, and captures degraded by blur, glare, pixelation, angle, darkness, damage and cropping.
 
 Twelve of them are published to the single-label picker with a one-line description of what each
 demonstrates, so **Check one label** can be driven without knowing the filenames.
+
+`uv run python seed.py` loads thirteen of them as the part-worked example set described above;
+all 25 stage as a batch from **Batch upload**.
 
 ### A batch that exercises every pairing case
 
@@ -148,14 +156,13 @@ any other. Regenerate them with `scripts/build_injection_fixtures.py`.
 
 ### Resetting
 
-**Export → Load the example set**. It snapshots the current store first, then restores the
-13-record example set — part-worked on purpose, so every inbox filter has something in it and
-there is a determination to practise on. All 25 fixtures are one click away as a batch, from
-**Batch upload → Load the sample batch**.
+**Records → Load the example set**. It snapshots the current store first, then restores the
+13-record example set. **Remove all records** empties it instead, for starting from your own
+data.
 
-**Export → Download a restorable backup** takes the full mirror, and **Restore from a backup**
-reads one back (both admin-token gated). The plain **Export records as CSV** is the reviewer's
-take-away and drops columns, so it is not the file to restore from.
+**Records → Download a restorable backup** takes the full 26-column mirror, and **Restore from
+a backup** reads one back (both admin-token gated). The plain **Export records as CSV** is the
+reviewer's 18-column take-away and drops columns, so it is not the file to restore from.
 
 ---
 
@@ -199,11 +206,26 @@ have consumed the time the rules engine needed.
 
 ### Write the PRD, then treat it as the source of truth
 
-`docs/PRD.md` fixes the domain model, the persistence schema, the
-API surface, the routes and design tokens, the fixture set, the non-functional requirements, and
-an M0 to M7 roadmap where every milestone carries its own exit criteria. Behaviour is not
-invented at the keyboard: if the PRD settles a question, the code follows it and the comment
-cites the section.
+`docs/PRD.md` fixes the domain model, the persistence schema, the API surface, the routes and
+design tokens, the fixture set, the non-functional requirements, and an M0 to M7 roadmap where
+every milestone carries its own exit criteria. Behaviour is not invented at the keyboard: if the
+PRD settles a question, the code follows it and the comment cites the section.
+
+Six things went the other way, and the PRD was revised to v1.2 to match the build rather than
+the build bent to match the PRD. Each is recorded in place in the spec, with the reason:
+
+| Departure | Why |
+| --- | --- |
+| **A label is read only when a reviewer asks**, not on upload | Extraction costs money per call, so a filing nobody verifies must never pay for one. The trade is that verification latency is now the model's latency, which is why it is measured rather than assumed. |
+| **One vision provider**, not two side by side | A single-tenant tool does not need provider redundancy badly enough to pay for a second bake-off, and the abstraction it needed was a per-provider table with one row in it. |
+| **OCR is the fallback**, not an always-on second reader | Measured at 85 of 155 fields against the vision reader's 122. Accurate enough to fall back to, not to gate auto-close on — so §5.3's reader-agreement clause is dropped and every other clause enforced. |
+| **A fourth verdict, `invalid`** | A specimen that is not a label cannot be adjudicated field by field, and calling it `fail` says the applicant's label is wrong rather than that the wrong file was filed. |
+| **Job progress is polled**, not streamed over SSE | One endpoint fewer for a queue this size. |
+| **No Docker** | The target host already runs Caddy and several services directly under systemd, so a container runtime adds operational surface without buying isolation this tool needs. |
+
+The mirror also carries two columns beyond the PRD's original set — `field_values`, without
+which a restored store renders every field as "not recorded", and `override`, without which an
+export destroys the only evidence a waiver was deliberate.
 
 ### Execute in milestone order and let the gates hold
 
@@ -217,8 +239,7 @@ onto the pytest suite in `api/tests/`.
 **Rules own the verdict.** A reader reports what is printed on the label. It never sees the
 application, and it cannot express a verdict at all — there is no verdict field on a reading and
 the model's response schema is closed, so PRD §3.2's "a reader may never improve a verdict"
-holds by construction rather than by a check that could be forgotten. The deterministic engine
-then compares the two sides and decides.
+holds by construction rather than by a check that could be forgotten.
 
 That is what makes the reader safe to treat as configuration, and it is why text printed on a
 label instructing the reader to approve it is simply transcribed and then fails the comparison
@@ -266,12 +287,7 @@ gave a pass or fail oracle rather than an opinion, and CI ran on every push.
    environment change, not a refactor.
 5. **Model pricing and rate limits are current as of the build date** and are re-verified
    against provider documentation before any production cutover.
-6. **A label is read only when a reviewer asks.** PRD §5.2 starts extraction on upload so the
-   model call overlaps data entry. Extraction costs money per call, so a filing nobody verifies
-   must never pay for one — the trade is that verification latency is now the model's latency,
-   which is why it is measured rather than assumed. This and the other three deliberate
-   departures from the PRD are recorded in `CLAUDE.md`.
-7. **There are no user accounts yet.** Determinations are attributed to the signed-in reviewer,
+6. **There are no user accounts yet.** Determinations are attributed to the signed-in reviewer,
    and `web/src/lib/session.ts` is a mock session standing in until real authentication exists.
    It is one definition, read by both the masthead and every determination, so replacing it is a
    single change.
@@ -288,10 +304,21 @@ gave a pass or fail oracle rather than an opinion, and CI ran on every push.
 | `ocr` | p95 0.8 s | none | Local Tesseract, two page-segmentation passes. No network. Also the automatic fallback. |
 | `fake` | instant | none | Replays the fixture ground truth. The CI reader (PRD §5.4). |
 
-Those figures are measured, not estimated — four configurations over all 25 fixtures, in
-[`docs/benchmark.md`](docs/benchmark.md). It is also why the default is `gpt-5.6-luna` at
+Those figures are measured, not estimated — four configurations over all 25 fixtures with
+`scripts/bench.py`, on 2026-08-20. It is also why the default is `gpt-5.6-luna` at
 `effort=none`: the only configuration that clears the five-second p95 target while beating both
 `gpt-4.1` models on accuracy.
+
+| Reader | effort | p50 | **p95** | Verdicts | Fields |
+| --- | --- | --- | --- | --- | --- |
+| **gpt-5.6-luna** | **none** | **2482 ms** | **4084 ms** | 16/25 | 122/155 |
+| gpt-4.1-nano | n/a | 3548 ms | 4629 ms | 13/25 | 108/155 |
+| gpt-5.6-luna | low | 3884 ms | 5105 ms | 18/25 | 124/155 |
+| gpt-4.1-mini | n/a | 3815 ms | 5240 ms | 15/25 | 127/155 |
+| ocr | n/a | — | 0.8 s | 15/25 | 85/155 |
+
+Re-run it with `uv run python scripts/bench.py --reader openai --model <name>` before changing
+the model, `MAX_EDGE` or `JPEG_QUALITY`.
 
 The reader never sees the application values, so nothing written on a label can steer the
 adjudication (PRD §3.3).
@@ -306,27 +333,33 @@ string names what actually read the label.
 
 | Path | What is in it |
 | --- | --- |
-| `api/` | Flat modules, no package prefix: `db.py`, `adjudicate.py`, `csv_io.py`, `batching.py`, `uploads.py`, `models.py` |
+| `api/` | Flat modules, no package prefix: `db.py`, `adjudicate.py`, `csv_io.py`, `batching.py`, `uploads.py`, `models.py`, `logs.py`, `config.py`, `seed.py` |
 | `api/routers/` | The HTTP surface: records, batches, jobs, store, specimens, all mounted under `/api` |
 | `api/readers/` | Reader implementations plus image prep and versioned prompts |
 | `api/migrations/` | Numbered SQL, applied at boot and tracked in `schema_version` |
 | `api/scripts/` | Hand-run generators: fixtures, injection specimens, the benchmark, the demo batch |
 | `api/fixtures/` | The 25 specimens, `applications.csv`, `expectations.json`, and `injection/` |
+| `api/tests/` | One module per api module it covers; `conftest.py` isolates `DATA_DIR` |
 | `web/src/routes/` | Inbox, CheckLabel, CheckBatch, RecordDetail, Export |
+| `web/src/components/` | `Dialog` and `Lightbox` shells, `Pill`, `QueueNav`, `Toast`, `BulkDecisionDialog`, `ErrorBoundary` |
+| `web/src/lib/` | Display copy and verdict vocabulary, search, job polling, dialog and toast plumbing, the mock session |
 | `web/e2e/` | Playwright suite and the accessibility audit |
 | `data/` | Runtime store: SQLite database, uploaded images, snapshots, CSV mirror. Gitignored. |
 | `deploy/` | Caddyfile, systemd units, deploy and backup scripts for the VPS |
-| `docs/` | PRD, demo script, runbook, benchmark, fixture manifest, sample batch CSV |
+| `docs/` | PRD, fixture manifest, sample batch CSV |
 
 ---
 
 ## Quality gates
 
 ```bash
-cd api && uv run ruff check . && uv run mypy . && uv run pytest -q     # 174 tests
-cd web && npm run lint && npm run test && npm run build
-cd web && npx playwright test                                          # 11 specs
+cd api && uv run ruff check . && uv run mypy . && uv run pytest -q     # 194 tests, 3 skipped
+cd web && npm run lint && npm run test && npm run build                # 15 tests
+cd web && npx playwright test                                          # 15 specs
 ```
+
+The three skipped tests are the live-reader injection cases; they run against a real provider
+when `LIVE_READER` is set, and are skipped in CI because they cost money.
 
 CI runs all of the above on every push, in three jobs, plus `pip-audit` and `npm audit` as
 advisory steps — a new advisory against a pinned dependency should surface without failing an
@@ -334,8 +367,8 @@ unrelated pull request.
 
 Behavioural coverage lives on the Python side: `test_adjudicate` for the rules engine, `test_api`
 for the route contracts, `test_batching` for filename pairing, `test_csv_io` for the round trip,
-`test_db` for the store, `test_readers` for reader behaviour and fallback, `test_uploads` for
-specimen validation, and `test_injection` for PRD §3.3.
+`test_db` for the store and its migrations, `test_readers` for reader behaviour and fallback,
+`test_uploads` for specimen validation, and `test_injection` for PRD §3.3.
 
 The Playwright suite walks the reviewer's actual path — triage, verify, open a determination,
 step the filtered queue, decide — because what breaks those is routing, cache invalidation and
@@ -356,8 +389,11 @@ rolls back to the previous commit if the health endpoint does not come up. `PUBL
 defined once in the root `.env` and threads from there into the Vite `base`, the Router
 `basename` and the front-host proxy path, so the subpath is never written down twice.
 
+Database migrations are applied at boot and tracked in `schema_version`, so a deploy upgrades
+the store in place — there is no separate migration step to forget.
+
 `deploy/backup.sh` takes a nightly encrypted copy of the store off the box, driven by
-`ttb-build-backup.timer`, and prunes both ends to 30 days. Operating the service — health
-checks, deploys, restores, and what to do when the reader misbehaves — is
-[`docs/runbook.md`](docs/runbook.md). Reader accuracy and latency figures are in
-[`docs/benchmark.md`](docs/benchmark.md).
+`ttb-build-backup.timer`, and prunes both ends to 30 days. `GET /api/health` reports store
+readability, image writability, reader reachability, the running provider and model, paid calls
+against the daily cap, and the §8 service counters — it is the first thing to check when
+something looks wrong.

@@ -19,8 +19,7 @@ jobs:
       - run: uv run ruff check .
       - run: uv run mypy .
       - run: uv run pytest -q
-      # PRD §8. Advisory: a new advisory against a pinned dependency should
-      # show up in the run without turning every unrelated PR red.
+      # PRD §8, advisory: a new CVE should surface without reddening every PR.
       - run: uvx pip-audit
         continue-on-error: true
 
@@ -51,8 +50,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      # The suite drives the real app against the fixture replayer, so it needs
-      # both sides installed and a token pair for the fixture reset.
+      # Drives the real app against the fixture replayer, so it needs both sides.
       - run: uv sync
         working-directory: api
       - run: npm ci --legacy-peer-deps

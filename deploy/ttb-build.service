@@ -1,8 +1,5 @@
-# Label Verification Service API.
-#
-# Deliberately not containerised: the target is a shared host that already runs
-# Caddy and several other services directly under systemd, so an extra runtime
-# would add operational surface without buying isolation we need.
+# Label Verification Service API. Not containerised: the host already runs Caddy
+# and others directly under systemd, so a runtime would add surface, not isolation.
 #
 # Install:  cp deploy/ttb-build.service /etc/systemd/system/
 #           systemctl daemon-reload && systemctl enable --now ttb-build
@@ -18,7 +15,7 @@ ExecStart=/var/www/ttb-build/api/.venv/bin/uvicorn main:app --host 127.0.0.1 --p
 Restart=on-failure
 RestartSec=3
 
-# The service reads its own tree and writes only the data directory.
+# Reads its own tree, writes only the data directory.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

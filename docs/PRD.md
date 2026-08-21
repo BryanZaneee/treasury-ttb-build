@@ -1,7 +1,13 @@
 # Label Verification Service — PRD & Build Plan
 
+**v1.2 — 20 Aug 2026.** Reconciled with the delivered build. One configured vision provider
+rather than two, with local OCR as its fallback rather than an always-on second reader;
+extraction on request rather than on upload; job progress by polling rather than server-sent
+events; a paid-call cap rather than a dollar estimate; `invalid` added to the verdict enum;
+Caddy and systemd rather than Docker Compose. Where a decision reversed something in v1.1, the
+reason is stated in place and the trade recorded in the README.
+
 **v1.1 — 19 Aug 2026.** System of record moved from CSV to SQLite with a derived CSV mirror.
-Reader layer generalised to two interchangeable vision providers plus always-on local OCR.
 API surface reduced from 19 endpoints to 10. Authentication replaced with shared-token access
 and spend controls. Performance targets reconciled with the 5-second stakeholder requirement.
 Batch pairing, prompt-injection posture, and AI governance specified.
@@ -10,7 +16,7 @@ AI-assisted TTB-style COLA label verification. A reviewer files an application, 
 model reads the label specimen, the two are adjudicated field by field, and every
 determination is written to an auditable system of record.
 
-- **Stack:** React 19 + TypeScript (Vite) · Python 3.12 + FastAPI · SQLite system of record with CSV mirror · Docker Compose on a Tailscale-connected VPS
+- **Stack:** React 19 + TypeScript (Vite) · Python 3.12 + FastAPI · SQLite system of record with CSV mirror · Caddy and systemd on a Tailscale-connected VPS
 - **Design source:** `Label Verification.dc.html` — high-fidelity, approved. Its colors, type and copy are normative.
 - **Target:** single-tenant internal tool, 1–10 concurrent reviewers, 2 vCPU / 4 GB VPS, reached at `bryanzane.com/ttb-build`
 - **Timeline:** milestones M0–M7; production cutover at M6, hardening at M7
@@ -53,13 +59,13 @@ training, audits closed records — the operations gated behind the admin token.
 
 | ID | Story | Acceptance |
 | --- | --- | --- |
-| S1 | Check one label: upload a specimen, type the application fields, verify. | Record created, extraction starts on upload, verdict returned, detail view opens on the field comparison. |
+| S1 | Check one label: upload a specimen, type the application fields, verify. | Record created, the label is read on submit, verdict returned and reported with a way into the record. |
 | S2 | Prefill the single-label form from a named sample (matching, casing difference, missing warning, title-case warning, reworded warning, ABV mismatch, unit mismatch, illegible field). | Every sample selectable and reproduces its documented verdict. |
 | S3 | Batch upload: application CSV + folder of label images, paired on `filename`. | Staged preview reports all five pairing buckets (§5.5); commit files every non-ambiguous row. |
 | S4 | Load the bundled sample batch in one click. | The 25 fixture applications stage, images resolved — bar the three rows deliberately left in the other pairing states (§5.5). |
 | S5 | Inbox filtered by needs attention / awaiting AI / review / fail / closed, with search over ID, applicant, brand, filename. | Filter counts match the store; search is case- and punctuation-insensitive. |
 | S6 | Open an unverified application, fill missing fields, press Verify. | Row shows busy state, resolves to pass/review/fail without page reload; field results stream as they resolve. |
-| S7 | Verify every pending record in one action. | Progress per record; one failure does not abort the rest; job summary reports estimated spend. |
+| S7 | Verify every pending record in one action. | Progress per record; one failure does not abort the rest; job summary reports the verdict mix. |
 | S8 | Accept a flagged record after explicit confirmation naming each disagreeing field. | Confirmation lists offending fields; acceptance stores reviewer name, timestamp, override flag. |
 | S9 | Return a record to the applicant with an editable reason. | Reason persists and appears in the export; the record is not reopenable (§12). |
 | S10 | Minimise the detail panel and return to it later on this device. | Collapsed/expanded state and open record survive reload. |
@@ -86,18 +92,24 @@ training, audits closed records — the operations gated behind the admin token.
 ### 3.2 Verdicts and roll-up
 
 Field verdict ∈ `match | review | fail`. Record verdict = worst field verdict (any fail →
-fail; else any review → review; else match). No verdict yet = *awaiting AI*. Decision ∈
-`null | accepted | returned`; a match verdict may auto-set `accepted` by `Automatic` only when
-auto-approve is enabled **and** the record passes the full eligibility test of §5.3.
+fail; else any review → review; else match), plus `invalid`, which is not a field verdict at
+all. No verdict yet = *awaiting AI*. Decision ∈ `null | accepted | returned`; a match verdict
+may auto-set `accepted` by `Automatic` only when auto-approve is enabled **and** the record
+passes the full eligibility test of §5.3.
 
 - **match** — normalised values identical, or numerically equivalent within tolerance.
 - **review** — same content, different presentation: capitalisation, punctuation, unit
   expression, an optional accompanying statement, a value on the label omitted from the
   application, or a cosmetic warning defect (title-case header, non-bold header). Also
-  assigned when an otherwise-matching field was read from a degraded capture, or when the two
-  readers disagree (§5.3).
+  assigned when an otherwise-matching field was read from a degraded capture with low
+  reader confidence.
 - **fail** — different content; a required value absent from the label; a reworded or missing
   government warning; or a field the extractor returned as `ILLEGIBLE`.
+- **invalid** — the specimen is not an alcohol beverage label at all. Added after v1.1: such a
+  record cannot be adjudicated field by field, and `fail` would tell the reviewer the
+  applicant's label is wrong when the finding is that the wrong file was filed. No field rows
+  are written and the roll-up is bypassed. Only the vision reader can raise it, and the prompt
+  is deliberately reluctant — a hard-to-read label must still be adjudicated.
 
 **Rules first, model second.** The deterministic engine produces the verdict of record. The
 vision reader supplies observed values and may **downgrade** a verdict or attach an
@@ -161,26 +173,33 @@ app_producer, app_origin, app_warning_declared,
 verified, result, elapsed_ms, engine, decision, decided_by, decided_at, note
 ```
 
-Plus eight columns that exist only in the database and are not exported: `override`,
-`supersedes_id`, `reader_provider`, `reader_model`, `prompt_version`, `prep_ms`, `reader_ms`,
-`rules_ms`. The timing columns are what make per-record latency comparable across readers in
-production, not just in the bench (§5.4).
+Plus columns that exist only in the database: `override`, `reader_provider`, `reader_model`,
+`prompt_version`, `prep_ms`, `reader_ms`, `rules_ms`, and `reading_json`. The timing columns
+make per-record latency comparable in production, not just in the bench (§5.4).
+`reading_json` holds the reading behind the current verdict, so correcting an application
+re-adjudicates against the label already read rather than paying to read it again
+(`migrations/005`). `override` is exported; the rest are not.
 
-The two CSV columns absent here — `field_results` and `field_notes` — are packed at export
-time from the second table.
+v1.1 also specified `supersedes_id`, for PRD §12's refile-links-back. It was never written or
+read, and was dropped in `migrations/006`.
+
+The CSV columns absent here — `field_results`, `field_notes` and `field_values` — are packed
+at export time from the second table.
 
 **field_results** — one row per verified field per record. Replaces v1.0's packed
 `key:verdict|key:verdict` cell, which was a serialization format nested inside a
 serialization format.
 
 ```
-record_id, field_key, app_value, label_value, verdict, note,
-reader_value, ocr_value, agreed, confidence
+record_id, field_key, app_value, label_value, verdict, note, confidence
 ```
 
-Unique on (`record_id`, `field_key`). `reader_value` and `ocr_value` retain what each reader
-independently saw, and `agreed` is the auto-close gate of §5.3 — keeping both is what makes
-the three-way comparison possible after the fact rather than only at bench time.
+Unique on (`record_id`, `field_key`). v1.1 also specified `reader_value`, `ocr_value` and
+`agreed`, to retain what each reader independently saw and gate auto-close on their agreement.
+With one reader plus a fallback (§5.3) there is no second reading to store: `ocr_value` and
+`agreed` were never written, and `reader_value` only ever duplicated `label_value`. All three
+were dropped in `migrations/006`. `confidence` stays — it is what drives the degraded-capture
+downgrade of §3.2.
 
 **audit** — append-only event log: `seq`, `ts`, `record_id`, `event`, `payload_json`. Every
 determination, override, import, and reset writes one row. This is what satisfies §12's
@@ -199,17 +218,38 @@ seconds of the last write) regenerates `data/records.csv` from the database. The
 **derived and never read back** — a stale or partial mirror is a cosmetic defect, not data
 loss, which is precisely why no locking is required around it.
 
-The mirror carries the v1.0 column set verbatim so exported files remain interchangeable with
-the approved prototype, with `field_results` re-packed into the `key:verdict|key:verdict` form
-and notes emitted in a parallel `field_notes` column:
+The mirror carries the v1.0 column set, with `field_results` re-packed into the
+`key:verdict|key:verdict` form and notes in a parallel `field_notes` column, plus two columns
+v1.1 did not have — 26 in all:
 
 ```
 id, received, applicant, beverage, filename, specimen, quality,
 app_brand, app_class_type, app_alcohol_content, app_net_contents,
 app_producer, app_origin, app_warning_declared,
-verified, result, field_results, field_notes, elapsed_ms, engine,
-decision, decided_by, decided_at, note
+verified, result, field_results, field_notes, field_values, elapsed_ms, engine,
+decision, override, decided_by, decided_at, note
 ```
+
+`field_values` carries the observed values as JSON in one cell. Without it the mirror exports
+verdicts and notes but not the values they were reached from, so a store restored from an
+export renders every field as "not recorded" — a determination with its evidence deleted. JSON
+rather than two more packed columns, because observed label values routinely contain both the
+`|` and the `:` that `field_notes` separates on.
+
+`override` is here because accepting a record that did not pass is the one determination a
+reviewer makes against the engine, and an export that drops the flag destroys the only
+evidence that the waiver was deliberate — which is what S8 exists to produce.
+
+**Two further exports**, both API routes rather than files on disk, since the mirror is written
+by a background timer and serving the file would race it:
+
+- `GET /api/export/backup.csv` — the full 26-column mirror above. This is what
+  `POST /api/store/import` reads back, and the file a restore starts from.
+- `GET /api/export/records.csv` — what a reviewer takes away: 18 columns, the same store
+  without its machine-facing half. No packed JSON, no timings, no engine string, and an
+  `issues` column naming the fields that disagreed in words. Its application columns use the
+  batch-intake header names, so a downloaded export can be re-uploaded on Check a batch
+  without being translated first. It drops columns, so it is *not* a restore artifact.
 
 ### 4.3 CSV interchange
 
@@ -220,13 +260,15 @@ decision, decided_by, decided_at, note
   spreadsheet formula injection.
 - `from_csv(bytes) -> rows` — tolerates CRLF, a BOM, and reordered columns; preserves `id` so
   merge-import is idempotent; rejects a file missing `app_brand` with a field-level error the
-  UI can display.
+  UI can display, and recognises a batch-intake CSV well enough to say so by name.
 
 Round-trip test: seed → export → wipe → import → export → assert identical bytes. Satisfies
 S11 regardless of storage.
 
 **Batch intake CSV** accepts the shorter applicant header:
 `filename, brand_name, class_type, alcohol_content, net_contents, producer, country_of_origin, government_warning, applicant`.
+It also accepts the mirror's own names for those seven fields: refusing a file this service
+wrote, over a column name, is not a defensible error.
 
 ### 4.4 Snapshots and migrations
 
@@ -250,24 +292,26 @@ each appears exactly once.
 ```
 api/
   main.py             app factory, CORS, static mounts, health
-  config.py           env parsing, per-provider effort clamp, spend accounting
+  config.py           env parsing, reader API key selection
   models.py           Pydantic: Application, LabelReading, FieldResult, Record
   db.py               connection, schema, migrations, snapshot, reset, audit append
   csv_io.py           to_csv / from_csv / mirror writer — the only CSV code
   adjudicate.py       normalisation, per-field comparison, roll-up, notes
   batching.py         filename pairing, staged-preview construction
-  jobs.py             bounded worker pool, per-record status, SSE progress
+  logs.py             structured JSON logging, redaction, service counters
+  uploads.py          image sniffing, re-encoding, content-addressed storage
   seed.py             build the example store from fixtures/
   readers/
     __init__.py       Reader protocol, registry, get_reader(config)
-    vision.py         OpenAI-compatible client — serves both OpenAI and Gemini
+    vision.py         OpenAI-compatible client, and the daily paid-call cap
+    prep.py           shared image preparation, cached per file
     ocr.py            local Tesseract reader
     fake.py           replays fixture readings — used in CI
     prompts.py        extraction prompts, versioned
   routers/
-    records.py  batches.py  jobs.py  store.py
+    records.py  batches.py  jobs.py  store.py  specimens.py
 migrations/
-  001_initial.sql  002_….sql
+  001_initial.sql … 006_drop_unused_columns.sql
 tests/                one test module per api module it covers
   test_adjudicate.py  one case per fixture defect, verdict asserted
   test_readers.py     schema conformance, retry, degradation, effort clamp
@@ -275,85 +319,92 @@ tests/                one test module per api module it covers
   test_db.py          round-trip, migration, concurrent write
   test_csv_io.py      byte-identical round trip, formula-injection prefixing
   test_batching.py    filename pairing across all five buckets
-  test_api.py         contract tests against the OpenAPI schema
+  test_api.py         contract and behaviour tests for the documented routes
+  test_uploads.py     format sniffing, re-encoding, size and name safety
 scripts/
-  bench.py            three-way reader bake-off (§5.4)
+  bench.py            reader bake-off against the fixture set (§5.4)
 ```
 
 ### 5.1 API surface
 
-Ten endpoints. Static assets — specimen images, the CSV mirror, the blank template, and the
-named-sample catalogue — are served directly by Caddy from the data volume rather than through
-the application.
+Nine endpoints. Specimen images are served directly by Caddy from the data volume in
+production; the API mounts them locally where there is no Caddy.
 
 | Endpoint | Behaviour |
 | --- | --- |
 | `GET /api/records` | Filter (`attention\|pending\|review\|fail\|closed`), query, cursor page; returns rows plus filter counts. |
-| `POST /api/records` | Create one application: multipart (image + JSON), or `specimen_key` for a bundled fixture image. Extraction begins immediately (§5.2). |
+| `POST /api/records` | Create one application: multipart (image + JSON), or `specimen_key` for a bundled fixture image. `verify_now` reads and adjudicates it in the same request (§5.2). |
 | `GET /api/records/{id}` | Full record: application, reading, field results, notes, engine, timings, decision history. |
 | `PATCH /api/records/{id}` | Edit application fields, or issue a decision. Editing invalidates any prior verdict. **The override rule is enforced here**: `decision: accepted` on a non-`match` verdict is rejected unless `override: true`, and the check has its own unit test — it must not be lost inside a generic field-merge loop. |
 | `POST /api/records/{id}/verify` | Run adjudication. Idempotent per (record, image hash, prompt version, provider, model, effort) via cache. |
 | `POST /api/batches/stage` | Multipart CSV + images. Parses, pairs images by filename (§5.5), returns a staged preview with per-row errors. Nothing is written. |
-| `POST /api/jobs` | `{scope: "pending" \| "batch", batch_id?, verify_now?}`. Commits a staged batch and/or enqueues verification. Returns a job id. |
-| `GET /api/jobs/{id}/events` | Server-sent events: `progress`, `record`, `done`, `error`. |
-| `POST /api/fixtures` | `{mode: "stage" \| "reset"}`. Stage the sample batch, or snapshot and reseed the example store. Admin token required for `reset`. |
+| `POST /api/jobs` | `{scope: "pending" \| "batch" \| "ids", batch_id?, record_ids?, rows?, verify_now?}`. Commits a staged batch and/or enqueues verification. Returns a job id. |
+| `GET /api/jobs/{id}` | Job state, counters, verdict mix and per-record events. Polled; there is no event stream. |
+| `POST /api/fixtures` | `{mode: "stage" \| "reset" \| "empty"}`. Stage the sample batch, or snapshot and reseed or clear the store. Admin token required for `reset` and `empty`. |
 | `POST /api/store/import` | Replace or merge by `id`, after snapshotting. Admin token required. |
-| `GET /api/health` | Store readable, images writable, reader reachable, prompt version, provider, model, spend today. |
+| `GET /api/health` | Store readable, images writable, reader reachable, prompt version, provider, model, paid calls today, service counters. |
 
-Served by Caddy, not the API: `/ttb-build/images/{hash}`, `/ttb-build/export/records.csv`,
-`/ttb-build/export/template.csv`, `/ttb-build/specimens.json`.
+Also on the API: `GET /api/batches/{id}` and its per-row image routes (§5.5),
+`GET /api/specimens` for the bundled catalogue, and the three CSV exports of §4.2 —
+`/api/export/records.csv` (reviewer), `/api/export/backup.csv` (full mirror),
+`/api/export/template.csv` (blank intake header).
 
 ### 5.2 Reader layer
 
-**Providers.** Two vision models are supported and interchangeable by configuration. Both are
-reached through a single `AsyncOpenAI` client, since Gemini exposes an OpenAI-compatible
-endpoint — only the API key, base URL, and model string differ.
+**Provider.** One vision model, reached through the OpenAI Chat Completions API. The adapter
+is deliberately thin, so any OpenAI-compatible endpoint is a base-URL change rather than a
+rewrite — which is how a second provider would be added back if one were ever needed. v1.1
+specified two providers side by side; the second was dropped because a single-tenant tool does
+not need provider redundancy badly enough to pay for a second bake-off, and the abstraction it
+required was a per-provider table with one row in it.
 
-| | OpenAI | Google |
-| --- | --- | --- |
-| Model string | `gpt-5.6-luna` | `gemini-3.7-flash` |
-| Base URL | default | `https://generativelanguage.googleapis.com/v1beta/openai/` |
-| Image input | `image_url` with `data:image/jpeg;base64,…` | identical |
-| Effort parameter | `reasoning_effort`: `none`, `low`, `medium` (default), `high`, `xhigh`, `max` | `reasoning_effort` maps to `thinking_level`: `low`, `medium`, `high` |
-| Structured output | supported | supported |
-| Context / output | 1,050,000 / 128,000 | 1,048,576 / 65,536 |
-| Published price | $0.20/M in, $0.02/M cached in, $1.20/M out | see current Gemini pricing page |
+| | OpenAI |
+| --- | --- |
+| Model string | `gpt-5.6-luna` |
+| Base URL | default, overridable by `READER_BASE_URL` |
+| Image input | `image_url` with `data:image/jpeg;base64,…` |
+| Effort parameter | `reasoning_effort`: `none` (default), `low`, `medium`, `high`, `xhigh`, `max` |
+| Structured output | `json_schema`, strict, closed with `additionalProperties: false` |
+| Published price | $0.20/M in, $0.02/M cached in, $1.20/M out |
 
-**Two provider-specific constraints, enforced in the adapter:**
+**Two constraints, enforced in the adapter:**
 
-1. **Effort clamp.** Gemini 3.7 Flash rejects `minimal` with an error, and reasoning cannot be
-   disabled on Gemini 3 models. The adapter clamps configured effort to a per-provider floor:
-   `low` for Gemini, `none` for OpenAI. Asserted in `test_readers.py`.
-2. **Service tier.** Gemini matches OpenAI's `service_tier` parameter in name and logic,
-   defaulting to `standard`. It is exposed as configuration so priority inference can be
-   measured against the latency target rather than assumed.
+1. **Effort clamp.** Configured effort is raised to the provider floor (`none`), and an
+   unrecognised value falls to it rather than being forwarded. Asserted in `test_readers.py`.
+2. **Service tier.** The API does not accept the value `standard` this document names as the
+   default; the valid values are `auto`, `default`, `fast`, `flex` and `priority`. The adapter
+   maps `standard` onto `auto`. Found by calling the endpoint, and asserted in
+   `test_readers.py`.
 
 **Configuration.**
 
 ```
-READER_PROVIDER=openai|gemini|ocr|fake
+READER_PROVIDER=openai|ocr|fake
 READER_MODEL=gpt-5.6-luna
 READER_BASE_URL=                    # empty = OpenAI default
-READER_API_KEY=
-READER_EFFORT=low                   # clamped per provider
-READER_SERVICE_TIER=standard        # standard | flex | priority
+READER_API_KEY=                     # OPENAI_API_KEY takes precedence
+READER_EFFORT=none                  # clamped to the provider floor
+READER_SERVICE_TIER=standard        # mapped onto the API's `auto`
 READER_TIMEOUT_S=25
 READER_CONCURRENCY=10
-DAILY_SPEND_CAP_USD=50
+DAILY_VISION_CALL_CAP=300           # paid calls per UTC day; 0 disables
 ```
 
 **Image preparation.** Pillow applies EXIF rotation, downscales the longest edge to 1024 px,
 encodes JPEG q85, and computes a perceptual sharpness score used as the capture-quality prior.
-Where the sharpness prior is low or the warning region is small, a second pass runs on a
-bottom crop of the label, since warning text is the smallest type on most specimens and the
-field most sensitive to resolution. The 1024 px default is validated against the fixture set
-by `scripts/bench.py` before it is fixed; if per-field accuracy drops, the value moves back to
-1600 and the latency budget absorbs it.
+The 1024 px default is validated against the fixture set by `scripts/bench.py` before it is
+fixed; if per-field accuracy drops, the value moves back to 1600 and the latency budget
+absorbs it. The second bottom-crop pass v1.1 specified was not built: the single pass reaches
+the documented warning verdict on every fixture, so it would be a second paid call for an
+accuracy problem that has not appeared.
 
-**Extraction begins on upload, not on Verify.** The reader never sees application values, so
-extraction has no dependency on the form and starts the moment the specimen lands. By the time
-the reviewer presses Verify, the reading is cached and adjudication is a rules-engine call.
-This is what makes the 5-second target achievable rather than a hope about model latency.
+**Extraction runs when a reviewer asks, not on upload.** The reader never sees application
+values, so extraction *could* start the moment the specimen lands — v1.1 specified exactly
+that, to hide the model call behind the reviewer's data entry. It costs money per call, and a
+filing nobody ever verifies must never pay for one, so the reader runs only on request:
+`verify_now` on `POST /api/records`, the Verify action, or a job. The consequence is that
+verification latency is now wholly model latency, which is why §8's target is measured in
+§5.4 rather than assumed.
 
 **Guards.** Two retries with backoff on transport or schema failure; a 25-second per-image
 budget; results cached by `sha256(image) + prompt_version + provider + model + effort` — the
@@ -363,23 +414,28 @@ literal `ILLEGIBLE` sentinel, plus the warning composite (present, body verbatim
 header bold) and a capture-quality classification drawn from the fixture vocabulary (`normal`,
 `blurry`, `heavyBlur`, `glare`, `pixelated`, `angled`, `dark`, `damaged`, `cropped`).
 
-### 5.3 Dual reader and auto-close eligibility
+### 5.3 OCR fallback and auto-close eligibility
 
-Local OCR (Tesseract) runs on **every** specimen, always, at roughly 200 ms and no marginal
-cost. It serves three purposes:
+Local OCR (Tesseract) is free, needs no network, and serves two purposes:
 
-1. **Independent second reader.** Agreement between OCR and the vision model on a normalised
-   field value is the auto-close gate. This is a materially stronger signal than a low-tier
-   model's self-reported confidence, which is poorly calibrated.
-2. **Fallback reader.** When the vision provider is unreachable — the firewall scenario raised
-   in the IT interview — OCR supplies observed values and the engine string names it.
-3. **Illegibility prior.** OCR confidence feeds the capture-quality assessment alongside the
-   sharpness score.
+1. **Fallback reader.** When the vision provider is unreachable — the firewall scenario raised
+   in the IT interview — OCR supplies observed values and the engine string names it, so the
+   service degrades rather than blocking. A record read this way carries a *Read by local OCR*
+   chip in the determination view.
+2. **Illegibility prior.** The sharpness score computed during preparation drives the
+   capture-quality call when OCR is what read the label.
 
-**Auto-close eligibility.** A record may auto-close only if all of the following hold: every
-field verdict is `match`; the vision reader and OCR agree on every field after normalisation;
-capture quality is `normal`; and no field was read by a single reader alone. Anything else
-routes to the review inbox. An OCR-only reading never auto-closes.
+v1.1 ran OCR on **every** specimen as an independent second reader, and made agreement between
+it and the vision model the auto-close gate. That is not what was built. §5.4 measures OCR at
+15 of 25 documented verdicts but only 85 of 155 fields, against the vision reader's 122 —
+accurate enough to fall back to, not accurate enough to gate on, and a gate it
+disagrees with on `brand` most of the time is one that routes everything to a human anyway. So
+OCR runs only when the vision reader fails, and the agreement clause is dropped from the gate.
+
+**Auto-close eligibility.** A record may auto-close only if all of the following hold:
+`AUTO_APPROVE_MATCHES` is on, which it is not by default; every field verdict is `match`;
+capture quality is `normal`; the reading did not come from the OCR fallback; and the record was
+not drawn into review by `QA_SAMPLE_RATE`. Anything else routes to the review inbox.
 
 OCR is not a batch-size fallback. Reader selection never varies with queue depth — two records
 must not receive different verdict quality for reasons unrelated to their content, which would
@@ -387,28 +443,29 @@ be indefensible on audit.
 
 **Runtime timings.** Every verification records `prep_ms`, `reader_ms`, `rules_ms`, and
 `elapsed_ms` on the record, measured with `time.perf_counter_ns()` and rounded to whole
-milliseconds at the boundary. Because OCR runs on every specimen alongside the vision reader,
-production accumulates paired timings continuously — the comparison does not stop when the
-bench script finishes.
+milliseconds at the boundary. Preparation runs inside the reader call and is subtracted out
+rather than counted twice.
 
 Provider selection is a measurement, not an assertion. The measurement is specified in §5.4.
 
-### 5.4 Three-way reader benchmark
+### 5.4 Reader benchmark
 
-`scripts/bench.py` runs the full fixture set through all three readers and produces the
-evidence for choosing one. It is the artifact that turns "we picked Luna" into "we measured
-Luna, Gemini, and OCR, and here is the table."
+`scripts/bench.py` runs the full fixture set through a named reader and produces the evidence
+for choosing one. It is the artifact that turns "we picked Luna" into "we measured Luna against
+the 4.1 class and against OCR, and here is the table."
 
 ```
-python scripts/bench.py --readers openai,gemini,ocr --runs 3 --concurrency 1
+uv run python scripts/bench.py --reader openai --model gpt-5.6-luna --effort none
 ```
 
 **Method.** Every reader sees the identical prepared image, so differences are attributable to
-the reader and not to preprocessing. The extraction cache is bypassed. Each fixture runs
-`--runs` times (default 3) and the median is reported, since a single sample on a network call
-is noise. `--concurrency 1` is the default for latency measurement — concurrent runs measure
-throughput, not latency, and the two are reported separately. Ground truth is
-`fixtures/expectations.json`.
+the reader and not to preprocessing. The extraction cache is bypassed and the preparation cache
+is cleared per fixture. Timings run from the Verify press, which is where §8 sets the
+threshold — and since extraction now happens there rather than on upload, that is the whole
+model call. Ground truth is `fixtures/expectations.json`.
+
+One run per configuration, not the median of three v1.1 asked for: each run is 25 paid calls,
+and the four configurations already separate by more than the run-to-run spread.
 
 **Timing instrumentation.** Four stages, `perf_counter_ns()` at each boundary, reported in ms:
 
@@ -417,46 +474,25 @@ throughput, not latency, and the two are reported separately. Ground truth is
 | `prep_ms` | EXIF rotation, downscale, JPEG encode, sharpness score |
 | `reader_ms` | Request dispatch to parsed response — the only stage that differs between readers |
 | `rules_ms` | Normalisation, comparison, roll-up, note generation |
-| `total_ms` | Upload accepted to verdict written |
+| `total_ms` | Verify press to verdict written |
 
-`reader_ms` is additionally split into `ttfb_ms` and `transfer_ms` for the two API readers,
-because a provider that is slow to start and a provider that is slow to stream are different
-problems with different fixes.
+**Outputs.** The table is printed to stdout; `--out` writes it to a file and `--json` the raw
+rows, so any claim can be recomputed. The head-to-head result and the rationale for the
+production default are recorded in the README.
 
-**Outputs.** Two files, both committed:
+**Summary tables.** Per reader: p50, p95 and max `total_ms`; median `reader_ms` and `prep_ms`;
+median input and output tokens and output tokens per second; verdict accuracy against ground
+truth; per-field accuracy across all seven fields; capture-quality accuracy; and error count.
+The p95 column is checked directly against the 5-second requirement in §8.
 
-- `data/benchmark.csv` — one row per (fixture, reader, run): `fixture_id, reader, run,
-  prep_ms, ttfb_ms, reader_ms, rules_ms, total_ms, verdict, expected_verdict, fields_correct,
-  fields_total, illegible_detected, input_tokens, output_tokens, cost_usd, error`. Raw, so any
-  claim in the summary can be recomputed.
-- `docs/benchmark.md` — the rendered summary, reproduced in the README.
+The three-way agreement matrix v1.1 specified is not produced: it existed to justify the
+auto-close gate's reader-agreement clause, which §5.3 no longer has.
 
-**Summary tables.** Four, in this order:
-
-*Speed* — per reader: p50, p95, and max `total_ms`; median `reader_ms`; median `ttfb_ms`;
-timeout and error counts. The p95 column is checked directly against the 5-second requirement
-in §8.
-
-*Accuracy* — per reader: per-field correctness against ground truth for all seven fields as a
-matrix (reader × field), overall field accuracy, record-verdict accuracy, **false auto-close
-count** (a defect fixture reaching `match` — this must be zero for any reader to be eligible),
-false-rejection count, and illegible-detection precision and recall.
-
-*Agreement* — the pairwise matrix across all three readers: openai↔gemini, openai↔ocr,
-gemini↔ocr, per field. This is the table that justifies the §5.3 auto-close gate. Low OCR
-agreement on `brand` and high agreement on `warning` is the expected shape — stylised brand
-type defeats OCR while the warning statement is plain high-contrast sans-serif — and if the
-measured matrix contradicts that, the gate design is revisited rather than the measurement
-explained away.
-
-*Cost* — per reader: median input and output tokens, cost per label, cost per 100 labels,
-extrapolated cost for a 300-label peak-season batch.
-
-**Exit criteria.** M3 does not close until `docs/benchmark.md` exists, every reader shows zero
-false auto-closes, and at least one configuration meets the p95 target of §8. The chosen
-production default is named in the README with a one-paragraph rationale citing the table.
-`tests/test_readers.py` runs the same harness against the `fake` reader with two fixtures, so
-the benchmark code path is covered in CI without network access or spend.
+**Exit criteria.** M3 does not close until the bake-off has been run, no reader shows a defect
+fixture reaching `match`, and at least one configuration meets the p95 target of §8. The chosen
+production default is named in the README with a rationale citing the table.
+`tests/test_readers.py` runs the same code path against the `fake` reader, so the benchmark is
+covered in CI without network access or spend.
 
 ### 5.5 Batch filename pairing
 
@@ -498,7 +534,7 @@ and the Router `basename`.
 | --- | --- |
 | `/inbox` | Review inbox. Notification strip ("n applications need your attention"), five filter tabs with live counts, search, verify-all, queue table with pill status, per-row expand showing the field comparison, per-row Verify / Open. Empty and error states per filter. |
 | `/check` | Check one label. Left: specimen dropzone with preview and quality badge, or named-sample picker — extraction starts on drop. Right: the seven application fields. Verify runs adjudication and routes to the detail view. |
-| `/batch` | Check a batch. CSV dropzone, image multi-drop, template download, load-sample-batch, staged table showing all five pairing buckets with row errors, verify-now toggle, commit with per-record progress and estimated spend. |
+| `/batch` | Check a batch. CSV dropzone, image multi-drop, template download, load-sample-batch, staged table showing all five pairing buckets with row errors and per-row image picker, commit with per-record progress. |
 | `/records/:id` | Determination view. Specimen viewer (zoom, quality treatment noted) beside the three-column comparison — application says / label shows / result — one row per field with the agent-ready note and both readers' values, then engine, per-stage timings and the decision bar (Accept, Return, minimise). Minimised state and open record persist in `localStorage`. |
 | `/store` | Record store, rendered as a normal table — never raw CSV. Export (the served mirror), import, blank template, reset-to-example with confirmation, snapshot list. |
 
@@ -543,10 +579,10 @@ volume.
 
 **Performance.** Verification p95 **under 5 seconds measured from the reviewer pressing
 Verify** — the threshold the Compliance Division identified as the point at which the previous
-scanning pilot was abandoned. This is met by extracting on upload (§5.2), so the model call
-overlaps the reviewer's data entry rather than following it. Reader wall-clock time is tracked
-separately as an internal metric and surfaced on the determination view. Field results stream
-to the UI as they resolve. Inbox first paint under 1.5 s on a cold cache. Store operations
+scanning pilot was abandoned. Because extraction runs on request rather than on upload (§5.2),
+that window is wholly model latency, so it is measured rather than assumed:
+§5.4 records 4,084 ms p95 for the production configuration. Per-stage timings
+are recorded on every record. Inbox first paint under 1.5 s on a cold cache. Store operations
 under 300 ms.
 
 **Batch throughput.** A 25-application batch completes in under 3 minutes. A 300-application
@@ -555,7 +591,9 @@ minutes at `READER_CONCURRENCY=10`. Concurrency is bounded, not unbounded: 300 s
 requests would exceed provider rate limits, exhaust memory during image preparation, and
 destroy per-record progress reporting. Note that OpenAI Tier 1 limits are 500 RPM and 500,000
 TPM; the account tier is verified before any 300-record run, and the ceiling is documented in
-the runbook. Each job reports estimated spend in its summary.
+the runbook. Each job reports its verdict mix in its summary; a per-job spend estimate was
+dropped, because an honest one needs a per-model price table and the enforced control is the
+call cap below.
 
 **Access.** No user accounts, no signup, no session management. Mutating endpoints require a
 shared bearer token (`ACCESS_TOKEN`) supplied in the README; `POST /api/store/import` and
@@ -565,11 +603,12 @@ Because there is no identity, `decided_by` is captured as a free-text reviewer n
 determination; the timestamp and override flag — the audit-relevant fields — are recorded
 regardless.
 
-**Spend control.** Hard spend limits are configured on the OpenAI and Google API dashboards and
-are the primary control. The service adds a secondary backstop, `DAILY_SPEND_CAP_USD` (default
-50), accounted in the reader layer from per-request token usage. On breach, verification returns
+**Spend control.** A hard spend limit on the provider dashboard is the primary control. The
+service adds a secondary backstop, `DAILY_VISION_CALL_CAP` (default 300), accounted in the
+reader layer. It counts paid calls rather than dollars: an honest dollar figure needs a
+per-model price table that goes stale, and a call count cannot. On breach, verification returns
 rules-only verdicts with the engine string naming the cause, and `/api/health` reports the
-condition. This is defence in depth rather than the sole guard: it degrades gracefully
+count against the cap. This is defence in depth rather than the sole guard: it degrades gracefully
 mid-batch where a provider-side cap returns hard errors, and it keeps spend visible in the
 application's own health output. Per-IP rate limits apply to upload and verify.
 
@@ -616,54 +655,52 @@ handle_path /ttb-build/* {
 }
 ```
 
-**App host** — Caddy plus API in Compose, started by a systemd unit so the stack survives
-reboot. The app-host Caddy listens on the tailnet interface only, serves the built frontend,
-proxies `/api` to the API container, and serves the data volume's static assets directly:
+**App host** — Caddy and the API directly under systemd, so both survive reboot. v1.1
+specified Docker Compose; the target is a shared host already running Caddy and several other
+services under systemd, so a container runtime would have added operational surface without
+buying isolation this tool needs. The app-host Caddy listens on the tailnet interface only,
+serves the built frontend, proxies `/api`, and serves the image directory directly:
 
 ```
 :8080 {
-    root * /srv/labelverify/web
-    handle /api/* { reverse_proxy api:8000 }
-    handle /images/*   { root * /srv/labelverify/data; file_server }
-    handle /export/*   { root * /srv/labelverify/data; file_server }
+    root * /var/www/ttb-build/web/dist
+    handle /api/images/* { root * /var/www/ttb-build/data; file_server }
+    handle /api/* { reverse_proxy 127.0.0.1:8020 }
     handle { try_files {path} /index.html; file_server }
     encode gzip
 }
 ```
 
-`/export/records.csv` is the CSV mirror from §4.2, served straight off disk — which is how the
-export endpoint was removed from the API surface without losing the capability.
+The CSV exports are API routes rather than files on disk (§4.2): the mirror is written by a
+debounced background timer, so serving the file races that writer.
 
 ```
-/srv/labelverify/
-  docker-compose.yml     caddy + api
-  Caddyfile
-  .env                   READER_*, ACCESS_TOKEN, ADMIN_TOKEN, DAILY_SPEND_CAP_USD,
-                         AUTO_APPROVE_MATCHES, QA_SAMPLE_RATE, DATA_DIR=/data,
-                         PUBLIC_BASE_PATH=/ttb-build
-  web/                   built Vite bundle (immutable asset hashes)
-  data/                  bind mount: records.db, records.csv, images/, snapshots/
-  deploy.sh              pull, build, migrate-check, up -d, health gate, rollback
+/var/www/ttb-build/
+  api/                   FastAPI app, its .venv, migrations
+  web/dist/              built Vite bundle (immutable asset hashes)
+  data/                  records.db, records.csv, images/, snapshots/
+  .env                   READER_*, ACCESS_TOKEN, ADMIN_TOKEN, DAILY_VISION_CALL_CAP,
+                         AUTO_APPROVE_MATCHES, QA_SAMPLE_RATE, DATA_DIR,
+                         PUBLIC_BASE_PATH=/ttb-build, BACKUP_DEST, BACKUP_RECIPIENT
+  deploy/                Caddyfile, systemd units, deploy.sh, backup.sh
 ```
 
-**Subpath configuration.** `PUBLIC_BASE_PATH` is read at build time and threaded into four
-places that must agree: Vite `base`, React Router `basename`, the API client base URL, and the
-front Caddy's `handle_path`. It is defined once and injected; it is not repeated across config
-files.
+**Subpath configuration.** `PUBLIC_BASE_PATH` is read at build time and threaded into the
+places that must agree: Vite `base`, React Router `basename` and the API client base URL all
+derive from `import.meta.env.BASE_URL`, and the front Caddy's `handle_path` matches it. It is
+defined once and injected; it is not repeated across config files.
 
-**Host prep.** Non-root `deploy` user owning `/srv/labelverify`; root SSH login disabled; SSH
-keys only; UFW denying all inbound except the Tailscale interface; `fail2ban`; unattended
-security upgrades; 2 GB swap.
+**Host prep.** SSH keys only; the API bound to loopback and reached only through Caddy; UFW
+denying all inbound except the Tailscale interface; unattended security upgrades.
 
-**CI (GitHub Actions).** Lint, mypy, pytest, vitest, Playwright, `pip-audit`, `npm audit`,
-SBOM; build both images and push to the registry; SSH deploy on a tag over the tailnet.
-`deploy.sh` gates on `/api/health` and rolls back to the previous tag on failure.
+**CI (GitHub Actions).** Three jobs: api (ruff, mypy, pytest, `pip-audit`), web (oxlint,
+vitest, build, `npm audit`), and e2e (Playwright plus the axe audit against both servers,
+uploading its report on failure). Both audits are advisory. `deploy/deploy.sh` is run on the
+host, gates on `/api/health`, and resets to the previous commit if it does not come up.
 
-**Backups.** Nightly cron tars `data/` and encrypts it to off-box object storage; weekly
-restore verification into a scratch directory.
-
-**Staging** is the same Compose file on a second port with its own data volume, so fixture
-resets never touch production.
+**Backups.** `deploy/backup.sh` on a systemd timer takes a `sqlite3 .backup` copy with the
+image directory, encrypts it with `age`, ships it off-box with rsync, and prunes both ends to
+30 days. A rehearsed restore is outstanding — see §10 M7.
 
 ---
 
@@ -671,14 +708,14 @@ resets never touch production.
 
 | M | Milestone | Deliverables and exit criteria |
 | --- | --- | --- |
-| M0 | Skeleton and contracts | Monorepo (`api/`, `web/`, `fixtures/`), Pydantic models, generated TS types, token middleware, health endpoint, CI green. *Exit:* `docker compose up` serves an empty inbox from the real API under `/ttb-build`. |
+| M0 | Skeleton and contracts | Monorepo (`api/`, `web/`, `fixtures/`), Pydantic models, hand-written TS types, token middleware, health endpoint, CI green. *Exit:* both dev servers serve an empty inbox from the real API. |
 | M1 | SQLite store, CSV mirror, fixtures | Three-table schema, migrations, snapshots, append-only audit, seed/reset, `csv_io` plus the debounced mirror, 25 specimens with `expectations.json`. *Exit:* byte-identical round trip and reset both pass; mirror regenerates within two seconds of a mutation. |
-| M2 | Rules engine | Normalisation, per-field comparison, warning composite, roll-up, agent-ready notes, quality downgrade, verdict-improvement guard. *Exit:* all 25 fixture expectations green with the `fake` reader; no defect fixture reaches match. |
-| M3 | Reader layer and bake-off | Image prep, versioned prompts, schema validation, retries, cache, both vision providers with the effort clamp, always-on OCR, dual-reader gate, injection fixtures, `scripts/bench.py`. *Exit:* `docs/benchmark.md` committed, zero false auto-closes for every reader, at least one configuration meeting the §8 p95 target, production default named with a rationale. |
-| M4 | Reviewer UI | Inbox, single check with extract-on-upload, determination view with per-stage timings and both readers' values, decision dialogs with override warning, persisted minimise, toasts, store page. *Exit:* prototype parity signed off screen by screen. |
-| M5 | Batch pipeline | Three-pass pairing with all five buckets, stage/commit, sample batch, job queue with SSE progress and spend reporting, verify-all, partial-failure recovery. *Exit:* 25-application batch inside the time budget with one row deliberately missing its image and one ambiguous pair blocking commit; 300-record run inside 10 minutes. |
-| M6 | Deploy and cutover | Compose, tailnet-only app host, front-host `/ttb-build` proxy, systemd unit, shared-token access, spend caps verified on both dashboards, backups, staging, CI deploy with rollback. *Exit:* two reviewers work a real batch at `bryanzane.com/ttb-build` end to end. |
-| M7 | Hardening | Playwright suite, accessibility audit, load pass at 10 concurrent reviewers, restore rehearsal, runbook and operator guide. *Exit:* runbook followed successfully by someone who did not build the system. |
+| M2 | Rules engine | Normalisation, per-field comparison, warning composite, roll-up, agent-ready notes, quality downgrade. *Exit:* all 25 fixture expectations green with the `fake` reader; no defect fixture reaches match. |
+| M3 | Reader layer and bake-off | Image prep, versioned prompts, schema validation, retries, cache, the vision reader with its effort clamp, OCR fallback, injection fixtures, `scripts/bench.py`. *Exit:* the bake-off run and its table recorded in the README, no defect fixture reaching match for any reader, at least one configuration meeting the §8 p95 target, production default named with a rationale. |
+| M4 | Reviewer UI | Inbox, single check, determination view, decision dialogs with override warning, persisted minimise, toasts, records page. *Exit:* prototype parity signed off screen by screen. |
+| M5 | Batch pipeline | Pairing with all five buckets, stage/commit, sample batch, job queue with polled progress, verify-all, partial-failure recovery. *Exit:* 25-application batch inside the time budget with one row deliberately missing its image and one ambiguous pair blocking commit; 300-record run inside 10 minutes. |
+| M6 | Deploy and cutover | Tailnet-only app host, front-host `/ttb-build` proxy, systemd units, shared-token access, spend cap verified on the dashboard, encrypted off-box backups, deploy script with health gate and rollback. *Exit:* two reviewers work a real batch at `bryanzane.com/ttb-build` end to end. **Done.** |
+| M7 | Hardening | Playwright suite, accessibility audit, load pass at 10 concurrent reviewers, restore rehearsal, runbook and operator guide. *Exit:* runbook followed successfully by someone who did not build the system. **Partial:** the Playwright suite, the axe audit, the runbook and the backup timer are in; the load pass and a rehearsed restore are outstanding. |
 
 ---
 
@@ -698,11 +735,11 @@ resets never touch production.
 12. Reload mid-review → open record and minimised panel state restored.
 13. A specimen carrying injected instruction text in its artwork produces its expected rules verdict; the injected content appears nowhere in the determination.
 14. A staged batch containing two images that normalise to the same stem reports `ambiguous` and blocks commit until resolved.
-15. Reader switched from `openai` to `gemini` between two verifications of the same specimen produces two distinct cache entries and two recorded `reader_model` values.
-16. `READER_EFFORT=minimal` with `READER_PROVIDER=gemini` is clamped to `low` and the request succeeds.
+15. Model or effort changed between two verifications of the same specimen produces two distinct cache entries and two recorded `reader_model` values.
+16. An unrecognised `READER_EFFORT` is clamped to the provider floor and the request succeeds.
 17. Daily spend cap breached mid-batch: remaining records complete with rules-only verdicts and the engine string names the cause; no record is lost.
 18. Re-verifying an already-decided record appends an `audit` event and leaves the prior determination readable; `records` reflects only the current state.
-19. `scripts/bench.py --readers openai,gemini,ocr` completes on the full fixture set and writes both `data/benchmark.csv` and `docs/benchmark.md`; every reader reports zero false auto-closes.
+19. `scripts/bench.py --reader <name>` completes on the full fixture set and writes its summary; no reader lets a defect fixture reach `match`.
 20. Per-stage timings (`prep_ms`, `reader_ms`, `rules_ms`) are present and non-zero on every verified record, and sum to within 5 ms of `elapsed_ms`.
 
 ---
@@ -714,9 +751,10 @@ re-decision append an event rather than overwriting, and `records` holds only th
 state. A compliance audit trail that discards prior determinations cannot answer the question
 it exists to answer.
 
-**A returned record is not reopenable.** The applicant files afresh. The original record
-remains closed and linked to its successor by `supersedes_id`, so the history is traceable
-without a mutable record.
+**A returned record is not reopenable.** The applicant files afresh and the original stays
+closed. v1.1 linked the two with a `supersedes_id` column; it was never written, and was
+dropped in `migrations/006`. The `audit` table is what makes the history traceable, and a
+refile link belongs with the refile flow whenever that is built.
 
 **Still open:** whether the government warning may legitimately sit on a back label the
 specimen does not include, and if so whether the reviewer attaches a second image. This is a
@@ -729,7 +767,7 @@ whose warning is genuinely on a back label.
 | Reader hallucinates a value and a defect auto-closes | Rules own the verdict; the reader may never improve one; OCR agreement gates auto-close; fixture suite blocks release |
 | Prompt injection via specimen artwork | Transcribe-only prompt, strict schema, no verdict improvement, adversarial fixtures in CI |
 | Degraded captures produce confident wrong readings | Sharpness prior plus dual-reader agreement; `ILLEGIBLE` sentinel is a `fail`, never a guess |
-| Reader latency or cost at batch scale | Extraction on upload, content-addressed cache, bounded concurrency, per-image budget, provider-side spend caps plus an in-service backstop, per-job spend reporting |
+| Reader latency or cost at batch scale | Read only on request, content-addressed cache, bounded concurrency, per-image budget, a provider-side spend cap plus an in-service paid-call backstop |
 | Provider unavailable or blocked by egress policy | Two interchangeable providers plus local OCR; rules verdicts always return; engine string names the reader |
 | Single VPS is a single point of failure | Stateless containers plus a bind-mounted volume; restore is one `deploy.sh` run against a fresh host |
 
