@@ -102,3 +102,27 @@ def test_a_reader_cannot_express_a_verdict() -> None:
 
     verdict_fields = [f for f in LabelReading.model_fields if "verdict" in f.lower()]
     assert verdict_fields == [], f"LabelReading gained a verdict field: {verdict_fields}"
+
+
+def test_the_ocr_warning_body_stops_at_the_statement() -> None:
+    """`_lines` concatenates a psm-3 and a psm-6 pass, so a body read to the end
+    of the list absorbs the second pass and fails a compliant label on the
+    verbatim compare. Pure over `_Line`, so it needs no Tesseract."""
+    from adjudicate import STATUTORY_WARNING, warning_body
+    from readers.ocr import _Line, _warning
+
+    statute = STATUTORY_WARNING.split(": ", 1)[1]
+    lines = [
+        # Pass 1: the display type, then the warning block.
+        _Line("OLD TOM", 92.0),
+        _Line("GOVERNMENT WARNING: " + statute, 88.0),
+        # Pass 2: the same label read again, which must not join the body.
+        _Line("OLD TOM GIN", 90.0),
+        _Line("40% ALC/VOL 750 ML", 91.0),
+        _Line("Bottled by Old Tom Distillery", 87.0),
+    ]
+    reading = _warning(lines)
+    assert reading.present is True
+    assert reading.body is not None
+    assert warning_body(reading.body) == warning_body(STATUTORY_WARNING)
+    assert "750 ML" not in reading.body

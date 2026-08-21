@@ -33,6 +33,13 @@ _NET_RE = re.compile(
     r"\b\d+(?:\.\d+)?\s*(?:ml|mL|ML|cl|cL|CL|L|l|fl\.?\s*oz|FL\.?\s*OZ)\b"
 )
 _WARNING_RE = re.compile(r"GOVERNMENT\s+WARNING", re.IGNORECASE)
+# The statement's closing words. `_lines` concatenates two passes, so a body
+# read to the end of the list folds the whole second pass into the warning and
+# fails a compliant label on the verbatim compare (PRD §3.1).
+_WARNING_END = re.compile(r"health\s+problems", re.IGNORECASE)
+# Backstop when a degraded capture never yields the closing words. The statute
+# is 54 words; past this the reading is incomplete either way.
+_WARNING_MAX_WORDS = 80
 
 # Lines that are never the brand or the class/type.
 _NOISE = re.compile(
@@ -132,12 +139,23 @@ def _quality(prepared: Prepared) -> CaptureQuality:
     return "normal"
 
 
+def _statement(lines: list[_Line]) -> str:
+    """The warning body, stopped at its closing words rather than at the end of
+    the line list. OCR line breaks are unreliable, so this counts words."""
+    words: list[str] = []
+    for line in lines:
+        words.extend(line.text.split())
+        if _WARNING_END.search(" ".join(words[-6:])) or len(words) >= _WARNING_MAX_WORDS:
+            break
+    return " ".join(words[:_WARNING_MAX_WORDS])
+
+
 def _warning(lines: list[_Line]) -> WarningReading:
     for index, line in enumerate(lines):
         match = _WARNING_RE.search(line.text)
         if not match:
             continue
-        body = " ".join(part.text for part in lines[index:])
+        body = _statement(lines[index:])
         header = match.group(0)
         return WarningReading(
             present=True,
