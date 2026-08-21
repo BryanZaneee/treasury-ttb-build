@@ -1,11 +1,8 @@
 """Deterministic rules engine (PRD §3).
 
 The verdict of record is produced here, from normalised application values
-against normalised label values. The reader supplies observed values and may
-downgrade a verdict or attach a note; it may never improve one (`guard`).
-
-Pure functions only - no database, no I/O, no reader. Everything this module
-needs is already typed in models.py.
+against normalised label values. A reader supplies observed values only; it
+cannot express a verdict at all (PRD §3.2). Pure functions - no I/O, no reader.
 """
 
 from __future__ import annotations
@@ -23,9 +20,8 @@ from models import (
     WarningReading,
 )
 
-# PRD §3.1 field keys, in determination-view order. These are the fixture and
-# CSV vocabulary (camelCase); Application uses Python-conventional attribute
-# names, so the mapping is explicit rather than a generic case converter.
+# PRD §3.1 field keys in determination-view order. camelCase is the fixture and
+# CSV vocabulary; the map to Application's attributes is explicit, not derived.
 FIELD_KEYS = ("brand", "classType", "abv", "net", "producer", "origin", "warning")
 _APP_ATTR = {
     "brand": "brand",
@@ -36,29 +32,24 @@ _APP_ATTR = {
     "origin": "origin",
 }
 
-# One spelling of each field name, shared with the CSV `issues` column. Two
-# tables drifted apart - "Class/type" in a reviewer's field note against
-# "Class / type" in the export of the same record - so the same field was named
-# two ways across two reviewer-facing surfaces. PRD §3.1 spells it spaced.
+# One spelling of each field name, shared with the CSV `issues` column: two
+# tables drifted and named the same field two ways. PRD §3.1 spells it spaced.
 _LABELS = csv_io.FIELD_LABEL
 
-# Fields that must be adjudicated on every record. `producer` is conditional and
-# `origin` is imports-only (PRD §3.1), so they are adjudicated only when either
-# side carries a value.
+# Adjudicated on every record. `producer` is conditional and `origin` is
+# imports-only (PRD §3.1), so those wait for a value on one side.
 _ALWAYS = ("brand", "classType", "abv", "net", "warning")
 
 ILLEGIBLE = "ILLEGIBLE"
 
 _RANK: dict[Verdict, int] = {"match": 0, "review": 1, "fail": 2}
 
-# Below this, a reading from a non-normal capture is not trusted on its own and
-# an otherwise-matching field downgrades to review (PRD §3.2).
+# Below this, a non-normal capture downgrades an otherwise-matching field (§3.2).
 DEGRADED_CONFIDENCE = 0.7
 
 # PRD §3.1: net contents tolerance.
 NET_TOLERANCE_ML = 1.0
-# ABV is printed to one decimal place; anything closer than this is the same
-# stated strength, not a mismatch.
+# ABV prints to one decimal, so anything closer is the same stated strength.
 ABV_TOLERANCE = 0.05
 
 _ML_PER = {"ml": 1.0, "cl": 10.0, "l": 1000.0, "floz": 29.5735295625}
@@ -109,11 +100,10 @@ def normalise(key: str, value: str | None) -> str | float | None:
         parsed = parse_net(value)
         return None if parsed is None else parsed[0]
     if key == "classType":
-        # Drop trailing parenthetical designations, e.g. "Vodka (Grain Neutral)".
+        # Drop trailing parentheticals, e.g. "Vodka (Grain Neutral)".
         return _fold(re.sub(r"\s*\([^)]*\)\s*$", "", value))
     if key == "producer":
-        # "Bottled by X" and "X" name the same producer - the statement of
-        # responsibility is label convention, not a different value.
+        # "Bottled by X" and "X" name the same producer: label convention.
         without_prefix = _RESPONSIBILITY_RE.sub("", value)
         return _STATE_RE.sub(lambda m: _STATES[m.group(1)], _fold(without_prefix))
     if key == "origin":
@@ -157,35 +147,13 @@ def roll_up(verdicts: list[Verdict]) -> Verdict:
     return max(verdicts, key=lambda v: _RANK[v])
 
 
-def guard(rules_verdict: Verdict, reader_verdict: Verdict | None) -> tuple[Verdict, bool]:
-    """The reader may downgrade a verdict, never improve one (PRD §3.2).
-
-    Returns the verdict of record and whether an improvement was rejected.
-
-    Deliberately unreachable from the pipeline, and that is the stronger
-    guarantee: no reader can express a verdict at all. `LabelReading` has no
-    verdict field and `prompts.SCHEMA` is closed with `additionalProperties`
-    false, so §3.2's rule holds by construction rather than by this check.
-    Kept, with its tests, as the executable statement of the rule - if a reader
-    ever gains a verdict, this is what it must be routed through, and the
-    rejection flag is the governance event §3.2 wants in `audit`.
-    See tests/test_readers.py::test_a_reader_cannot_express_a_verdict.
-    """
-    if reader_verdict is None:
-        return rules_verdict, False
-    if _RANK[reader_verdict] > _RANK[rules_verdict]:
-        return reader_verdict, False
-    return rules_verdict, _RANK[reader_verdict] < _RANK[rules_verdict]
-
-
 def apply_quality(
     verdict: Verdict, quality: CaptureQuality | None, confidence: float | None
 ) -> tuple[Verdict, str | None]:
     """Downgrade an otherwise-matching field read from a degraded capture.
 
-    Capture quality alone is not enough: two blurry fixtures and one angled one
-    are legitimately `match`. It takes a poor capture *and* a reading the reader
-    was not confident about.
+    Quality alone is not enough - two blurry fixtures are legitimately `match`.
+    It takes a poor capture *and* a reading the reader was unsure of.
     """
     if (
         verdict == "match"
@@ -201,9 +169,8 @@ def apply_quality(
     return verdict, None
 
 
-# 27 CFR fixes the government warning verbatim, so the label body is compared
-# against the statute rather than against an application value - the application
-# only declares that a warning is present (PRD §3.1, §4.1 app_warning_declared).
+# 27 CFR fixes the warning verbatim, so the label is compared against the
+# statute; the application only declares it present (PRD §3.1, §4.1).
 STATUTORY_WARNING = (
     "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not "
     "drink alcoholic beverages during pregnancy because of the risk of birth "
@@ -216,13 +183,7 @@ _WARNING_HEADER = re.compile(r"^\s*GOVERNMENT\s+WARNING\s*:?\s*", re.IGNORECASE)
 
 
 def warning_body(text: str) -> str:
-    """The statement without its header, whitespace collapsed.
-
-    The extraction schema reports header case and boldness separately from the
-    body, so a reader may legitimately return the statement with or without the
-    "GOVERNMENT WARNING:" prefix. Both readers do this differently in practice;
-    the compliance question is whether the statement itself is verbatim.
-    """
+    """The statement without its header - case is reported separately (§3.2)."""
     return " ".join(_WARNING_HEADER.sub("", text).split())
 
 
@@ -234,14 +195,9 @@ def _illegible_note(key: str) -> str:
 
 
 def _presentation_form(key: str, value: str) -> str:
-    """The value as the reviewer would see it, with conventions that are not
-    presentation differences removed.
-
-    A label prints "Bottled by Old Tom Distillery"; the application files "Old
-    Tom Distillery". That is label convention, not a capitalisation or
-    punctuation variant, so it must not raise a review the way genuine
-    presentation differences do.
-    """
+    """The value as the reviewer sees it, less conventions that are not
+    presentation differences - "Bottled by X" against "X" must not raise a
+    review the way a real capitalisation variant does."""
     if key == "producer":
         return _RESPONSIBILITY_RE.sub("", value).strip()
     return value
@@ -374,10 +330,8 @@ def adjudicate(
 
     Returns the field results and the rolled-up record verdict.
     """
-    # Not a label at all: there is nothing to compare, so no field rows are
-    # written and the roll-up is bypassed entirely. A per-field verdict here
-    # would read as "the applicant's brand name is wrong" when the real finding
-    # is that the wrong file was filed (PRD §3.2 extension).
+    # Not a label: no field rows, no roll-up. A per-field verdict would blame the
+    # brand name for the wrong file being filed (PRD §3.2 extension).
     if reading.not_a_label:
         return [], "invalid"
 
@@ -394,7 +348,6 @@ def adjudicate(
                     label_value=reading.warning.body if reading.warning.present else None,
                     verdict=verdict,
                     note=note,
-                    reader_value=reading.warning.body,
                 )
             )
             continue
@@ -403,8 +356,7 @@ def adjudicate(
         field = getattr(reading, _APP_ATTR[key])
         label_raw: str | None = field.value
 
-        # producer is conditional and origin is imports-only: adjudicate them
-        # only when one side or the other actually carries a value.
+        # producer is conditional, origin imports-only: only when a side has one.
         if key not in _ALWAYS and not app_raw and label_raw in (None, ""):
             continue
 
@@ -424,7 +376,6 @@ def adjudicate(
                 label_value=label_raw,
                 verdict=verdict,
                 note=quality_note or note,
-                reader_value=label_raw,
                 confidence=field.confidence,
             )
         )

@@ -1,5 +1,4 @@
--- records is the CSV row: columns 1-22 are the CSV columns verbatim (PRD §4.1),
--- plus eight database-only columns that never appear in the CSV mirror.
+-- records is the CSV row (PRD §4.1) plus database-only columns.
 CREATE TABLE records (
     id                   TEXT PRIMARY KEY,
     received             TEXT NOT NULL,
@@ -35,7 +34,7 @@ CREATE TABLE records (
     rules_ms              INTEGER
 );
 
--- one row per verified field per record (PRD §4.1) - replaces v1.0's packed cell
+-- one row per verified field per record (PRD §4.1)
 CREATE TABLE field_results (
     record_id     TEXT NOT NULL REFERENCES records(id),
     field_key     TEXT NOT NULL,
@@ -50,8 +49,7 @@ CREATE TABLE field_results (
     PRIMARY KEY (record_id, field_key)
 );
 
--- append-only event log (PRD §4.1) - superseded verdicts are retained here,
--- never overwritten; records holds only the current state.
+-- append-only event log (PRD §4.1); records holds only the current state.
 CREATE TABLE audit (
     seq          INTEGER PRIMARY KEY AUTOINCREMENT,
     ts           TEXT NOT NULL,

@@ -1,11 +1,8 @@
-"""The bundled specimen catalogue (PRD §7).
+"""The bundled specimen catalogue (PRD §7). Read-only.
 
-The 25 synthetic label specimens are published so the single-label form can be
-filled from a named sample and reproduce its documented verdict. Read-only, and
-the same fixture set the rules engine is tested against.
-
-All specimens are synthetic: fictional brands, no real trade dress, and no
-applicant information of any kind.
+The 25 synthetic specimens are published so the single-label form can be filled
+from a named sample and reproduce its documented verdict. Fictional brands, no
+real trade dress, no applicant information of any kind.
 """
 
 from __future__ import annotations
@@ -22,8 +19,7 @@ from readers.fake import expectations
 router = APIRouter(tags=["specimens"], prefix="/specimens")
 
 
-# The named single-label samples published to the UI (PRD §7). Copy is the
-# prototype's, so the picker reads the same as the approved design.
+# The named samples the picker leads with (PRD §7), in the prototype's own copy.
 SAMPLE_COPY: dict[str, tuple[str, str]] = {
     "old-tom-pass.jpg": ("Clean match", "Every field agrees"),
     "stones-throw-caps.jpg": ("Casing difference", "Brand set in full caps"),
@@ -72,8 +68,7 @@ def list_specimens() -> list[SpecimenSummary]:
                 hint=hint,
             )
         )
-    # The named samples the single-label picker leads with come first, in the
-    # order PRD §7 lists them; the rest follow alphabetically.
+    # Named samples first in PRD §7's order, the rest alphabetically.
     order = list(SAMPLE_COPY)
     return sorted(
         out,

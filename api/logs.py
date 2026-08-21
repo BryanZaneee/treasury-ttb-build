@@ -1,12 +1,8 @@
 """Structured logging and service counters (PRD §8).
 
-JSON on stdout, one object per line, so the journal unit on the app host can be
-shipped without a parser. Every line carries the request id stamped by the
-middleware in main.py, which is what lets one reviewer's failed verification be
-followed across the reader, the rules engine and the store.
-
-Applicant names and reviewer notes never reach a log line: `redact` drops them
-by key, so a payload picked up from a record row cannot leak one by accident.
+JSON on stdout, one object per line, each carrying the request id stamped in
+main.py so one failed verification can be followed across reader, rules and
+store. `redact` drops personal and free-text fields by key.
 """
 
 from __future__ import annotations
@@ -19,9 +15,8 @@ import uuid
 from contextvars import ContextVar
 from typing import Any
 
-# PRD §8: personal and free-text fields stay out of logs. Keyed rather than
-# pattern-matched - a note can contain anything, including something that looks
-# like an id, so the only safe rule is never to emit the field at all.
+# PRD §8: keyed rather than pattern-matched - a note can contain anything, so
+# the only safe rule is never to emit the field at all.
 REDACTED_KEYS = frozenset(
     {"applicant", "note", "notes", "reason", "reviewer_name", "decided_by", "field_notes"}
 )

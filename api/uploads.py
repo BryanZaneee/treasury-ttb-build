@@ -1,10 +1,9 @@
 """Validation and storage for client-supplied images (PRD §8).
 
-A filename and a declared content type are both client claims: storing under
-the given name lets `old-tom-pass.jpg` overwrite a fixture. So the format is
-sniffed from the magic bytes and storage is content-addressed, which the schema
-already allows by separating where an image lives (`specimen`) from what it was
-called (`filename`).
+A filename and a content type are both client claims, and the given name would
+let an upload overwrite a fixture. So the format is sniffed from the magic bytes
+and storage is content-addressed - the schema already separates where an image
+lives (`specimen`) from what it was called (`filename`).
 """
 
 from __future__ import annotations
@@ -45,10 +44,10 @@ def sniff(data: bytes) -> str:
 
 
 def store(data: bytes, images_dir: Path) -> str:
-    """Validate, re-encode and store one image. Returns the storage key.
+    """Validate, re-encode and store one image, returning the storage key.
 
-    Re-encoding through Pillow is what makes the sniff worth doing: anything
-    appended to or hidden inside the original container does not survive it.
+    Re-encoding is what makes the sniff worth doing: anything appended to or
+    hidden inside the original container does not survive it.
     """
     if not data:
         raise UploadError("the uploaded file is empty")
@@ -82,9 +81,5 @@ def store(data: bytes, images_dir: Path) -> str:
 
 
 def safe_basename(name: str) -> str:
-    """The filename with any directory component removed.
-
-    Handles both separators: a Windows-style `..\\..\\x.png` survives a POSIX
-    rsplit untouched, which is how the batch intake was letting it through.
-    """
+    """The basename, both separators - a Windows path survives a POSIX rsplit."""
     return Path(name.replace("\\", "/")).name

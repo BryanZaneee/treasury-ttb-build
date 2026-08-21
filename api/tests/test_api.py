@@ -268,8 +268,7 @@ def test_editing_the_application_readjudicates_without_reading_again(
     assert resp.status_code == 200
     body = resp.json()
     assert body["app_alcohol_content"] == "40%"
-    # The correction is adjudicated on the spot, and catches the mismatch it
-    # introduced.
+    # The correction is adjudicated on the spot, and catches the mismatch it introduced.
     assert body["verified"] is True
     assert body["result"] == "fail"
     fields = {
@@ -424,15 +423,6 @@ def test_committing_the_sample_batch_verifies_every_record() -> None:
     # 24 of the 25 have an image to read; the fixture set is 6 match, 5 review,
     # 14 fail, less the one left unpaired.
     assert sum(job["verdicts"].values()) == 24
-
-
-def test_job_events_stream_closes_when_the_job_finishes() -> None:
-    job_id = client.post("/api/jobs", headers=ACCESS, json={"scope": "pending"}).json()["id"]
-    _await_job(job_id)
-    resp = client.get(f"/api/jobs/{job_id}/events")
-    assert resp.status_code == 200
-    assert "text/event-stream" in resp.headers["content-type"]
-    assert "event: done" in resp.text
 
 
 def test_fixtures_stub() -> None:

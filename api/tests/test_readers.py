@@ -21,10 +21,10 @@ def _reader(provider: str, model: str = "m", effort: str = "low") -> VisionReade
 
 def test_effort_is_clamped_to_the_provider_floor() -> None:
     """PRD §5.2: configured effort is raised to the provider's floor."""
-    assert clamp_effort("openai", "none") == "none"
-    assert clamp_effort("openai", "medium") == "medium"
+    assert clamp_effort("none") == "none"
+    assert clamp_effort("medium") == "medium"
     # An unrecognised value falls to the floor rather than being forwarded.
-    assert clamp_effort("openai", "nonsense") == "none"
+    assert clamp_effort("nonsense") == "none"
 
 
 def test_service_tier_standard_is_mapped_to_a_value_the_api_accepts() -> None:
@@ -94,12 +94,7 @@ def test_daily_call_cap_stops_paid_requests_and_does_not_retry() -> None:
 
 
 def test_a_reader_cannot_express_a_verdict() -> None:
-    """PRD §3.2 holds by construction, not by a runtime check.
-
-    The reader reports what is printed; the rules engine decides. If a verdict
-    field ever appears in the reading or the schema, that guarantee is gone and
-    every reading has to go through adjudicate.guard() instead.
-    """
+    """PRD §3.2 holds by construction: no reader can express a verdict at all."""
     from readers.prompts import SCHEMA
 
     assert "verdict" not in str(SCHEMA).lower(), "the reader schema must not expose a verdict"

@@ -1,12 +1,11 @@
 """Job queue: commit a staged batch and/or verify records (PRD §5.1, §5.5).
 
-Jobs run on a background thread so the reviewer sees per-record progress over
-SSE, and one failing record never aborts the rest.
+Jobs run on a background thread and persist progress per record, so the
+reviewer can poll it; one failing record never aborts the rest.
 """
 
 from __future__ import annotations
 
-import json
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -14,7 +13,6 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 import csv_io
@@ -28,12 +26,10 @@ router = APIRouter(tags=["jobs"])
 class JobCreateRequest(BaseModel):
     scope: Literal["pending", "batch", "ids"]
     batch_id: str | None = None
-    # scope "ids": verify exactly these records. The reviewer selected them in
-    # the inbox, so the set is theirs to choose - the server does not re-derive
-    # it from a filter that may have moved on since.
+    # scope "ids": exactly these records. The reviewer chose them, so the server
+    # does not re-derive the set from a filter that may have moved on.
     record_ids: list[str] = []
-    # scope "batch": file only these staged rows. The reviewer selected them in
-    # the staged table; the rest stay staged for a later commit.
+    # scope "batch": file only these staged rows; the rest stay staged.
     rows: list[int] = []
     verify_now: bool = True
 
@@ -47,18 +43,15 @@ class Job(BaseModel):
     committed: int = 0
     failed: int = 0
     verdicts: dict[str, int] = {}
-    # The records this job is verifying. A `pending` job derives its own set
-    # server side, so without this the browser cannot say which rows the job
-    # covers - only how many - and the inbox could not mark them as in progress.
+    # A `pending` job derives its own set server side, so without this the
+    # browser knows how many rows it covers but not which.
     record_ids: list[str] = []
     events: list[dict[str, Any]] = []
     error: str | None = None
 
 
-# Job progress is a JSON document rather than a process dict: PRD §5 runs two
-# workers, and the reviewer polling /jobs/{id} will not reliably reach the one
-# running the job. A restart still loses in-flight progress; the records
-# themselves are already durable.
+# A document, not a process dict: PRD §5 runs two workers and the reviewer
+# polling /jobs/{id} may not reach the one running it. The records are durable.
 def save_job(job: Job) -> Job:
     db.doc_put("job", job.id, job.model_dump_json())
     return job
@@ -70,15 +63,11 @@ def load_job(job_id: str) -> Job | None:
 
 
 def _commit_batch(job: Job, batch_id: str, only: list[int] | None = None) -> list[str]:
-    """File the staged rows. Ambiguous rows block the whole commit (PRD §5.5);
-    missing-image rows file and are simply not verifiable.
-
-    `only` files a subset - the reviewer accepted part of the staged table -
-    and the rows that were filed are then removed from the staged document, so
-    committing the remainder later cannot file them twice."""
-    # Claiming removes the rows from the staged document inside the same
-    # transaction that reads them, so a second commit of the same batch finds
-    # nothing to file rather than filing everything twice.
+    """File the staged rows. Ambiguous rows block the commit (PRD §5.5);
+    missing-image rows file and are simply not verifiable. `only` files a
+    subset, which is then removed from the staged document."""
+    # Claimed inside the transaction that reads them, so a second commit finds
+    # nothing rather than filing everything twice.
     chosen, blocking = batches.claim_rows(batch_id, only)
     # Block, don't skip: a caller bypassing the UI must not lose rows silently.
     if blocking:
@@ -107,8 +96,7 @@ def _commit_batch(job: Job, batch_id: str, only: list[int] | None = None) -> lis
                 "app_net_contents": values.get("net_contents", ""),
                 "app_producer": values.get("producer") or None,
                 "app_origin": values.get("country_of_origin") or None,
-                # An exported mirror writes SQLite's 1/0 here, the blank template
-                # writes true/false. One truthiness rule for both (csv_io).
+                # 1/0 from an export, true/false from the template (csv_io).
                 "app_warning_declared": csv_io.parse_bool(values.get("government_warning")),
                 "verified": False,
                 "result": None,
@@ -123,9 +111,7 @@ def _commit_batch(job: Job, batch_id: str, only: list[int] | None = None) -> lis
 
 
 def _verify_one(job: Job, record_id: str, lock: threading.Lock) -> None:
-    """Verify one record. Runs on a pool thread, so every mutation of the job
-    counters and event list is taken under the lock - they are read by the
-    progress bar and the SSE stream while this is still running."""
+    """Verify one record on a pool thread; counters are mutated under the lock."""
     row = db.get_record(record_id)
     if row is None:
         with lock:
@@ -179,18 +165,15 @@ def _run(job: Job, body: JobCreateRequest) -> None:
         job.total = len(record_ids)
         job.record_ids = record_ids
         save_job(job)
-        # PRD §8: bounded, not unbounded. A 300-record batch one-at-a-time
-        # cannot meet the 10-minute budget, and 300 at once would breach the
-        # provider's rate limits. The readers are synchronous, so a thread pool
-        # is the smaller change than making the whole path async.
+        # PRD §8: bounded - 300 one at a time misses the budget, 300 at once
+        # breaches the provider. Readers are sync, so a pool beats going async.
         lock = threading.Lock()
 
         def verify_and_record(record_id: str) -> None:
             _verify_one(job, record_id, lock)
             with lock:
                 job.completed += 1
-                # Persist per record: this is what the progress bar and the SSE
-                # stream read, and they may be served by another worker.
+                # Per record: the progress bar may be served by another worker.
                 save_job(job)
 
         workers = max(1, settings.reader_concurrency)
@@ -218,27 +201,3 @@ def get_job(job_id: str) -> Job:
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
     return job
-
-
-@router.get("/jobs/{job_id}/events")
-def job_events(job_id: str) -> StreamingResponse:
-    if load_job(job_id) is None:
-        raise HTTPException(status_code=404, detail="job not found")
-
-    def stream() -> Any:
-        sent = 0
-        while True:
-            job = load_job(job_id)
-            if job is None:
-                return
-            while sent < len(job.events):
-                event = job.events[sent]
-                sent += 1
-                yield f"event: {event['event']}\ndata: {json.dumps(event)}\n\n"
-            progress = {"completed": job.completed, "total": job.total, "state": job.state}
-            yield f"event: progress\ndata: {json.dumps(progress)}\n\n"
-            if job.state != "running" and sent >= len(job.events):
-                return
-            threading.Event().wait(0.25)
-
-    return StreamingResponse(stream(), media_type="text/event-stream")

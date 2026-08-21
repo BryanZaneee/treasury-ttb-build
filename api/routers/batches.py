@@ -1,8 +1,7 @@
 """Batch staging endpoint (PRD §5.1, §5.5).
 
-Staging writes nothing. It parses the CSV, pairs images by filename, and returns
-a preview with per-row buckets and errors. The staged batch is held until a job
-commits it (`POST /api/jobs`).
+Staging writes nothing to `records`: it parses the CSV, pairs images by
+filename, and holds the preview until a job commits it (`POST /api/jobs`).
 """
 
 from __future__ import annotations
@@ -12,7 +11,6 @@ import shutil
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, TypeAdapter
@@ -25,15 +23,12 @@ from batching import BatchCsvError
 
 router = APIRouter(tags=["batches"])
 
-PairingBucket = Literal["matched", "matched_fuzzy", "missing_image", "ambiguous"]
-
-
 class StagedRow(BaseModel):
     row: int
     applicant: str
     brand: str
     filename: str
-    bucket: PairingBucket
+    bucket: batching.Bucket
     image: str | None = None
     candidate_filenames: list[str] = []
     errors: list[str] = []
@@ -54,10 +49,8 @@ class StagedBatch(BaseModel):
     blocks_commit: bool = False
 
 
-# Staged batches are held as JSON documents rather than in a process dict: PRD
-# §5 runs two workers, and a batch staged on one has to be committable by the
-# other. Nothing lands in `records` until commit, so losing one costs a
-# re-upload.
+# JSON documents, not a process dict: PRD §5 runs two workers and a batch staged
+# on one must be committable by the other. Losing one costs a re-upload.
 @dataclass
 class Staged:
     rows: list[batching.Row]
@@ -65,23 +58,6 @@ class Staged:
 
 
 _ROWS = TypeAdapter(list[batching.Row])
-
-
-def get_staged(batch_id: str) -> Staged | None:
-    body = db.doc_get("batch", batch_id)
-    if body is None:
-        return None
-    raw = json.loads(body)
-    return Staged(rows=_ROWS.validate_python(raw["rows"]), images=raw["images"])
-
-
-def put_staged(batch_id: str, staged: Staged) -> Staged:
-    db.doc_put(
-        "batch",
-        batch_id,
-        json.dumps({"rows": _ROWS.dump_python(staged.rows, mode="json"), "images": staged.images}),
-    )
-    return staged
 
 
 def _loads(body: str) -> Staged:
@@ -95,17 +71,22 @@ def _dumps(staged: Staged) -> str:
     )
 
 
+def get_staged(batch_id: str) -> Staged | None:
+    body = db.doc_get("batch", batch_id)
+    return None if body is None else _loads(body)
+
+
+def put_staged(batch_id: str, staged: Staged) -> Staged:
+    db.doc_put("batch", batch_id, _dumps(staged))
+    return staged
+
+
 def claim_rows(batch_id: str, only: list[int] | None) -> tuple[list[batching.Row], list[int]]:
     """Take the rows about to be filed out of the staged document, atomically.
 
-    Reading the document, filing its rows and writing back the remainder is a
-    read-modify-write, and two workers running it against the same batch - a
-    double-clicked commit, or a retry - would each file the full set. Claiming
-    under one exclusive transaction means the loser finds nothing left to file
-    instead of writing a second copy of every record.
-
-    Returns the claimed rows, or the blocking ambiguous row numbers (PRD §5.5);
-    in the blocking case nothing is claimed and the document is untouched.
+    Read-modify-write, so a double-clicked commit would otherwise file the set
+    twice; under one exclusive transaction the loser finds nothing left. Returns
+    the claimed rows, or the blocking ambiguous row numbers (PRD §5.5).
     """
     with db.exclusive() as conn:
         row = conn.execute(
@@ -153,9 +134,8 @@ def to_response(batch_id: str, staged: Staged) -> StagedBatch:
     )
 
 
-# Batch images are stored under their own basename, not the content-addressed
-# key `uploads.store` produces: pairing is by filename, so the name is the
-# thing being matched on and has to survive the write.
+# Stored under their own basename, not `uploads.store`'s content-addressed key:
+# pairing is by filename, so the name has to survive the write.
 def _write_image(image: UploadFile) -> str | None:
     name = uploads.safe_basename(image.filename or "")
     if not name:
@@ -176,9 +156,8 @@ def stage_batch(
     except BatchCsvError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    # Images are written to the store now so a commit does not need the upload
-    # again; an uncommitted batch just leaves unreferenced files behind, which
-    # the next fixture reset clears.
+    # Written now so a commit needs no re-upload; an abandoned batch leaves
+    # unreferenced files the next fixture reset clears.
     names = []
     for image in images:
         name = _write_image(image)
@@ -199,8 +178,7 @@ def _require(batch_id: str) -> Staged:
 
 @router.get("/batches/{batch_id}", response_model=StagedBatch)
 def read_batch(batch_id: str) -> StagedBatch:
-    """Re-read a staged batch. A partial commit files some rows and leaves the
-    rest, so the table needs a way to ask what is still staged."""
+    """Re-read a staged batch - a partial commit leaves the rest staged."""
     return to_response(batch_id, _require(batch_id))
 
 
@@ -217,15 +195,13 @@ def assign_image(batch_id: str, row_no: int, body: AssignRequest) -> StagedBatch
         raise HTTPException(status_code=404, detail=str(exc).strip("\"'")) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    # `assign` mutates the rows in place, so the staged document has to be
-    # written back - it is no longer the same object the next request loads.
+    # `assign` mutates in place, so the document has to be written back.
     return to_response(batch_id, put_staged(batch_id, staged))
 
 
 @router.post("/batches/{batch_id}/rows/{row_no}/upload", response_model=StagedBatch)
 def upload_row_image(batch_id: str, row_no: int, image: UploadFile = File(...)) -> StagedBatch:
-    """Supply the missing specimen for one staged row without re-uploading the
-    batch - the reviewer has the file, it just was not in the folder."""
+    """Supply one row's missing specimen without re-uploading the whole batch."""
     staged = _require(batch_id)
     name = _write_image(image)
     if not name:
@@ -243,8 +219,7 @@ def upload_row_image(batch_id: str, row_no: int, image: UploadFile = File(...)) 
 
 @router.delete("/batches/{batch_id}/images/{name}", response_model=StagedBatch)
 def discard_image(batch_id: str, name: str) -> StagedBatch:
-    """Drop an uploaded image the reviewer does not want in this batch. The
-    file stays on disk; only the batch stops offering it."""
+    """Drop an image from the batch; the file stays on disk."""
     staged = _require(batch_id)
     try:
         batching.discard(staged.rows, staged.images, uploads.safe_basename(name))
@@ -255,9 +230,7 @@ def discard_image(batch_id: str, name: str) -> StagedBatch:
 
 @router.delete("/batches/{batch_id}/rows/{row_no}", response_model=StagedBatch)
 def drop_row(batch_id: str, row_no: int) -> StagedBatch:
-    """Drop a staged row before it is filed. A reviewer looking at a row they
-    are not going to file - a duplicate, a withdrawn application, one with no
-    specimen - should not have to re-upload the CSV without it."""
+    """Drop a staged row before it is filed, without re-uploading the CSV."""
     staged = _require(batch_id)
     remaining = [r for r in staged.rows if r.row != row_no]
     if len(remaining) == len(staged.rows):
@@ -266,23 +239,20 @@ def drop_row(batch_id: str, row_no: int) -> StagedBatch:
     return to_response(batch_id, put_staged(batch_id, staged))
 
 
-# The sample batch is what a reviewer learns pairing on, so it arrives with one
-# row in each state PRD §5.5 defines rather than 25 clean matches: a row whose
-# image never arrived, a row named with the wrong extension, and a row two
-# uploads both answer to. The rest match exactly.
+# The sample batch is what a reviewer learns pairing on, so it carries one row
+# in each state PRD §5.5 defines rather than 25 clean matches.
 _SAMPLE_MISSING = "tallgrass-cropped.jpg"
 _SAMPLE_FUZZY = "quarry-house-units.jpg"
 _SAMPLE_AMBIGUOUS = "ember-line-heavyblur.jpg"
 
 
 def _sample_images(filenames: list[str]) -> list[str]:
-    """The images "uploaded" with the sample batch - what is actually on disk,
-    which is not quite what the CSV asks for."""
+    """What is on disk for the sample batch, which is not what the CSV asks for."""
     images_dir = db.data_dir() / "images"
     names = [f for f in filenames if f != _SAMPLE_MISSING]
 
-    # Two files that normalise to the same stem, and no exact match for either,
-    # is what makes a row ambiguous (batching.stem).
+    # Two files normalising to one stem, neither exact, is what makes a row
+    # ambiguous (batching.stem).
     names.remove(_SAMPLE_AMBIGUOUS)
     source = images_dir / _SAMPLE_AMBIGUOUS
     for variant in (
@@ -303,8 +273,7 @@ def stage_sample_batch() -> StagedBatch:
     names = _sample_images([r["filename"] for r in rows])
 
     for row in rows:
-        # The CSV names it .png; the file on disk is the .jpg beside it, which
-        # is a fuzzy match rather than an exact one.
+        # The CSV names .png; the file on disk is the .jpg beside it - fuzzy.
         if row["filename"] == _SAMPLE_FUZZY:
             row["filename"] = _SAMPLE_FUZZY.replace(".jpg", ".png")
 

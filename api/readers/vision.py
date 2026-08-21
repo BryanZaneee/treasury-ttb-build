@@ -1,12 +1,10 @@
 """OpenAI vision reader (PRD §5.2).
 
-Written against the OpenAI Chat Completions API. It stays a thin adapter on
-purpose: any OpenAI-compatible endpoint is a base-URL change, which is how a
-second provider would be added back if one is ever needed.
+A thin adapter on the Chat Completions API, so any OpenAI-compatible endpoint is
+a base-URL change rather than a rewrite.
 
-ponytail: synchronous client. The routes that call it are sync `def`, so
-FastAPI already runs them in a threadpool. Move to AsyncOpenAI when M5's
-bounded worker pool needs real concurrency across a 300-record batch.
+ponytail: synchronous client. The callers are sync `def`, so FastAPI already
+runs them in a threadpool; move to AsyncOpenAI if a 300-record batch needs more.
 """
 
 from __future__ import annotations
@@ -26,9 +24,9 @@ from models import CaptureQuality, FieldReading, LabelReading, WarningReading
 from readers.prep import prepare
 from readers.prompts import PROMPT, SCHEMA, VERSION
 
-# PRD §5.2 clamps configured effort to a per-provider floor.
+# PRD §5.2 clamps configured effort to the provider floor; OpenAI accepts "none".
 _EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-_EFFORT_FLOOR = {"openai": "none"}
+_EFFORT_FLOOR = "none"
 
 RETRIES = 2
 
@@ -46,16 +44,10 @@ class SpendCapReached(ReaderError):
     """The daily paid-call ceiling is spent. Verification degrades to rules."""
 
 
-# Defence in depth against a runaway or abused deployment (PRD §8). The primary
-# control is a hard spend limit on each provider dashboard; this is the
-# in-service backstop, so a breach degrades to rules-only verdicts rather than
-# silently spending.
-#
-# The PRD specifies the cap in dollars, which needs a per-model price table to
-# enforce honestly. Counting paid calls needs no price list and cannot drift out
-# of date, so that is what is enforced here.
-# ponytail: in-process counter, resets on restart and is per-worker. Move to the
-# audit table if the cap ever has to hold across restarts or workers.
+# In-service backstop behind the provider's own spend limit (PRD §8). The PRD
+# sets it in dollars; counting calls needs no price table and cannot go stale.
+# ponytail: in-process, so per-worker and reset on restart - move it to the
+# audit table if the cap ever has to hold across either.
 _calls: dict[str, int] = {}
 
 
@@ -80,12 +72,11 @@ class Usage:
     output_tokens: int = 0
 
 
-def clamp_effort(provider: str, effort: str) -> str:
-    """Raise a configured effort to the provider's floor (PRD §5.2)."""
-    floor = _EFFORT_FLOOR.get(provider, "none")
+def clamp_effort(effort: str) -> str:
+    """Raise a configured effort to the provider floor (PRD §5.2)."""
     if effort not in _EFFORT_ORDER:
-        return floor
-    return max(effort, floor, key=_EFFORT_ORDER.index)
+        return _EFFORT_FLOOR
+    return max(effort, _EFFORT_FLOOR, key=_EFFORT_ORDER.index)
 
 
 def _field(raw: dict[str, Any] | None) -> FieldReading:
@@ -107,9 +98,8 @@ class VisionReader:
         daily_call_cap: int = 0,
     ) -> None:
         self.provider = provider
-        self.name = provider
         self.model = model
-        self.effort = clamp_effort(provider, effort)
+        self.effort = clamp_effort(effort)
         self.service_tier = service_tier
         self.prompt_version = VERSION
         self.daily_call_cap = daily_call_cap
@@ -170,21 +160,16 @@ class VisionReader:
         return self._to_reading(json.loads(content))
 
     def _effort_kwargs(self) -> dict[str, Any]:
-        """Provider-specific request knobs, as the live APIs actually accept
-        them (PRD §5.2, verified against both providers).
+        """Request knobs as the live API actually accepts them (PRD §5.2).
 
-        One correction to the PRD, found by calling the real endpoint rather
-        than trusting the spec: `service_tier` does not accept "standard". The
-        valid values are auto, default, fast, flex and priority, so the PRD's
-        default is mapped onto `auto`.
+        Correcting the spec from the real endpoint: `service_tier` does not
+        accept "standard", so the PRD's default is mapped onto `auto`.
         """
         kwargs: dict[str, Any] = {"service_tier": _SERVICE_TIER.get(
             self.service_tier, self.service_tier
         )}
-        # `reasoning_effort` is only accepted by reasoning models; sending it to
-        # a gpt-4.x model is a 400. Gate on the model name rather than probing.
-        # ponytail: name-prefix check, swap for a capability lookup if either
-        # provider ever ships one.
+        # `reasoning_effort` is a 400 on a non-reasoning model, so gate on name.
+        # ponytail: name prefix; swap for a capability lookup if one ships.
         if _REASONING_MODEL.match(self.model):
             kwargs["reasoning_effort"] = self.effort
         return kwargs

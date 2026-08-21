@@ -1,18 +1,15 @@
-"""Pydantic v2 domain models.
+"""Pydantic v2 domain models. Shapes only, no storage.
 
-Field and column names mirror PRD §3.1 (verified fields) and §4.1 (records /
-field_results schema) verbatim so the M1 persistence layer does not need to
-rename anything. No ORM — this module only defines shapes, not storage.
+Names mirror PRD §3.1 and §4.1 verbatim so nothing needs renaming on the way to
+or from the database.
 """
 
 from typing import Literal
 
 from pydantic import BaseModel
 
-# "invalid" is an extension to PRD §3.2's three-value enum: a specimen that is
-# not a label at all cannot be adjudicated field by field, and calling it a
-# fail tells the reviewer the applicant's label is wrong rather than that the
-# wrong image was filed. Only the vision reader can raise it.
+# "invalid" extends PRD §3.2's enum: `fail` would blame the applicant's label
+# for the wrong image being filed. Only the vision reader raises it.
 Verdict = Literal["match", "review", "fail", "invalid"]
 Decision = Literal["accepted", "returned"] | None
 CaptureQuality = Literal[
@@ -67,7 +64,7 @@ class LabelReading(BaseModel):
     origin: FieldReading
     warning: WarningReading
     quality: CaptureQuality
-    # The image is very clearly not an alcohol beverage label (PRD §3.2 ext).
+    # The image is clearly not an alcohol beverage label (PRD §3.2 ext).
     not_a_label: bool = False
 
 
@@ -80,15 +77,11 @@ class FieldResult(BaseModel):
     label_value: str | None = None
     verdict: Verdict | None = None
     note: str | None = None
-    reader_value: str | None = None
-    ocr_value: str | None = None
-    agreed: bool | None = None
     confidence: float | None = None
 
 
 class Record(BaseModel):
-    """One row of the `records` table (PRD §4.1) — columns 1-22 plus the eight
-    database-only columns. `result` is null when the record is *awaiting AI*."""
+    """One row of `records` (PRD §4.1); `result` is null until verified."""
 
     id: str
     received: str
@@ -115,7 +108,6 @@ class Record(BaseModel):
 
     # Database-only columns, not part of the CSV mirror (PRD §4.1).
     override: bool = False
-    supersedes_id: str | None = None
     reader_provider: str | None = None
     reader_model: str | None = None
     prompt_version: str | None = None

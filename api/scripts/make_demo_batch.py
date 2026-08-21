@@ -1,4 +1,4 @@
-"""Assemble the demo batch folder for docs/demo.md.
+"""Assemble the demo batch folder the README's batch walkthrough uses.
 
 Copies the images the demo CSV refers to out of api/fixtures/ and manufactures
 the two cases you cannot get from a clean fixture set: a second image that

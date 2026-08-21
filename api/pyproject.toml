@@ -1,7 +1,7 @@
 [project]
 name = "ttb-api"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI-assisted TTB-style COLA label verification API"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.141.1",

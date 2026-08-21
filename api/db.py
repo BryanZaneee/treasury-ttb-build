@@ -1,9 +1,8 @@
 """SQLite system of record. Stdlib sqlite3 only - no ORM (PRD §4).
 
-WAL mode permits concurrent readers. Schema is applied from migrations/ at
-boot inside a transaction, tracked in schema_version. `records` is the CSV
-row: every column maps 1:1 to a CSV column plus eight database-only columns
-(PRD §4.1) - so exporting is a SELECT, not a reshape.
+WAL mode for concurrent readers; migrations/ applied at boot and tracked in
+schema_version. `records` is the CSV row plus database-only columns (PRD §4.1),
+so exporting is a SELECT, not a reshape.
 """
 
 from __future__ import annotations
@@ -30,16 +29,17 @@ RECORD_COLUMNS = [
     "app_producer", "app_origin", "app_warning_declared",
     "verified", "result", "elapsed_ms", "engine", "decision", "decided_by",
     "decided_at", "note",
-    "override", "supersedes_id", "reader_provider", "reader_model",
+    "override", "reader_provider", "reader_model",
     "prompt_version", "prep_ms", "reader_ms", "rules_ms",
-    # The reading behind the current verdict, so correcting the application can
-    # be adjudicated against the label already read (migrations/005).
+    # The reading behind the current verdict (migrations/005).
     "reading_json",
 ]
 
+_FIELD_ORDER = {key: i for i, key in enumerate(FIELD_ORDER)}
+
 FIELD_RESULT_COLUMNS = [
     "record_id", "field_key", "app_value", "label_value", "verdict", "note",
-    "reader_value", "ocr_value", "agreed", "confidence",
+    "confidence",
 ]
 
 
@@ -81,11 +81,8 @@ def transaction() -> Iterator[sqlite3.Connection]:
 def exclusive() -> Iterator[sqlite3.Connection]:
     """A transaction that takes the write lock *before* it reads.
 
-    `transaction()` begins deferred, so sqlite3 opens the transaction on the
-    first write - a read-modify-write through it can interleave with another
-    worker's and both can act on the same snapshot. BEGIN IMMEDIATE serialises
-    the whole sequence, which is what claiming staged batch rows needs: PRD §9
-    runs more than one worker, and filing the same row twice writes two records.
+    `transaction()` begins deferred, so two read-modify-writes can act on one
+    snapshot; claiming staged rows needs the whole sequence serialised (PRD §9).
     """
     conn = connect()
     conn.isolation_level = None
@@ -139,17 +136,12 @@ def snapshot(reason: str) -> Path:
     return dest
 
 
-# PRD §8 keeps backups for 30 days. Snapshots are taken before every import and
-# reset, so without this the directory grows for the life of the deployment.
+# PRD §8 keeps backups 30 days; without pruning the directory grows forever.
 SNAPSHOT_RETENTION_DAYS = 30
 
 
 def prune_snapshots(keep_days: int = SNAPSHOT_RETENTION_DAYS) -> list[Path]:
-    """Delete snapshots older than the retention window. Returns what went.
-
-    Never deletes the newest one whatever its age: a store that has sat
-    untouched for a month should still have something to restore from.
-    """
+    """Delete snapshots past the retention window, never the newest one."""
     snapshots = sorted((data_dir() / "snapshots").glob("*.db"))
     if not snapshots:
         return []
@@ -183,8 +175,7 @@ def insert_record(row: dict[str, Any]) -> None:
 
 
 def update_record(record_id: str, **columns: Any) -> None:
-    """Patch named columns on one record. Unknown column names are rejected
-    rather than silently dropped - a typo here would lose a verdict."""
+    """Patch named columns. An unknown name is rejected: a typo would lose a verdict."""
     unknown = set(columns) - set(RECORD_COLUMNS)
     if unknown:
         raise ValueError(f"unknown record columns: {sorted(unknown)}")
@@ -207,8 +198,7 @@ def clear_field_results(record_id: str) -> None:
 
 
 def upsert_records(rows: list[dict[str, Any]]) -> None:
-    """Insert or update many records in ONE transaction, so an import either
-    lands whole or not at all."""
+    """Many records in one transaction, so an import lands whole or not at all."""
     if not rows:
         return
     with transaction() as conn:
@@ -308,8 +298,7 @@ def upsert_field_results_many(rows: list[dict[str, Any]]) -> None:
 
 
 def get_field_results(record_id: str) -> list[sqlite3.Row]:
-    """Ordered as PRD §3.1 lists the fields, not alphabetically - the
-    determination view reads top to bottom the way the table is written."""
+    """In PRD §3.1 field order, which is how the determination view reads."""
     conn = connect()
     try:
         rows = conn.execute(
@@ -317,15 +306,13 @@ def get_field_results(record_id: str) -> list[sqlite3.Row]:
         ).fetchall()
     finally:
         conn.close()
-    order = {key: i for i, key in enumerate(FIELD_ORDER)}
-    return sorted(rows, key=lambda r: order.get(r["field_key"], len(order)))
+    return sorted(rows, key=lambda r: _FIELD_ORDER.get(r["field_key"], len(_FIELD_ORDER)))
 
 
 def next_record_id() -> str:
-    """COLA-YYYY-NNNN, continuing the highest number already in the store.
+    """COLA-YYYY-NNNN, continuing the highest number in the store.
 
-    The suffix is read with one aggregate rather than by scanning every id into
-    Python: filing a 300-row batch called this once per row, which made the
+    One aggregate, not a scan: a 300-row batch calls this per row, which made the
     commit quadratic in the size of the store.
     """
     conn = connect()
@@ -343,10 +330,8 @@ def next_record_id() -> str:
 def insert_new_record(row: dict[str, Any]) -> str:
     """Allocate an id and file the row under it, returning the id.
 
-    Allocation and insert are two statements, so two concurrent filings can pick
-    the same number - and PRD §9 runs more than one worker. The unique index on
-    `records.id` is what actually decides, and losing that race is a retry, not
-    the 500 an uncaught IntegrityError produced.
+    Allocation and insert are two statements, so concurrent filings can pick the
+    same number; the unique index decides and losing is a retry, not a 500.
     """
     for _ in range(8):
         row["id"] = next_record_id()
@@ -362,11 +347,7 @@ _background: list[threading.Thread] = []
 
 
 def run_in_background(fn: Any, *args: Any) -> None:
-    """Fire-and-forget work that writes to the store.
-
-    Tracked so wipe() can wait for it: an unjoined writer lands in the next
-    test's database, the same way a pending mirror timer would.
-    """
+    """Fire-and-forget store writes, tracked so wipe() can wait for them."""
     thread = threading.Thread(target=fn, args=args, daemon=True)
     _background.append(thread)
     thread.start()
@@ -375,9 +356,8 @@ def run_in_background(fn: Any, *args: Any) -> None:
 def doc_put(kind: str, key: str, body: str) -> None:
     """Store one JSON document, visible to every worker.
 
-    ponytail: the whole document is rewritten on each update, so a job's event
-    list is re-serialised once per record. Fine at PRD §8's 300-record batch;
-    append events to their own table if a batch ever gets much larger.
+    ponytail: rewritten whole per update, so a job's events are re-serialised per
+    record. Fine at PRD §8's 300; give events a table if batches grow.
     """
     with transaction() as conn:
         conn.execute(
@@ -454,10 +434,8 @@ def reset_images_dir() -> None:
 def mirror_rows() -> list[dict[str, Any]]:
     """Every record with its field results packed into the mirror's cells.
 
-    Both tables are read once. Packing per record through `get_field_results`
-    meant a fresh connection and a query per row, so regenerating the mirror for
-    a 300-record store opened 301 connections - on the debounce timer once a
-    second through a batch commit, and on the request path for both exports.
+    Both tables read once: per-record packing opened a connection per row, on the
+    debounce timer and on both exports.
     """
     conn = connect()
     try:
@@ -466,12 +444,11 @@ def mirror_rows() -> list[dict[str, Any]]:
     finally:
         conn.close()
 
-    order = {key: i for i, key in enumerate(FIELD_ORDER)}
     by_record: dict[str, list[sqlite3.Row]] = {}
     for result in results:
         by_record.setdefault(result["record_id"], []).append(result)
     for grouped in by_record.values():
-        grouped.sort(key=lambda r: order.get(r["field_key"], len(order)))
+        grouped.sort(key=lambda r: _FIELD_ORDER.get(r["field_key"], len(_FIELD_ORDER)))
 
     rows = []
     for record in records:

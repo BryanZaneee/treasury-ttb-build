@@ -152,3 +152,77 @@ def test_pruning_keeps_the_newest_snapshot_however_old() -> None:
 
     assert db.prune_snapshots() == []
     assert only.exists()
+
+
+def test_migration_006_upgrades_a_populated_store_in_place() -> None:
+    """A deployed store carries records, verdicts and audit history. Dropping
+    the four unused columns must not touch any of it (PRD §4.4)."""
+    # Rebuild the store as it stood before 006, so the ALTERs run against the
+    # schema a deployed box actually has rather than against a fresh one.
+    path = db.db_path()
+    path.unlink(missing_ok=True)
+    conn = db.connect()
+    conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)")
+    for migration in sorted(db.MIGRATIONS_DIR.glob("*.sql")):
+        version = int(migration.stem.split("_", 1)[0])
+        if version >= 6:
+            break
+        conn.executescript(migration.read_text())
+        conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+    conn.commit()
+
+    columns = [row[1] for row in conn.execute("PRAGMA table_info(field_results)")]
+    assert {"reader_value", "ocr_value", "agreed"} <= set(columns), "pre-006 store expected"
+
+    record = _sample_record("COLA-2026-4100")
+    record["result"] = "fail"
+    record["decision"] = "returned"
+    record["decided_by"] = "J. Park"
+    record["override"] = True
+    record["reading_json"] = '{"brand": {"value": "Old Tom", "confidence": 0.99}}'
+    present = [c for c in db.RECORD_COLUMNS if c in record]
+    conn.execute(
+        f"INSERT INTO records ({', '.join(present)}) "
+        f"VALUES ({', '.join('?' for _ in present)})",
+        [record[c] for c in present],
+    )
+    conn.execute(
+        "INSERT INTO field_results "
+        "(record_id, field_key, app_value, label_value, verdict, note, confidence, "
+        " reader_value, ocr_value, agreed) "
+        "VALUES ('COLA-2026-4100', 'brand', 'Old Tom', 'OLD TOM', 'review', 'caps', 0.9,"
+        " 'OLD TOM', NULL, NULL)"
+    )
+    conn.execute(
+        "INSERT INTO audit (ts, record_id, event, payload_json) "
+        "VALUES ('2026-08-19T00:00:00+00:00', 'COLA-2026-4100', 'verified', '{}')"
+    )
+    conn.commit()
+    conn.close()
+
+    db.init_db()
+
+    conn = db.connect()
+    applied = {row[0] for row in conn.execute("SELECT version FROM schema_version")}
+    assert 6 in applied
+    record_columns = [row[1] for row in conn.execute("PRAGMA table_info(records)")]
+    field_columns = [row[1] for row in conn.execute("PRAGMA table_info(field_results)")]
+    conn.close()
+
+    assert "supersedes_id" not in record_columns
+    assert not {"reader_value", "ocr_value", "agreed"} & set(field_columns)
+    assert "confidence" in field_columns, "reader evidence that is written stays"
+    assert "reading_json" in record_columns
+
+    survivor = db.get_record("COLA-2026-4100")
+    assert survivor is not None
+    assert survivor["result"] == "fail"
+    assert survivor["decision"] == "returned"
+    assert survivor["override"] == 1, "the override flag is the whole point of S8"
+    assert survivor["reading_json"], "the reading behind the verdict survives"
+
+    fields = db.get_field_results("COLA-2026-4100")
+    assert [(f["field_key"], f["verdict"], f["note"]) for f in fields] == [
+        ("brand", "review", "caps")
+    ]
+    assert fields[0]["confidence"] == 0.9

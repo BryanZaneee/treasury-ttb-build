@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from adjudicate import adjudicate as run
-from adjudicate import apply_quality, guard, normalise, parse_net, roll_up
+from adjudicate import apply_quality, normalise, parse_net, roll_up
 from models import Application
 from readers.fake import FakeReader, expectations
 
@@ -63,22 +63,6 @@ def test_no_defect_fixture_reaches_match() -> None:
         if verdict == "match":
             offenders.append(specimen)
     assert offenders == []
-
-
-def test_reader_may_downgrade_a_verdict_but_never_improve_one() -> None:
-    """PRD §3.2, the load-bearing rule. No fixture exercises this - the fake
-    reader agrees with the rules by construction - so it is asserted directly."""
-    # Downgrades are accepted and are not governance events.
-    assert guard("match", "review") == ("review", False)
-    assert guard("match", "fail") == ("fail", False)
-    assert guard("review", "fail") == ("fail", False)
-    # Improvements are rejected, and each one is flagged for the audit log.
-    assert guard("fail", "review") == ("fail", True)
-    assert guard("fail", "match") == ("fail", True)
-    assert guard("review", "match") == ("review", True)
-    # Agreement, and a reader that returned nothing, both leave the rules alone.
-    assert guard("review", "review") == ("review", False)
-    assert guard("fail", None) == ("fail", False)
 
 
 def test_record_verdict_is_the_worst_field_verdict() -> None:

@@ -1,15 +1,14 @@
 """Versioned extraction prompts and the response schema (PRD §5.2, §3.3).
 
-VERSION is recorded on every record so a reading can be traced to the prompt
-that produced it. There is no extraction cache yet (M3), so bumping it changes
-nothing retroactively.
+VERSION is recorded on every record, and keys the extraction cache
+(migrations/002), so bumping it retires every reading the old prompt produced.
 """
 
 # Bump on any change to PROMPT or SCHEMA below.
 VERSION = "2026-08-19.3"
 
-# PRD §3.3 control 1: the specimen is applicant-supplied and may carry text
-# crafted to steer the reader. The prompt transcribes, it never interprets.
+# PRD §3.3 control 1: a specimen is applicant-supplied and may carry text aimed
+# at the reader, so the prompt transcribes and never interprets.
 PROMPT = """\
 You are transcribing a photograph of an alcohol beverage label for a compliance \
 record. Report only what is physically printed on the label in the image.
@@ -78,11 +77,8 @@ SCHEMA = {
             "required": ["present", "body", "headerCase", "headerBold"],
             "additionalProperties": False,
         },
-        # PRD §3.2 fixes the verdict enum at match/review/fail, all of which
-        # assume the image is a label. A photograph of something else is not a
-        # label that failed - it is not a label - and telling a reviewer to
-        # adjudicate seven fields against a picture of a dog wastes their time.
-        # Deliberate extension to the spec; see models.Verdict.
+        # PRD §3.2's three verdicts all assume the image is a label. Something
+        # else is not a label that failed; see models.Verdict.
         "notALabel": {"type": "boolean"},
         "quality": {
             "type": "string",

@@ -1,7 +1,5 @@
-"""Image preparation, shared by every reader (PRD §5.2).
-
-Every reader sees the *identical* prepared image, so differences in the bake-off
-are attributable to the reader and not to preprocessing.
+"""Image preparation, shared by every reader (PRD §5.2), so a bake-off measures
+the reader and not the preprocessing.
 """
 
 from __future__ import annotations
@@ -13,18 +11,15 @@ from pathlib import Path
 
 from PIL import Image, ImageFilter, ImageOps, ImageStat
 
-# PRD §5.2: validated against the fixture set by scripts/bench.py before it is
-# fixed. If per-field accuracy drops, this moves back to 1600 and the latency
-# budget absorbs it.
+# PRD §5.2: validated against the fixtures by scripts/bench.py. If per-field
+# accuracy drops, this goes back to 1600 and latency absorbs it.
 MAX_EDGE = 1024
 JPEG_QUALITY = 85
 
-# Edge-energy below this reads as a soft capture. Measured across all 25
-# fixtures: the three blurred ones score 12.4/21.4/32.7, everything else lands
-# in 35.7-62.5. Blur only - glare, pixelation, angle, dark, damage and cropping
-# sit inside that clean range and need the vision reader's own quality call.
-# ponytail: fogbank-dark clears this by 0.7, iron-gate-blur misses by 2.3.
-# Recalibrate if the prep pipeline, MAX_EDGE or the fixture encoding moves.
+# Edge energy below this reads as soft: over the 25 fixtures the three blurred
+# score 12.4/21.4/32.7 and the rest 35.7-62.5. Blur only; glare and angle sit in
+# the clean range and need the vision reader's own call.
+# ponytail: margins are 0.7 and 2.3, so recalibrate if prep or MAX_EDGE moves.
 SHARP_FLOOR = 35.0
 
 
@@ -33,20 +28,15 @@ class Prepared:
     image: Image.Image
     jpeg: bytes
     sharpness: float
-    width: int
-    height: int
 
     @property
     def is_sharp(self) -> bool:
         return self.sharpness >= SHARP_FLOOR
 
 
-# Preparation is deterministic per file, and stored specimens are
-# content-addressed, so the same path never means two different images. Caching
-# it lets the caller time this stage on its own (PRD §5.4 per-stage timings)
-# without the reader paying for a second pass.
-# ponytail: bounded LRU holding decoded images; drop maxsize if memory ever
-# matters more than the repeat verify.
+# Deterministic per file and specimens are content-addressed, so caching lets the
+# caller time this stage alone (PRD §5.4) without the reader paying twice.
+# ponytail: bounded LRU of decoded images; drop maxsize if memory matters more.
 @lru_cache(maxsize=32)
 def prepare(path: Path) -> Prepared:
     """EXIF-rotate, downscale the longest edge, encode JPEG, score sharpness."""
@@ -57,8 +47,7 @@ def prepare(path: Path) -> Prepared:
     buffer = io.BytesIO()
     image.save(buffer, format="JPEG", quality=JPEG_QUALITY)
 
-    # Variance of edge energy - a cheap, dependency-free focus proxy. A blurred
-    # or pixelated capture has far less edge energy than a crisp one.
+    # Edge-energy variance: a cheap, dependency-free focus proxy.
     edges = image.convert("L").filter(ImageFilter.FIND_EDGES)
     sharpness = ImageStat.Stat(edges).stddev[0]
 
@@ -66,6 +55,4 @@ def prepare(path: Path) -> Prepared:
         image=image,
         jpeg=buffer.getvalue(),
         sharpness=sharpness,
-        width=image.width,
-        height=image.height,
     )

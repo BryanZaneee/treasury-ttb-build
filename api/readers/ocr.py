@@ -1,13 +1,9 @@
-"""Local Tesseract reader (PRD §5.3).
+"""Local Tesseract reader (PRD §5.3). No network, no marginal cost.
 
-Runs on every specimen: independent second reader for the auto-close gate,
-fallback when the vision provider is unreachable, and an illegibility prior.
-No network, no marginal cost.
-
-The §5.4 agreement matrix depends on knowing its reach: it reads the plain
-sans-serif government warning near-perfectly and stylised brand type badly.
-Fields it cannot find return `None`, which the rules engine treats as
-absent-from-label, never as a guess.
+The fallback when the vision reader is unreachable, not an always-on second
+reader. It reads the plain sans-serif warning near-perfectly and stylised brand
+type badly; a field it cannot find returns `None`, which the rules engine reads
+as absent-from-label rather than as a guess.
 """
 
 from __future__ import annotations
@@ -52,12 +48,8 @@ class _Line:
     confidence: float
 
 
-# Two passes, because one page-segmentation mode does not read a wine label.
-# psm 3 (auto) resolves the large display type - the brand - but on a busy label
-# it skips the body block entirely. psm 6 (uniform block) reads the body: class,
-# alcohol, net contents, warning. Measured on harbor-mist, psm 3 finds 15 words
-# and psm 6 finds 25, and neither set contains the other. The union costs a
-# second Tesseract call (~200ms) and is what makes the body fields readable.
+# Two passes: psm 3 gets the display type, psm 6 the body block. On harbor-mist
+# that is 15 words against 25, neither set containing the other.
 _PASSES = ("--psm 3", "--psm 6")
 
 
@@ -105,11 +97,10 @@ def _find(lines: list[_Line], pattern: re.Pattern[str]) -> tuple[str | None, flo
 
 
 def _brand_and_class(lines: list[_Line]) -> tuple[_Line | None, _Line | None]:
-    """Brand is the most emphatically-cased line; class/type is the line after it.
+    """Brand is the most emphatically-cased line, class/type the one after it.
 
-    A weak heuristic by construction - OCR has no type-size information, so it
-    cannot see that the brand is the biggest thing on the label. This is the
-    field where OCR is expected to disagree with the vision reader (PRD §5.4).
+    Weak by construction: OCR has no type size, so it cannot see that the brand
+    is the biggest thing on the label. The field where it does worst (PRD §5.4).
     """
     candidates = [
         line
@@ -133,9 +124,7 @@ def _brand_and_class(lines: list[_Line]) -> tuple[_Line | None, _Line | None]:
 
 
 def _quality(prepared: Prepared) -> CaptureQuality:
-    """OCR sees blur and nothing else - glare, angle and pixelation all score
-    inside the clean range (see readers/prep.py). Anything it cannot detect is
-    reported as `normal` rather than guessed at."""
+    """OCR sees blur and nothing else, so anything else reports `normal`."""
     if prepared.sharpness < 15.0:
         return "heavyBlur"
     if not prepared.is_sharp:
@@ -154,16 +143,13 @@ def _warning(lines: list[_Line]) -> WarningReading:
             present=True,
             body=" ".join(body.split()),
             header_case="upper" if header.isupper() else "title",
-            # Tesseract reports no font weight, so bold is genuinely unknown.
-            # None (not False) keeps the rules engine from inventing a defect.
+            # No font weight from Tesseract, so None (not False) - False would invent a defect.
             header_bold=None,
         )
     return WarningReading(present=False, body=None, header_case=None, header_bold=None)
 
 
 class OcrReader:
-    name = "ocr"
-
     def read(self, specimen: str, image_path: Path | None = None) -> LabelReading:
         path = image_path or Path("fixtures") / Path(specimen).name
         prepared = prepare(path)

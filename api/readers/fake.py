@@ -1,10 +1,8 @@
 """Fixture-replaying reader - the CI reader, no network and no spend (PRD §5.2).
 
-Replays `fixtures/expectations.json`'s `label` block, which is what a perfect
-reader would have seen on that specimen. Fields listed under `illegible` come
-back as the `ILLEGIBLE` sentinel; fields listed under `degraded` come back with
-a value but low confidence, which is what drives the §3.2 degraded-capture
-downgrade.
+Replays what a perfect reader would have seen. `illegible` fields come back as
+the sentinel, `degraded` ones with a value and low confidence, which is what
+drives the §3.2 degraded-capture downgrade.
 """
 
 from __future__ import annotations
@@ -30,12 +28,8 @@ def expectations() -> dict[str, Any]:
 
 
 class FakeReader:
-    name = "fake"
-
     def read(self, specimen: str, image_path: Path | None = None) -> LabelReading:
-        # The fixture replayer never opens the image - it replays what a
-        # perfect reader would have seen. image_path is accepted so every
-        # reader satisfies one protocol.
+        # Never opens the image; image_path exists so every reader has one shape.
         del image_path
         fixture = expectations().get(Path(specimen).name)
         if fixture is None:

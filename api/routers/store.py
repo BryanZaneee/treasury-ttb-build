@@ -40,14 +40,11 @@ def _require_admin(authorization: str | None) -> None:
         raise HTTPException(status_code=401, detail="admin token required")
 
 
-# Generated here rather than read back off disk: the mirror file is written by
-# a debounced background timer, so reading it races that writer. (The mirror on
-# disk is a backup artifact and is not web-exposed - the front proxy only serves
-# the built SPA and proxies /api.)
+# Generated here, not read off disk: the mirror is written by a debounced timer,
+# so reading the file races that writer.
 @router.get("/export/records.csv")
 def export_records_csv() -> Response:
-    """What a reviewer takes away: the applications, the results and who decided
-    what. See csv_io.REVIEW_COLUMNS for why this is not the mirror."""
+    """What a reviewer takes away; csv_io.REVIEW_COLUMNS says why not the mirror."""
     return Response(
         content=csv_io.to_review_csv(db.mirror_rows()),
         media_type="text/csv",
@@ -57,9 +54,7 @@ def export_records_csv() -> Response:
 
 @router.get("/export/backup.csv")
 def export_backup_csv() -> Response:
-    """The full mirror (PRD §4.2), which is what `POST /store/import` reads back.
-    Kept as its own download so the review export can drop columns without
-    breaking the restore path (S11)."""
+    """The full mirror (PRD §4.2), which is what `POST /store/import` reads back."""
     return Response(
         content=csv_io.to_csv(db.mirror_rows()),
         media_type="text/csv",
@@ -69,8 +64,7 @@ def export_backup_csv() -> Response:
 
 @router.get("/export/template.csv")
 def export_template_csv() -> Response:
-    """A blank batch-intake CSV (S11). Header is the applicant-facing one from
-    PRD §4.3, which is what batching.parse_csv accepts."""
+    """A blank batch-intake CSV (S11), headed as PRD §4.3 and parse_csv expect."""
     header = ",".join(batching.INTAKE_COLUMNS)
     return Response(
         content=f"{header}\n".encode(),
@@ -88,14 +82,12 @@ def fixtures(
         seed.empty_store()
         return FixturesResponse(mode="empty")
     if body.mode == "reset":
-        # ADMIN_TOKEN is checked here, not in TokenMiddleware, because the
-        # requirement depends on the request body (PRD §5.1/§8) - "stage"
-        # only needs the ACCESS_TOKEN the middleware already enforced.
+        # Checked here, not in TokenMiddleware, because it depends on the body
+        # (PRD §5.1/§8) - "stage" needs only the ACCESS_TOKEN already enforced.
         _require_admin(authorization)
         count = seed.reset_store()
         return FixturesResponse(mode="reset", reset_count=count)
-    # "stage" previews the bundled sample batch (S4). Nothing is filed until a
-    # job commits the returned batch_id.
+    # "stage" previews the sample batch (S4); nothing is filed until a job commits.
     batch = stage_sample_batch()
     return FixturesResponse(mode="stage", staged_count=len(batch.rows), batch=batch)
 
@@ -107,9 +99,8 @@ def import_store(
 ) -> StoreImportResponse:
     """Restore records from a CSV mirror (PRD §5.1, S11).
 
-    Merge upserts by id, so re-importing an export is idempotent rather than a
-    primary-key violation. Replace wipes first, which is what makes
-    `export -> wipe -> import -> export` byte-identical. Both snapshot first.
+    Merge upserts by id, so re-importing an export is idempotent; replace wipes
+    first, which is what makes the round trip byte-identical. Both snapshot.
     """
     data = csv_file.file.read()
     try:
@@ -124,8 +115,8 @@ def import_store(
     for index, row in enumerate(rows, start=1):
         record_id = (row.get("id") or "").strip()
         if not record_id:
-            # A generated id collides with the next import's generated id, so a
-            # row without one is an error the operator can act on, not a guess.
+            # A generated id would collide with the next import's, so a row
+            # without one is an error, not a guess.
             errors.append(f"row {index}: no id")
             continue
         records.append(
@@ -149,7 +140,7 @@ def import_store(
                 "elapsed_ms": _as_int(row.get("elapsed_ms")),
                 "engine": row.get("engine"),
                 "decision": row.get("decision"),
-                "override": csv_io.parse_bool(row.get("override")),
+                "override": parse_bool(row.get("override")),
                 "decided_by": row.get("decided_by"),
                 "decided_at": row.get("decided_at"),
                 "note": row.get("note"),

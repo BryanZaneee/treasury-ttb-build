@@ -2,11 +2,9 @@
 
 Verify runs the rules engine against a reader's label reading, behind the
 `readers.Reader` protocol. OCR is a fallback for when the vision reader is
-unreachable, not the always-on second reader §5.3 describes, so the auto-close
-gate here drops that spec's reader-agreement clause and keeps every other one -
-see `_auto_close_eligible`.
+unreachable, not §5.3's always-on second reader, so `_auto_close_eligible`
+drops that spec's reader-agreement clause and keeps every other one.
 """
-
 import hashlib
 import random
 import sqlite3
@@ -41,8 +39,7 @@ class RecordCounts(BaseModel):
     review: int = 0
     fail: int = 0
     closed: int = 0
-    # The whole-store count, so a caller wanting only a number does not have to
-    # fetch every record to take its length.
+    # So a caller wanting only a number need not fetch every record.
     total: int = 0
 
 
@@ -64,8 +61,8 @@ class RecordPatchRequest(BaseModel):
 
 
 def _row_to_record(row: sqlite3.Row) -> Record:
-    # sqlite3.Row iterates its *values*, not column names - .keys() is required here,
-    # not the redundant call SIM118 assumes for a plain dict.
+    # sqlite3.Row iterates values, not column names, so .keys() is not the
+    # redundant call SIM118 assumes for a plain dict.
     return Record(**{col: row[col] for col in row.keys() if col in Record.model_fields})  # noqa: SIM118
 
 
@@ -76,11 +73,8 @@ def list_records(
 ) -> RecordsListResponse:
     """The queue, plus the filter counts every view leads with.
 
-    `counts_only` skips the row list for callers that want the counts alone -
-    the masthead badge fetched the entire store on every route change to render
-    one integer. Search is not a parameter here: it runs client side over the
-    already-loaded set (`web/src/lib/search.ts`), which is the only
-    implementation and the only one that is punctuation-insensitive per S5.
+    `counts_only` skips the rows for a caller that wants one integer; search is
+    client side (`web/src/lib/search.ts`), the only S5 implementation.
     """
     counts = db.filter_counts()
     rows = [] if counts_only else db.list_records(result_filter=filter)
@@ -92,9 +86,8 @@ def list_records(
 
 @router.post("/records", response_model=Record, status_code=201)
 def create_record(
-    # Not collected on the single-label form: PRD §6.1 files the seven fields of
-    # §3.1 and applicant is not one of them. It still arrives from batch intake
-    # (§4.3) and the seed, and remains a record column and an S5 search key.
+    # Not on the single-label form (PRD §6.1) but still filed by batch intake
+    # (§4.3) and the seed, and still an S5 search key.
     applicant: str = Form(""),
     beverage: str = Form(...),
     application: str = Form(..., description="JSON-encoded Application"),
@@ -139,14 +132,8 @@ def create_record(
         "result": None,
     }
     record_id = db.insert_new_record(record)
-    # Deviation from PRD §5.2, deliberate: nothing calls a reader on upload.
-    # Extraction only happens when a reviewer asks for it, so a filing that is
-    # never verified never costs a paid call.
-    #
-    # verify_now IS that ask - the single-label page's button reads "Submit for
-    # verification". Running it here rather than as a second request from the
-    # browser is what stops a reviewer who moves on from leaving a record that
-    # nobody would ever verify.
+    # PRD §5.2 deviation: no reader runs on upload, so a filing nobody verifies
+    # costs nothing. verify_now is that ask, server side so moving on is safe.
     if verify_now:
         db.run_in_background(_verify_on_arrival, record_id)
     row = db.get_record(record_id)
@@ -155,8 +142,7 @@ def create_record(
 
 
 def _verify_on_arrival(record_id: str) -> None:
-    """Adjudicate a freshly filed record. Failures leave it pending, which is
-    the state the inbox already knows how to show and a reviewer can retry."""
+    """Adjudicate a freshly filed record; a failure leaves it pending to retry."""
     try:
         verify_record(record_id)
     except Exception as exc:  # noqa: BLE001 - a filing must not fail on this
@@ -177,15 +163,13 @@ def get_record(record_id: str) -> RecordDetail:
 
 
 def _specimen_path(specimen: str) -> Path:
-    """Where a specimen actually is: the store's image directory, or the bundled
-    fixture of the same name for a seeded record whose image was never copied."""
+    """The store's image directory, or the bundled fixture for a seeded record."""
     path = db.data_dir() / "images" / Path(specimen).name
     return path if path.exists() else Path("fixtures") / Path(specimen).name
 
 
 def _cache_key(path: Path) -> str | None:
-    """PRD §5.2: the key carries the image hash and every setting that can change
-    a reading, so switching model or provider cannot serve the previous one."""
+    """PRD §5.2: keyed on every input that can change a reading."""
     with suppress(OSError):
         return "|".join(
             [
@@ -202,20 +186,9 @@ def _cache_key(path: Path) -> str | None:
 def reading_on_file(row: sqlite3.Row) -> tuple[LabelReading, str, str] | None:
     """The reading behind this record's verdict, without asking a reader.
 
-    Correcting the application is a rules question, not a reading one: the label
-    has not changed, so re-adjudicating must never spend a call on it.
-
-    The record's own `reading_json` is the answer wherever there is one, because
-    it is the reading that produced the verdict being corrected. The extraction
-    cache is the fallback for records verified before that column existed. The
-    cache alone was not enough: it is keyed on provider, model, effort and
-    prompt version - right for a new verification, wrong here, since changing
-    any of them would strand every existing record - and it deliberately never
-    holds a fallback OCR reading (PRD §5.2), nor anything at all in a store
-    restored from CSV.
-
-    Returns None only when nothing has ever read this label, which is the one
-    case where a correction genuinely leaves the record awaiting verification.
+    Correcting the application is a rules question, so it must never spend a
+    call. `reading_json` answers where there is one, the extraction cache where
+    there is not; None means nothing has ever read this label.
     """
     stored = row["reading_json"]
     if stored:
@@ -236,25 +209,18 @@ def reading_on_file(row: sqlite3.Row) -> tuple[LabelReading, str, str] | None:
 def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, str, int]:
     """Read a specimen, falling back to local OCR when the reader fails.
 
-    PRD §3.2: a reader that is unreachable, slow, or returns unparseable JSON
-    degrades to the rules verdict, with the engine string recording the cause.
-    The service never blocks on the reader (acceptance test 11).
-
-    Returns the reading, the engine string, the reader that actually produced
-    it - which after a fallback is not the one configured, and is what the UI
-    uses to warn the reviewer that accuracy may be lower on a degraded capture -
-    and the image-preparation time in milliseconds.
+    PRD §3.2: a failed reader degrades to the rules verdict with the cause in the
+    engine string, never blocking (acceptance test 11). Returns the reading, the
+    engine string, the reader that actually ran, and the prep milliseconds.
     """
     path = image_path if image_path.exists() else Path("fixtures") / Path(specimen).name
     provider = settings.reader_provider
 
-    # Every reader prepares the same image through the same cached function, so
-    # timing it here measures prep once and leaves the reader's call a cache
-    # hit (PRD §5.4).
+    # Prep is cached, so timing it here measures it once and leaves the reader's
+    # own call a cache hit (PRD §5.4).
     prep_started = time.perf_counter_ns()
     with suppress(Exception):
-        # An unreadable file is the reader's error to raise, with its own
-        # fallback path; warming the cache is not where it should surface.
+        # An unreadable file is the reader's error to raise, not the warm-up's.
         prepare(path)
     prep_ms = round((time.perf_counter_ns() - prep_started) / 1_000_000)
 
@@ -270,18 +236,16 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
         reading = get_reader(provider).read(specimen, path)
         engine = f"rules check ({provider} reader)"
         if key is not None:
-            # Only the configured reader's own answer is cached. A fallback
-            # reading is degraded by definition and must not become sticky.
+            # Only the configured reader's answer is cached; a degraded fallback
+            # reading must never become sticky.
             db.extraction_cache_put(
                 key,
                 {"reading": reading.model_dump(mode="json"), "engine": engine, "reader": provider},
             )
         return reading, engine, provider, prep_ms
     except SpendCapReached:
-        # Acceptance test 17: the engine string names the cause. "unavailable"
-        # would read as an outage a reviewer should retry, when in fact nothing
-        # is broken and nothing will change until the cap resets at UTC
-        # midnight.
+        # Acceptance test 17: name the cause. "unavailable" would read as an
+        # outage to retry, when nothing changes until the cap resets at midnight.
         logs.count("spend_cap_reached")
         capped = True
         cause = "daily paid-call cap reached"
@@ -290,11 +254,8 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
         capped = False
         cause = type(exc).__name__ if not str(exc) else str(exc).split("\n")[0][:120]
 
-    # The engine string a reviewer sees says only "unavailable" - which reader
-    # failed and why is an operator question, and without this line the cause
-    # was computed and thrown away, leaving a box that had silently degraded to
-    # OCR with nothing in the journal to say what the provider actually
-    # answered.
+    # The reviewer sees only "unavailable"; which reader failed and why is an
+    # operator question, so it goes to the journal.
     logs.event("reader_fallback", provider=provider, model=settings.reader_model, cause=cause)
     if provider == "ocr":
         raise HTTPException(status_code=422, detail=f"reader failed: {cause}")
@@ -316,20 +277,15 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
 def _auto_close_eligible(verdict: str, quality: str | None, reader_used: str) -> bool:
     """Whether a verified record may close itself (PRD §5.3, §8).
 
-    Deviation from §5.3, deliberate: the spec's gate also requires the vision
-    reader and OCR to agree on every field, which this service cannot answer
-    because OCR is a fallback rather than an always-on second reader. Every
-    other clause is enforced, and the whole thing stays behind
-    AUTO_APPROVE_MATCHES, which is off unless an operator turns it on.
+    §5.3 deviation: its reader-agreement clause needs an always-on second reader,
+    which OCR is not here. Every other clause holds, behind AUTO_APPROVE_MATCHES.
     """
     if not settings.auto_approve_matches or verdict != "match" or quality != "normal":
         return False
-    # A record read only by the degraded fallback is one reader, and a
-    # single-reader reading never auto-closes.
+    # Read by the degraded fallback alone is one reader, which never auto-closes.
     if reader_used == "ocr":
         return False
-    # §8: sample a fraction of eligible records into human review regardless,
-    # so the policy is always being checked by somebody.
+    # §8: sample a fraction to a human anyway, so the policy stays spot-checked.
     return random.random() >= settings.qa_sample_rate
 
 
@@ -356,9 +312,8 @@ def enforce_override(
 ) -> bool:
     """PRD §5.1: accepting a non-`match` verdict requires an explicit override.
 
-    Deliberately its own function with its own test - the PRD calls out that
-    this check must not end up buried in a generic field-merge loop, because
-    that is how it gets lost in a refactor.
+    Its own function with its own test - burying it in a field-merge loop is how
+    it gets lost in a refactor.
     """
     if decision != "accepted" or record["result"] == "match":
         return False
@@ -376,9 +331,8 @@ def enforce_override(
                 "fields": fields,
             },
         )
-    # An override is the one decision where the audit row is the whole point, so
-    # it may not be anonymous. PRD §8 accepts a free-text name because there is
-    # no identity system; it does not accept no name at all.
+    # The audit row is the whole point of an override, so it may not be
+    # anonymous. PRD §8 takes a free-text name; it does not take no name.
     if not (reviewer_name or "").strip():
         raise HTTPException(
             status_code=422,
@@ -402,8 +356,7 @@ def patch_record(record_id: str, body: RecordPatchRequest) -> Record:
             status_code=422,
             detail="edit the application or issue a decision, not both in one request",
         )
-    # A decided record is not reopenable - the applicant files afresh and the
-    # new record links back via supersedes_id (PRD §12).
+    # A decided record is not reopenable - the applicant files afresh (PRD §12).
     if row["decision"] is not None:
         raise HTTPException(
             status_code=409,
@@ -434,11 +387,8 @@ def patch_record(record_id: str, body: RecordPatchRequest) -> Record:
         db.clear_field_results(record_id)
         db.append_audit(record_id, "edited", app.model_dump())
 
-        # The verdict above was cleared because the application changed, not
-        # because the label did. The reading already on file is adjudicated
-        # against the corrected application straight away, so a reviewer fixing
-        # a transcription error gets the corrected determination without the
-        # reader being asked to read an unchanged image again.
+        # The application changed, not the label, so the reading already on file
+        # is re-adjudicated rather than the image being read again.
         on_file = reading_on_file(row)
         if on_file is not None:
             reading, engine, reader_used = on_file
@@ -460,9 +410,8 @@ def patch_record(record_id: str, body: RecordPatchRequest) -> Record:
                 reader_provider=reader_used,
                 reader_model=settings.reader_model if reader_used != "ocr" else None,
                 prompt_version=PROMPT_VERSION if reader_used == "openai" else None,
-                # Written back when it came from the cache, so a record verified
-                # before migrations/005 stops depending on a cache entry that
-                # can be evicted or keyed out from under it.
+                # Written back even when it came from the cache, so the record
+                # stops depending on an entry that can be evicted (migrations/005).
                 reading_json=reading.model_dump_json(),
             )
             db.append_audit(
@@ -529,20 +478,16 @@ def verify_record(record_id: str) -> Record:
         quality=reading.quality,
         engine=engine,
         prep_ms=prep_ms,
-        # Prep runs inside the reader call, so it is subtracted out rather than
-        # double-counted across the two stages.
+        # Prep runs inside the reader call, so subtract it rather than count twice.
         reader_ms=max(0, round((read_done - started) / 1_000_000) - prep_ms),
         rules_ms=round((finished - read_done) / 1_000_000),
         elapsed_ms=round((finished - started) / 1_000_000),
-        # The reader that actually read the label, which after a fallback is
-        # not the configured one.
+        # The reader that actually ran, which after a fallback is not the
+        # configured one; only a vision reading comes from a prompt.
         reader_provider=reader_used,
         reader_model=settings.reader_model if reader_used != "ocr" else None,
-        # Only a vision reading comes from a prompt, and it is the reader that
-        # actually ran that fixes the version.
         prompt_version=PROMPT_VERSION if reader_used == "openai" else None,
-        # Kept on the record so correcting the application never has to ask a
-        # reader to read an unchanged image again (migrations/005).
+        # Kept so correcting the application never re-reads an unchanged image.
         reading_json=reading.model_dump_json(),
     )
     db.append_audit(
@@ -574,8 +519,7 @@ def verify_record(record_id: str) -> Record:
             decided_by="Automatic",
             decided_at=datetime.now(UTC).isoformat(),
         )
-        # §8 requires an audit row per auto-close: an unattended decision has
-        # to be as reviewable afterwards as a reviewer's own.
+        # §8: an unattended decision must be as reviewable as a reviewer's own.
         db.append_audit(
             record_id,
             "auto_closed",

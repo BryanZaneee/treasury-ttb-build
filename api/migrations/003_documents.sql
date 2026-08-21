@@ -1,10 +1,6 @@
--- Short-lived JSON documents: staged batches and job progress.
---
--- These were process-local dicts, but PRD §5 deploys two Uvicorn workers, so a
--- reviewer polling a job could hit the worker that never ran it and a batch
--- staged on one worker could not be committed by the other. Neither is durable
--- state in the sense `records` is - losing one costs a re-upload - but both
--- have to be visible to every worker.
+-- Short-lived JSON documents: staged batches and job progress. PRD §5 deploys
+-- two workers, so a batch staged on one must be committable by the other.
+-- Neither is durable state the way `records` is; losing one costs a re-upload.
 CREATE TABLE IF NOT EXISTS documents (
     kind       TEXT NOT NULL,
     key        TEXT NOT NULL,

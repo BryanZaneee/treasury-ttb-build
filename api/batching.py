@@ -1,9 +1,8 @@
 """Batch intake: filename pairing and staged-preview construction (PRD §5.5).
 
-Applications are paired to specimens on the CSV `filename` column against
-uploaded image basenames, in three passes. Ambiguity is always an error rather
-than a guess - two images that normalise to the same stem block the commit
-until a human resolves them.
+Applications pair to specimens on the CSV `filename` column against uploaded
+basenames. Ambiguity is an error, never a guess: two images normalising to one
+stem block the commit until a human resolves them.
 """
 
 from __future__ import annotations
@@ -16,11 +15,8 @@ from typing import Literal
 
 Bucket = Literal["matched", "matched_fuzzy", "missing_image", "ambiguous"]
 
-ALLOWED_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
-
-# The batch intake header (PRD §4.3) - the shorter, applicant-facing one. This
-# is the single definition: the blank template served to applicants and the
-# parser that accepts their file read the same list.
+# The applicant-facing intake header (PRD §4.3), defined once: the blank template
+# and the parser that accepts it read the same list.
 INTAKE_COLUMNS = (
     "filename",
     "brand_name",
@@ -34,11 +30,8 @@ INTAKE_COLUMNS = (
 )
 REQUIRED_COLUMNS = INTAKE_COLUMNS[:5]
 
-# The records mirror (csv_io.MIRROR_COLUMNS) names the same seven application
-# fields differently, because it is the database row and the intake file is the
-# applicant-facing form. A reviewer who exports the store, edits it, and uploads
-# it as a batch is doing something obvious; refusing it over a column name is
-# not. Extra mirror columns are ignored - only the required ones are checked.
+# The mirror names the same seven fields differently. Refusing a file this
+# service wrote, over a column name, is not a defensible error.
 _MIRROR_ALIASES = {
     "app_brand": "brand_name",
     "app_class_type": "class_type",
@@ -68,16 +61,14 @@ class Row:
 
 
 def stem(name: str) -> str:
-    """Normalised comparison key: case-fold, drop extension, collapse
-    separators to a single dash, strip a leading `./` (PRD §5.5 pass 2)."""
+    """Case-fold, drop extension, collapse separators, strip `./` (PRD §5.5)."""
     name = name.strip().lstrip("./").rsplit("/", 1)[-1]
     base = re.sub(r"\.[A-Za-z0-9]+$", "", name)
     return re.sub(r"[\s_-]+", "-", base).casefold()
 
 
 def _intake_name(column: str | None) -> str:
-    """An intake column name, whether the file was written by an applicant or
-    exported from the store."""
+    """An intake column name, from an applicant's file or from an export."""
     name = (column or "").strip().casefold()
     return _MIRROR_ALIASES.get(name, name)
 
@@ -93,15 +84,14 @@ def parse_csv(data: bytes) -> list[dict[str, str]]:
         raise BatchCsvError(f"missing required column(s): {', '.join(missing)}")
     rows = [{_intake_name(k): (v or "").strip() for k, v in row.items()} for row in reader]
     if not rows:
-        # The blank template is a valid file with nothing in it; staging it
-        # silently produced an empty preview with no explanation.
+        # The blank template is valid and empty; staging it silently produced a
+        # preview with no explanation.
         raise BatchCsvError("the file has a header but no application rows")
     return rows
 
 
 def pair(rows: list[dict[str, str]], image_names: list[str]) -> tuple[list[Row], list[str]]:
-    """Pair CSV rows to image basenames. Returns the staged rows and the
-    images no row claimed."""
+    """Pair CSV rows to image basenames; returns the rows and the unclaimed."""
     exact = {name.rsplit("/", 1)[-1]: name for name in image_names}
 
     by_stem: dict[str, list[str]] = {}
@@ -134,10 +124,9 @@ def pair(rows: list[dict[str, str]], image_names: list[str]) -> tuple[list[Row],
             staged_row.bucket = "matched"
             staged_row.image = exact[base]
         elif len(candidates) == 1:
-            # Pass 2 and 3 collapse to the same lookup - the stem already
-            # ignores case, separators and the extension. One candidate is a
-            # pairing; the fuzzy flag marks that the extension differed, which
-            # the preview surfaces for visual confirmation before commit.
+            # The stem already ignores case, separators and extension, so one
+            # candidate is a pairing; `fuzzy` marks that the extension differed
+            # and the preview asks for confirmation before commit.
             staged_row.image = candidates[0]
             same_extension = candidates[0].casefold().endswith(
                 base.casefold().rsplit(".", 1)[-1]
@@ -164,10 +153,8 @@ def pair(rows: list[dict[str, str]], image_names: list[str]) -> tuple[list[Row],
 def assign(rows: list[Row], images: list[str], row_no: int, image: str | None) -> None:
     """Pair a row with an image by hand, or clear the pairing.
 
-    Filename pairing is right for a curated CSV and a folder, but it has no
-    answer for a typo: the reviewer can see that row 7 is that bottle even when
-    the names disagree, and re-uploading the whole batch to fix one character
-    is not a remedy.
+    Filename pairing has no answer for a typo, and re-uploading the whole batch
+    to fix one character is not a remedy.
     """
     row = next((r for r in rows if r.row == row_no), None)
     if row is None:
@@ -187,8 +174,7 @@ def assign(rows: list[Row], images: list[str], row_no: int, image: str | None) -
         row.bucket = "missing_image"
         row.errors.append("no image supplied for this row")
     else:
-        # Assigned by a human, so it is matched - not a fuzzy guess the
-        # preview should ask them to confirm.
+        # A human assigned it, so it is matched, not a guess to confirm.
         row.bucket = "matched"
 
 
@@ -203,18 +189,12 @@ def unresolved(rows: list[Row]) -> list[int]:
 
 
 def blocks_commit(rows: list[Row]) -> bool:
-    """Commit is blocked while any row is ambiguous. `missing_image` rows do
-    not block: they file, and are editable but not verifiable (PRD §5.5)."""
+    """Ambiguity blocks the commit; a missing image does not (PRD §5.5)."""
     return any(row.bucket == "ambiguous" for row in rows)
 
 
 def discard(rows: list[Row], images: list[str], name: str) -> None:
-    """Drop an uploaded image from the batch and repair the rows that used it.
-
-    Deleting the spare is the remedy an ambiguous row's own error message
-    names, so a row left with one candidate pairs with it rather than staying
-    blocked.
-    """
+    """Drop an image and repair the rows that used it, resolving an ambiguity."""
     if name not in images:
         raise KeyError(f"{name!r} was not uploaded with this batch")
     images.remove(name)

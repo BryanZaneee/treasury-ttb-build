@@ -1,20 +1,14 @@
 """Build the example store from api/fixtures/ (PRD §7).
 
-The example set is what `POST /api/fixtures {mode: "reset"}` restores, and it
-exists to be trained on: thirteen applications spanning every state a reviewer
-meets - some still awaiting verification, clean matches, labels in review,
-failures still open, one failure accepted over the engine's objection, and one
-returned to the applicant.
+What `POST /api/fixtures {mode: "reset"}` restores: thirteen applications
+spanning every state a reviewer meets, so every inbox filter has something in it
+and there is a determination to practise on.
 
-Deviation from PRD §7/S12, deliberate: the store used to seed all 25 fixtures,
-every one of them unverified. That shows exactly one state, so the inbox filters
-all read zero and there is nothing to practise a decision on. The 25 are still
-one click away as a batch on Check a batch, which is where a bulk run belongs.
+PRD §7/S12 deviation: seeding all 25 unverified shows exactly one state. The 25
+are still one click away as a batch, which is where a bulk run belongs.
 
-The determinations are not hand-written. `FakeReader` replays what a perfect
-reader would have seen on each specimen and the real rules engine adjudicates
-it, so a seeded record carries the same field results the app would produce -
-offline, and without a paid call.
+The determinations are not hand-written - `FakeReader` replays each specimen and
+the real rules engine adjudicates it, offline and without a paid call.
 """
 
 from __future__ import annotations
@@ -34,9 +28,7 @@ FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 SEED_REVIEWER = "J. Park"
 
-# filename -> what the reviewer has done with it so far. `None` means the record
-# is filed but nobody has run verification yet; "open" means verified and
-# waiting on a decision.
+# filename -> how far the reviewer got. None: filed, unverified. "open": verified, undecided.
 EXAMPLE_SET: dict[str, str | None] = {
     "quarry-house-units.jpg": None,
     "iron-gate-blur.jpg": None,
@@ -96,11 +88,9 @@ def _verify(record_id: str, app: dict[str, str], filename: str) -> str:
         quality=reading.quality,
         engine="rules check (example set)",
         reader_provider="fake",
-        # The reading these verdicts came from, kept like any other verified
-        # record's (migrations/005). Without it, correcting a seeded record has
-        # nothing to re-adjudicate against and it falls back to awaiting
-        # verification - and the example set is the whole inbox on a fresh
-        # store, so that was every record a reviewer could practise on.
+        # Kept like any other verified record's (migrations/005): without it a
+        # correction has nothing to re-adjudicate against, and the example set is
+        # the whole inbox on a fresh store.
         reading_json=reading.model_dump_json(),
     )
     return verdict
@@ -114,7 +104,7 @@ def seed_store() -> int:
     for index, (filename, state) in enumerate(EXAMPLE_SET.items()):
         app = applications[filename]
         record_id = db.next_record_id()
-        # Staggered so the queue has an order to it rather than one timestamp.
+        # Staggered so the queue has an order rather than one timestamp.
         received = (now - timedelta(hours=len(EXAMPLE_SET) - index)).isoformat()
         db.insert_record(
             {
@@ -143,8 +133,7 @@ def seed_store() -> int:
         if state == "open":
             continue
 
-        # Decided records carry the same columns a reviewer's decision writes,
-        # including the override flag a non-match acceptance requires (PRD §5.1).
+        # The same columns a reviewer's decision writes, override flag included (PRD §5.1).
         db.update_record(
             record_id,
             decision=state,
@@ -169,11 +158,9 @@ def reset_store() -> int:
 
 
 def empty_store() -> None:
-    """Snapshot the current store and leave it empty, so a reviewer starts from
-    their own applications rather than someone else's examples."""
+    """Snapshot the store and leave it empty, for a reviewer's own applications."""
     db.snapshot(reason="empty")
-    # wipe() drops the whole SQLite file, so staged batches and job progress
-    # (the `documents` table) go with the records.
+    # wipe() drops the file, so staged batches and job progress go too.
     db.wipe()
     db.reset_images_dir()
     db.append_audit(None, "emptied", {})

@@ -1,8 +1,7 @@
 """CSV interchange for the records mirror (PRD §4.2-4.3).
 
-Exactly two functions, both unit-tested independently of the database:
-to_csv/from_csv operate on the mirror's column set. Batch-intake CSV (a
-different, shorter schema) is batching.py's concern, not this module's.
+to_csv/from_csv operate on the mirror's column set. Batch-intake CSV is a
+different, shorter schema and belongs to batching.py.
 """
 
 from __future__ import annotations
@@ -20,23 +19,13 @@ MIRROR_COLUMNS = [
     "engine", "decision", "override", "decided_by", "decided_at", "note",
 ]
 
-# One column beyond PRD §4.2's fixed set, and the reason is worth stating: the
-# mirror as specified carries verdicts and notes but not the values they were
-# reached from, so a store restored from an export showed every field as "not
-# recorded" - a determination with its evidence deleted. JSON in a single cell
-# rather than two more `key:value|...` columns because observed label values
-# routinely contain both `|` and `:`, which the packed format cannot survive.
+# Two columns beyond PRD §4.2. `field_values` because the mirror as specified
+# restores verdicts without the values they came from; JSON in one cell because
+# observed values contain the `|` and `:` the packed format splits on.
+# `override` because it is the only evidence a waiver was deliberate (S8).
 
-# `override` is the second column beyond PRD §4.2's set, and it has to be here:
-# accepting a record that did not pass is the one determination a reviewer makes
-# against the engine, and an export that drops the flag destroys the only
-# evidence that the waiver was deliberate - which is what S8 exists to produce.
-
-# What a reviewer downloads. The mirror above is a restore artifact and reads
-# like one; this is the same store without the machine-facing half - no packed
-# JSON, no timings, no engine string. The application columns deliberately use
-# the batch-intake header names (batching.INTAKE_COLUMNS) so a downloaded export
-# can be re-uploaded on Check a batch without being translated first.
+# What a reviewer downloads: the store without its machine-facing half. Intake
+# header names, so an export re-uploads on Check a batch untranslated.
 REVIEW_COLUMNS = [
     "id", "received", "applicant", "filename",
     "brand_name", "class_type", "alcohol_content", "net_contents",
@@ -91,8 +80,7 @@ def pack_field_values(rows: list[Any]) -> str:
 
 
 def unpack_field_values(packed: str) -> dict[str, dict[str, str | None]]:
-    """Inverse of `pack_field_values`. A cell that will not parse is dropped
-    rather than failing the import: the verdicts still restore without it."""
+    """Inverse of `pack_field_values`; an unparseable cell is dropped, not fatal."""
     if not packed.strip():
         return {}
     try:
@@ -116,8 +104,7 @@ def to_csv(rows: list[dict[str, Any]]) -> bytes:
 
 
 def issues(packed_field_results: str) -> str:
-    """The fields that did not match, named in full. Empty when every field
-    agreed, which is the common case and should read as blank, not as "none"."""
+    """The fields that did not match, named in full; blank when they all agreed."""
     out = []
     for chunk in (packed_field_results or "").split("|"):
         key, sep, verdict = chunk.partition(":")
@@ -146,8 +133,7 @@ _TRUE = {"1", "true", "yes", "y", "t"}
 
 
 def parse_bool(value: object) -> bool:
-    """A CSV boolean, however it was written: the exporter emits SQLite's 1/0, a
-    hand-authored file true/false, and str(True) writes True."""
+    """A CSV boolean however written: SQLite's 1/0, true/false, or str(True)."""
     return str(value or "").strip().casefold() in _TRUE
 
 
@@ -156,9 +142,9 @@ def unpack_field_results(
 ) -> list[dict[str, Any]]:
     """Rebuild field_results rows from the mirror's packed cells (PRD §4.2).
 
-    Verdict, note and the two observed values restore. `reader_value`,
-    `ocr_value`, `agreed` and `confidence` are not in the CSV and do not come
-    back - they are per-reader evidence, not the determination.
+    Verdict, note and the two observed values restore. `confidence` is not in
+    the CSV and does not come back - it is reader evidence, not the
+    determination.
     """
     note_by_key = {}
     for chunk in (notes or "").split("|"):
@@ -192,10 +178,9 @@ def from_csv(data: bytes) -> list[dict[str, Any]]:
     text = data.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text))
     if reader.fieldnames is None or "app_brand" not in reader.fieldnames:
-        # The other CSV this service hands out is the batch-intake template
-        # (batching.INTAKE_COLUMNS), which files new applications rather than
-        # restoring determinations. Say so instead of naming a column the
-        # operator never saw.
+        # The other CSV this service hands out is the intake template, which
+        # files applications rather than restoring them. Say so, rather than
+        # naming a column the operator never saw.
         if reader.fieldnames and "brand_name" in reader.fieldnames:
             raise CsvImportError(
                 "app_brand",

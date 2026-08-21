@@ -10,8 +10,8 @@ rather than overlapping data entry.
 The extraction cache is bypassed, as §5.4 requires: a cached run measures
 SQLite, not the reader.
 
-Run by hand. `--out` writes the table alone and overwrites, so paste it under
-the rationale in docs/benchmark.md rather than pointing it there:
+Run by hand. `--out` writes the table alone and overwrites; the production
+rationale and its head-to-head table live in the README:
 
     uv run python scripts/bench.py --reader fake
     uv run python scripts/bench.py --reader ocr --out /tmp/ocr.md

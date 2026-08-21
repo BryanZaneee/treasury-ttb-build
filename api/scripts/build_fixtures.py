@@ -36,25 +36,10 @@ WARNING_REWORDED = (
     "Please enjoy responsibly and never drink and drive."
 )
 
-# `illegible` and `degraded` are the two per-field capture signals the reader
-# reports. Illegible means the extractor could not read the field at all -> fail
-# (PRD §3.2). Degraded means it read the field, but from a capture bad enough
-# that the reading is not trustworthy on its own: an otherwise-matching field
-# downgrades to review rather than match (PRD §3.2, "an otherwise-matching field
-# ... read from a degraded capture"). Quality alone cannot carry this - two of
-# the blurry fixtures and one angled one are expected to reach match - so the
-# signal has to be per field, not per capture.
+# Per-field capture signals: illegible is unreadable -> fail, degraded is read
+# but not trustworthy alone -> review. Per field, not per capture (PRD §3.2).
 
-# field_key values follow PRD §3.1's table verbatim (brand, classType, abv,
-# net, producer, origin, warning) - a different vocabulary than models.py's
-# Python-conventional Application attribute names (brand, class_type, ...).
-
-# Each row: filename -> (
-#   applicant, beverage class,
-#   app values (as filed), label values (as printed),
-#   quality, illegible field keys, degraded field keys, expected per-field verdicts,
-#   expected record verdict
-# )
+# field_key uses PRD §3.1's camelCase table, not models.py's attribute names.
 ROWS: list[dict[str, Any]] = [
     {
         "filename": "old-tom-pass.jpg", "applicant": "Old Tom Distillery LLC", "beverage": "Distilled Spirits",

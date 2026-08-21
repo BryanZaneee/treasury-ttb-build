@@ -1,15 +1,11 @@
 """Reader layer (PRD §5.2, §5.3).
 
 A reader turns a specimen into a `LabelReading`. It never sees application
-values, so extraction has no dependency on the form and nothing written on the
-label can steer the adjudication (PRD §3.3).
+values, so nothing written on a label can steer the adjudication (PRD §3.3).
 
-Three implementations, interchangeable by configuration:
-
-  fake    replays fixtures/expectations.json - instant, free, used in CI
-  ocr     local Tesseract - ~600ms, free, no network, and the fallback the
-          service degrades to when the vision reader cannot be reached
-  openai  gpt-5.6-luna vision, the production reader (see docs/benchmark.md)
+  fake    replays fixtures/expectations.json - instant, free, the CI reader
+  ocr     local Tesseract - free, no network, and the automatic fallback
+  openai  vision, the production reader (see the README's bake-off table)
 """
 
 from __future__ import annotations
@@ -17,15 +13,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
-from config import api_key_for, settings
+from config import api_key, settings
 from models import LabelReading
 
 PROVIDERS = ("fake", "ocr", "openai")
 
 
 class Reader(Protocol):
-    name: str
-
     def read(self, specimen: str, image_path: Path | None = ...) -> LabelReading: ...
 
 
@@ -34,8 +28,7 @@ def get_reader(
     model: str | None = None,
     effort: str | None = None,
 ) -> Reader:
-    """Build a reader. Arguments override the environment, which is what lets
-    the dev bench run several providers side by side in one process."""
+    """Build a reader; arguments override the environment, which the bench uses."""
     provider = (provider or settings.reader_provider or "fake").lower()
 
     if provider == "fake":
@@ -52,7 +45,7 @@ def get_reader(
         return VisionReader(
             provider=provider,
             model=model or settings.reader_model,
-            api_key=api_key_for(provider),
+            api_key=api_key(),
             base_url=settings.reader_base_url,
             effort=effort or settings.reader_effort,
             service_tier=settings.reader_service_tier,
