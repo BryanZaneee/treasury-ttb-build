@@ -22,7 +22,6 @@ class Settings(BaseSettings):
     # Named per provider so the key is unambiguous; READER_API_KEY is the fallback.
     openai_api_key: str = ""
     reader_effort: str = "none"
-    reader_service_tier: str = "standard"
     reader_timeout_s: int = 25
     # PRD §8: bounded - 300 simultaneous calls would breach the provider's limits.
     reader_concurrency: int = 10

@@ -27,7 +27,7 @@ def test_effort_is_clamped_to_the_provider_floor() -> None:
     assert clamp_effort("nonsense") == "none"
 
 
-def test_service_tier_standard_is_mapped_to_a_value_the_api_accepts() -> None:
+def test_service_tier_is_a_value_the_api_accepts() -> None:
     """Regression: PRD §5.2 calls the default tier "standard"; OpenAI accepts
     only auto, default, fast, flex and priority."""
     kwargs = _reader("openai")._effort_kwargs()

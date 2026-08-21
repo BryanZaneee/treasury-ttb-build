@@ -371,10 +371,10 @@ required was a per-provider table with one row in it.
 
 1. **Effort clamp.** Configured effort is raised to the provider floor (`none`), and an
    unrecognised value falls to it rather than being forwarded. Asserted in `test_readers.py`.
-2. **Service tier.** The API does not accept the value `standard` this document names as the
-   default; the valid values are `auto`, `default`, `fast`, `flex` and `priority`. The adapter
-   maps `standard` onto `auto`. Found by calling the endpoint, and asserted in
-   `test_readers.py`.
+2. **Service tier.** The API does not accept the value `standard` v1.1 named as the default;
+   the valid values are `auto`, `default`, `fast`, `flex` and `priority`. The adapter sends
+   `auto` as a constant — v1.1 made this a `READER_SERVICE_TIER` knob, but it only ever held
+   one value, so the setting was dropped in v1.2. Asserted in `test_readers.py`.
 
 **Configuration.**
 
@@ -384,7 +384,6 @@ READER_MODEL=gpt-5.6-luna
 READER_BASE_URL=                    # empty = OpenAI default
 READER_API_KEY=                     # OPENAI_API_KEY takes precedence
 READER_EFFORT=none                  # clamped to the provider floor
-READER_SERVICE_TIER=standard        # mapped onto the API's `auto`
 READER_TIMEOUT_S=25
 READER_CONCURRENCY=10
 DAILY_VISION_CALL_CAP=300           # paid calls per UTC day; 0 disables

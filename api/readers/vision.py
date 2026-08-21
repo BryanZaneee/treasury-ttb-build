@@ -34,7 +34,7 @@ RETRIES = 2
 _REASONING_MODEL = re.compile(r"^(gpt-[5-9]|o[1-9])", re.IGNORECASE)
 
 # PRD §5.2 calls the default tier "standard"; the API does not have that value.
-_SERVICE_TIER = {"standard": "auto"}
+_SERVICE_TIER = "auto"
 
 
 class ReaderError(RuntimeError):
@@ -98,14 +98,12 @@ class VisionReader:
         api_key: str,
         base_url: str = "",
         effort: str = "low",
-        service_tier: str = "standard",
         timeout_s: float = 25.0,
         daily_call_cap: int = 0,
     ) -> None:
         self.provider = provider
         self.model = model
         self.effort = clamp_effort(effort)
-        self.service_tier = service_tier
         self.prompt_version = VERSION
         self.daily_call_cap = daily_call_cap
         if not api_key:
@@ -165,14 +163,8 @@ class VisionReader:
         return self._to_reading(json.loads(content))
 
     def _effort_kwargs(self) -> dict[str, Any]:
-        """Request knobs as the live API actually accepts them (PRD §5.2).
-
-        Correcting the spec from the real endpoint: `service_tier` does not
-        accept "standard", so the PRD's default is mapped onto `auto`.
-        """
-        kwargs: dict[str, Any] = {"service_tier": _SERVICE_TIER.get(
-            self.service_tier, self.service_tier
-        )}
+        """Request knobs as the live API actually accepts them (PRD §5.2)."""
+        kwargs: dict[str, Any] = {"service_tier": _SERVICE_TIER}
         # `reasoning_effort` is a 400 on a non-reasoning model, so gate on name.
         # ponytail: name prefix; swap for a capability lookup if one ships.
         if _REASONING_MODEL.match(self.model):
