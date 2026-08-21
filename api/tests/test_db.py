@@ -8,6 +8,8 @@ import sqlite3
 import threading
 from typing import Any
 
+import pytest
+
 import db
 
 
@@ -226,3 +228,42 @@ def test_migration_006_upgrades_a_populated_store_in_place() -> None:
         ("brand", "review", "caps")
     ]
     assert fields[0]["confidence"] == 0.9
+
+
+def test_a_failed_mirror_write_does_not_wedge_the_writer(monkeypatch: Any) -> None:
+    """The flush releases its slot in `finally`. Without that, one raising write
+    - wipe() unlinks the store under it - leaves the slot set and every later
+    mutation early-returns, so the mirror silently stops updating for good."""
+    calls: list[int] = []
+
+    def boom() -> None:
+        calls.append(1)
+        raise sqlite3.OperationalError("no such table: records")
+
+    monkeypatch.setattr(db, "write_mirror", boom)
+    db.schedule_mirror_write()
+    # It still propagates - in production that kills only the Timer thread.
+    with pytest.raises(sqlite3.OperationalError):
+        db._flush_mirror()
+    assert calls == [1]
+    assert db._mirror_timer is None, "slot still held after a failed write"
+
+    # The writer is still usable, which is the property that was broken.
+    monkeypatch.setattr(db, "write_mirror", lambda: calls.append(2))
+    db.schedule_mirror_write()
+    db._flush_mirror()
+    assert calls == [1, 2]
+
+
+def test_a_mutation_during_a_mirror_write_is_not_swallowed() -> None:
+    """schedule_mirror_write marks dirty before its early return, so a write
+    arriving mid-flush re-arms the timer instead of being debounced away."""
+    db.schedule_mirror_write()
+    assert db._mirror_dirty is True
+    db._flush_mirror()
+    # A mutation landing while the flush ran must leave the flag set again.
+    db.schedule_mirror_write()
+    assert db._mirror_dirty is True
+    assert db._mirror_timer is not None
+    db.wipe()
+    assert db._mirror_timer is None and db._mirror_dirty is False

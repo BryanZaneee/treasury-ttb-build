@@ -406,11 +406,12 @@ def extraction_cache_put(key: str, payload: dict[str, Any]) -> None:
 
 def wipe() -> None:
     """Delete and recreate the store. Used by reset and by test teardown."""
-    global _mirror_timer
+    global _mirror_timer, _mirror_dirty
     for thread in _background:
         thread.join(timeout=5)
     _background.clear()
     with _mirror_lock:
+        _mirror_dirty = False
         if _mirror_timer is not None:
             _mirror_timer.cancel()
             _mirror_timer = None
@@ -473,12 +474,16 @@ def write_mirror() -> None:
 
 _mirror_lock = threading.Lock()
 _mirror_timer: threading.Timer | None = None
+_mirror_dirty = False
 
 
 def schedule_mirror_write() -> None:
     """Debounced: at most once per second, coalescing a burst of mutations."""
-    global _mirror_timer
+    global _mirror_timer, _mirror_dirty
     with _mirror_lock:
+        # Marked before the early return: a mutation arriving while the flush is
+        # mid-write would otherwise be swallowed by the debounce and never land.
+        _mirror_dirty = True
         if _mirror_timer is not None:
             return
         _mirror_timer = threading.Timer(1.0, _flush_mirror)
@@ -487,7 +492,16 @@ def schedule_mirror_write() -> None:
 
 
 def _flush_mirror() -> None:
-    global _mirror_timer
-    write_mirror()
+    global _mirror_timer, _mirror_dirty
     with _mirror_lock:
-        _mirror_timer = None
+        _mirror_dirty = False
+    try:
+        write_mirror()
+    finally:
+        # Released in `finally` because write_mirror can raise - wipe() unlinks
+        # the store under it - and a slot left set wedges the mirror for good.
+        with _mirror_lock:
+            _mirror_timer = None
+            again = _mirror_dirty
+        if again:
+            schedule_mirror_write()
