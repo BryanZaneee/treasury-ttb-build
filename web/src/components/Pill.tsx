@@ -1,5 +1,5 @@
 import type { Verdict } from '../api/client'
-import { PILL_TEXT, kindOf } from '../lib/verdict'
+import { PILL_TEXT, kindOf } from '../lib/copy'
 
 export function Pill({
   verdict,

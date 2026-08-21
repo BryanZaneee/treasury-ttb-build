@@ -1,24 +1,20 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// PUBLIC_BASE_PATH threads into Vite `base` and the Router `basename`
-// (PRD §9) so the app can be served under a subpath in production.
+// PUBLIC_BASE_PATH threads into Vite `base` and the Router `basename` (PRD §9).
 export default defineConfig(({ mode }) => {
   // .env lives at the repo root (shared with the API, per PRD §9), not in web/.
   const envDir = '..'
   const env = loadEnv(mode, envDir, '')
-  // process.env wins so a deploy can build for a subpath without editing the
-  // shared .env, which would break the local dev server at the same time.
+  // process.env wins, so a deploy can build for a subpath without editing .env.
   const base = process.env.PUBLIC_BASE_PATH || env.PUBLIC_BASE_PATH || '/'
   return {
     base,
     envDir,
     plugins: [react()],
-    // Vitest's default glob would also collect the Playwright specs in e2e/,
-    // which need a browser and a running server. Unit tests live in src/.
+    // Vitest's default glob would also collect the Playwright specs in e2e/.
     test: { include: ['src/**/*.{test,spec}.{ts,tsx}'] },
-    // Dev only: the production topology puts Caddy in front and routes /api to
-    // the API container (PRD §9), so this proxy stands in for that locally.
+    // Dev only: Caddy does this in production (PRD §9).
     server: {
       proxy: {
         '/api': {

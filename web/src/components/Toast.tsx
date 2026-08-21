@@ -4,12 +4,8 @@ import { ToastContext } from '../lib/toast'
 import type { Toast } from '../lib/toast'
 
 /**
- * Toasts report the outcome of something the reviewer started and then stopped
- * watching: a determination that came back while they were filling in the next
- * form, or a reading produced by a reader other than the configured one.
- *
- * Announced in a live region, because a reviewer working the queue by keyboard
- * has no reason to be looking at the bottom-right of the screen (PRD §8).
+ * The outcome of something the reviewer started and stopped watching. Announced
+ * in a live region: working the queue by keyboard is no reason to miss it (§8).
  */
 
 const TOAST_MS = 12_000
@@ -26,10 +22,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (t: Omit<Toast, 'id'>) => {
       const id = Date.now() + Math.random()
       setToasts((prev) => [...prev, { ...t, id }])
-      // Every toast clears itself, including the ones carrying an action: a
-      // reviewer filing one label after another was stacking notices they had
-      // to dismiss by hand, and everything a toast offers is reachable again
-      // from the inbox.
+      // All of them, actions included: filing one after another stacked notices,
+      // and everything a toast offers is reachable again from the inbox.
       setTimeout(() => dismiss(id), TOAST_MS)
     },
     [dismiss],

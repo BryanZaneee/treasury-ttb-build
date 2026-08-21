@@ -14,22 +14,17 @@ export function App() {
 
   const location = useLocation()
 
-  // The masthead badge counts what needs an agent, so it is the same number the
-  // inbox leads with rather than a second definition of "outstanding". It asks
-  // for the counts alone: rendering one integer used to pull every record in
-  // the store on each route change, because the query had no staleTime and the
-  // client cache-busts every GET.
+  // The same number the inbox leads with, not a second definition of
+  // "outstanding" - and the counts alone, so one integer is not a whole store.
   const counts = useQuery({
-    // Under the 'records' prefix so every invalidateQueries(['records']) in the
-    // app refreshes the badge too.
+    // Under the 'records' prefix, so any invalidation refreshes the badge too.
     queryKey: ['records', 'counts'],
     queryFn: () => api<RecordsPage>('/records?counts_only=true'),
     staleTime: 30_000,
   })
   const attention = counts.data?.counts.attention ?? 0
 
-  // Verdict quality depends on which reader actually ran, so a degraded one is
-  // masthead news.
+  // Verdict quality depends on which reader ran, so a degraded one is news.
   const health = useQuery({
     queryKey: ['health'],
     queryFn: () => api<Health>('/health'),
@@ -69,8 +64,7 @@ export function App() {
             </NavLink>
           </nav>
 
-          {/* Who the determinations are recorded against, not a menu: what the
-              dialog behind it offered is all on Records now. */}
+          {/* Who determinations are recorded against, not a menu. */}
           <div className="agent">
             <div className="agent-avatar">{REVIEWER.initials}</div>
             <div>
@@ -103,8 +97,7 @@ export function App() {
           {/* Older links kept working rather than 404ing. */}
           <Route path="/settings" element={<Navigate to="/export" replace />} />
           <Route path="/store" element={<Navigate to="/export" replace />} />
-          {/* Anything else — including the retired /dev bench — lands in the
-              inbox rather than rendering an empty page. */}
+          {/* Anything else lands in the inbox rather than an empty page. */}
           <Route path="*" element={<Navigate to="/inbox" replace />} />
         </Routes>
         </ErrorBoundary>

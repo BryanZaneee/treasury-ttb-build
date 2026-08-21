@@ -7,7 +7,8 @@ import { PICK_LABEL, verdictSummary } from '../lib/copy'
 import { useEscape } from '../lib/dialog'
 import { waitForJob } from '../lib/job'
 import { useToast } from '../lib/toast'
-
+import { Lightbox } from '../components/Lightbox'
+import { Dialog } from '../components/Dialog'
 
 const BUCKET: Record<string, { label: string; pill: string }> = {
   matched: { label: 'Matched', pill: 'pill-match' },
@@ -19,9 +20,7 @@ const BUCKET: Record<string, { label: string; pill: string }> = {
 const REQUIRED =
   'filename, brand_name, class_type, alcohol_content, net_contents, producer, country_of_origin, government_warning, applicant'
 
-/** Where the staged batch id is remembered, so a reviewer can leave the page
-    and come back to the batch they were working on. The batch itself lives on
-    the server (PRD §5.5) - this is only the pointer at it. */
+/** The pointer at the staged batch; the batch itself lives on the server (§5.5). */
 const BATCH_KEY = 'ttb.batch'
 
 export function CheckBatch() {
@@ -32,8 +31,7 @@ export function CheckBatch() {
   // The row whose image picker is open, and the selection the bulk bar acts on.
   const [picking, setPicking] = useState<StagedRow | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
-  // Set while a commit is waiting on the reviewer to accept that rows without
-  // a specimen will be dropped rather than filed.
+  // Set while a commit waits for the reviewer to accept that ambiguous rows drop.
   const [dropWarn, setDropWarn] = useState<{ rows: number[]; verify: boolean } | null>(null)
   const [clearing, setClearing] = useState(false)
   const csvRef = useRef<HTMLInputElement>(null)
@@ -48,8 +46,7 @@ export function CheckBatch() {
   const [imgCount, setImgCount] = useState('No images selected')
   const [imgFiles, setImgFiles] = useState(0)
 
-  // The pickers name what is about to be staged, so they are stale the moment
-  // it has been.
+  // The pickers name what is about to be staged, so staging makes them stale.
   const resetPickers = () => {
     setCsvName('No file selected')
     setImgCount('No images selected')
@@ -63,9 +60,8 @@ export function CheckBatch() {
 
   const stagedBatch = useQuery({
     queryKey: ['batch', batchId],
-    // The id can outlive the batch - a fixtures reset, or a restart of a store
-    // that was wiped underneath it. Drop the pointer on the way past rather
-    // than holding the page on a 404 the reviewer cannot act on.
+    // The id can outlive the batch (a fixtures reset, a wiped store), so drop
+    // the pointer rather than hold the page on a 404 nobody can act on.
     queryFn: async () => {
       try {
         return await api<StagedBatch>(`/batches/${batchId}`)
@@ -84,8 +80,7 @@ export function CheckBatch() {
     setBatchId('')
   }
 
-  /** Put the staged batch down without filing it, and empty the pickers with
-      it. The batch stays on the server; nothing was ever written to the store. */
+  /** Put the batch down without filing it; nothing was ever written to the store. */
   const clearStaging = () => {
     forget()
     setSelected(new Set())
@@ -100,7 +95,6 @@ export function CheckBatch() {
     client.setQueryData(['batch', data.batch_id], data)
     setError(null)
   }
-
 
   const loadSample = useMutation({
     mutationFn: () =>
@@ -140,8 +134,7 @@ export function CheckBatch() {
     onError: (e) => setError(String(e)),
   })
 
-  // Removing the image, not just the pairing: an uploaded file nobody wants in
-  // this batch stops being offered to every other row's picker too.
+  // The image, not just the pairing: it stops being offered to every row.
   const discard = useMutation({
     mutationFn: (name: string) =>
       api<StagedBatch>(
@@ -200,10 +193,8 @@ export function CheckBatch() {
       setSelected(new Set())
       client.invalidateQueries({ queryKey: ['records'] })
       reportJob(finished)
-      // The filed rows are gone from the staged document; re-read what is left
-      // rather than guessing at it client side. A fully consumed batch answers
-      // 404, which is the same outcome as an empty one - not an error to raise
-      // after the rows have already filed.
+      // Re-read what is left rather than guess. A fully consumed batch answers
+      // 404, which is the same outcome as an empty one, not an error.
       try {
         const left = await api<StagedBatch>(`/batches/${batchId}`)
         if (left.rows.length === 0) forget()
@@ -215,8 +206,7 @@ export function CheckBatch() {
     onError: (e) => setError(String(e)),
   })
 
-  /** What the batch did, once it has done it. It carries the way into the queue
-      it just filled, so it is the one toast worth reading before it goes. */
+  /** What the batch did, with the way into the queue it just filled. */
   const reportJob = (job: Job) => {
     const verdicts = verdictSummary(job.verdicts)
     toast({
@@ -251,11 +241,9 @@ export function CheckBatch() {
     })
   }
 
-  /** File these rows, first warning about the ones that cannot be filed as they
-      stand. PRD §5.5 blocks commit on `ambiguous` alone - two images normalise
-      to the same stem, so there is no single label to file. A `missing_image`
-      row is not an error: it files and is editable, it just cannot be verified
-      (acceptance test 9 - "1 files as image-missing, no row lost"). */
+  /** File these rows, warning first about the ones that cannot be. PRD §5.5
+      blocks on `ambiguous` alone; `missing_image` files and simply cannot be
+      verified (acceptance test 9 - "1 files as image-missing, no row lost"). */
   const unresolved = (rows: number[]) =>
     (batch?.rows ?? []).filter((r) => rows.includes(r.row) && r.bucket === 'ambiguous')
 
@@ -356,9 +344,8 @@ export function CheckBatch() {
               </div>
             )}
             {staging ? (
-              /* ponytail: indeterminate on purpose. Staging is one request with
-                 no server-side job to poll, unlike commit, so a percentage
-                 would be invented. */
+              /* ponytail: indeterminate on purpose - staging is one request with
+                 no job to poll, so a percentage would be invented. */
               <div className="dropzone batch-empty" style={{ marginTop: 12, padding: 20 }}>
                 <div className="dropzone-hint" style={{ fontSize: 13.5 }}>
                   <span className="spinner spinner-dark" />{' '}
@@ -379,9 +366,7 @@ export function CheckBatch() {
               </div>
             ) : (
               <>
-                {/* General, not specific: the Pairing column says what is wrong
-                    with each row, and repeating it here was a second list to
-                    keep in step with the first. */}
+                {/* General, not per row: the Pairing column already says which. */}
                 {unresolved(rowNumbers).length > 0 && (
                   <div className="banner banner-error" style={{ marginTop: 12, marginBottom: 0 }}>
                     <div className="banner-mark" aria-hidden="true">
@@ -394,9 +379,8 @@ export function CheckBatch() {
                     </div>
                   </div>
                 )}
-                {/* A fuzzy pairing is the one bucket that files silently while
-                    still being a guess, so it says so once at the top rather
-                    than only as an amber pill partway down a 25-row table. */}
+                {/* The one bucket that files silently while still being a guess,
+                    so it says so once at the top of the table. */}
                 {batch.summary.matched_fuzzy > 0 && (
                   <div className="banner" style={{ marginTop: 12, marginBottom: 0 }}>
                     <div className="banner-mark" aria-hidden="true">
@@ -410,10 +394,8 @@ export function CheckBatch() {
                     </div>
                   </div>
                 )}
-                {/* PRD §5.5's fifth bucket. Images nothing claimed are listed
-                    here "so nothing vanishes silently" - the staged table has a
-                    row per application, so an unclaimed image has nowhere else
-                    to appear. */}
+                {/* PRD §5.5's fifth bucket: the table has a row per application,
+                    so an unclaimed image has nowhere else to appear. */}
                 {batch.summary.unused_images.length > 0 && (
                   <div className="banner" style={{ marginTop: 12, marginBottom: 0 }}>
                     <div className="banner-mark" aria-hidden="true">
@@ -430,10 +412,8 @@ export function CheckBatch() {
                 <div className="scroll-x" style={{ marginTop: 12 }}>
                   <table className="staged-table">
                     <thead>
-                      {/* The bar replaces the header row rather than sitting
-                          above it, so ticking a box does not push the table
-                          down - and inside the table it scrolls with the
-                          columns it acts on. */}
+                      {/* Replaces the header rather than sitting above it, and
+                          scrolls with the columns it acts on. */}
                       {selected.size > 0 ? (
                         <tr>
                           <th className="bulkbar-cell" colSpan={8}>
@@ -584,20 +564,12 @@ export function CheckBatch() {
       </div>
 
       {preview && (
-        <div
-          className="dialog-backdrop"
-          role="dialog"
-          aria-label={preview}
-          aria-modal="true"
-          tabIndex={-1}
-          autoFocus
-          onClick={() => setPreview(null)}
-        >
-          <figure className="lightbox">
-            <img src={imageUrl(preview)} alt={preview} />
-            <figcaption className="mono">{preview}</figcaption>
-          </figure>
-        </div>
+        <Lightbox
+          src={imageUrl(preview)}
+          alt={preview}
+          caption={preview}
+          onClose={() => setPreview(null)}
+        />
       )}
 
       {picking && batch && (
@@ -620,25 +592,12 @@ export function CheckBatch() {
       )}
 
       {clearing && batch && (
-        <div className="dialog-backdrop" role="presentation" onClick={() => setClearing(false)}>
-          <div
-            className="dialog dialog-sm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="clear-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="dialog-head">
-              <h2 id="clear-title">Clear the staged batch?</h2>
-            </div>
-            <div className="dialog-body">
-              <p className="card-note">
-                {batch.rows.length} staged row{batch.rows.length === 1 ? '' : 's'} and the
-                pairing work done on them are discarded. Nothing has been filed yet, so nothing
-                is removed from the store, but the CSV and its images have to be uploaded again.
-              </p>
-            </div>
-            <div className="dialog-foot">
+        <Dialog
+          title="Clear the staged batch?"
+          titleId="clear-title"
+          onClose={() => setClearing(false)}
+          footer={
+            <>
               <button
                 className="btn btn-danger"
                 onClick={() => {
@@ -651,43 +610,24 @@ export function CheckBatch() {
               <button className="btn btn-quiet" onClick={() => setClearing(false)}>
                 Cancel
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="card-note">
+            {batch.rows.length} staged row{batch.rows.length === 1 ? '' : 's'} and the pairing work
+            done on them are discarded. Nothing has been filed yet, so nothing is removed from the
+            store, but the CSV and its images have to be uploaded again.
+          </p>
+        </Dialog>
       )}
 
       {dropWarn && batch && (
-        <div className="dialog-backdrop" role="presentation" onClick={() => setDropWarn(null)}>
-          <div
-            className="dialog dialog-sm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="drop-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="dialog-head">
-              <h2 id="drop-title">Some rows match more than one image</h2>
-            </div>
-            <div className="dialog-body">
-              <div className="banner">
-                <div className="banner-mark" aria-hidden="true">
-                  !
-                </div>
-                <div className="banner-text">
-                  Two or more uploaded images normalise to the same filename, so there is no
-                  single label to file. These rows will be <strong>dropped, not filed</strong>.
-                  Pick a label for them first if you want to keep them.
-                </div>
-              </div>
-              {unresolved(dropWarn.rows).map((r) => (
-                <div className="staged-drop-row" key={r.row}>
-                  <span className="num">{batch.rows.indexOf(r) + 1}</span>
-                  <span>{r.applicant || r.brand || 'No applicant'}</span>
-                  <span>More than one match</span>
-                </div>
-              ))}
-            </div>
-            <div className="dialog-foot">
+        <Dialog
+          title="Some rows match more than one image"
+          titleId="drop-title"
+          onClose={() => setDropWarn(null)}
+          footer={
+            <>
               <button
                 className="btn"
                 disabled={commit.isPending}
@@ -709,9 +649,27 @@ export function CheckBatch() {
               <button className="btn btn-quiet push" onClick={() => setDropWarn(null)}>
                 Cancel
               </button>
+            </>
+          }
+        >
+          <div className="banner">
+            <div className="banner-mark" aria-hidden="true">
+              !
+            </div>
+            <div className="banner-text">
+              Two or more uploaded images normalise to the same filename, so there is no single
+              label to file. These rows will be <strong>dropped, not filed</strong>. Pick a label
+              for them first if you want to keep them.
             </div>
           </div>
-        </div>
+          {unresolved(dropWarn.rows).map((r) => (
+            <div className="staged-drop-row" key={r.row}>
+              <span className="num">{batch.rows.indexOf(r) + 1}</span>
+              <span>{r.applicant || r.brand || 'No applicant'}</span>
+              <span>More than one match</span>
+            </div>
+          ))}
+        </Dialog>
       )}
     </div>
   )
@@ -730,9 +688,8 @@ function StagedTableRow({
   onDrop,
 }: {
   row: StagedRow
-  /* Where the row sits in the table. `row.row` is its identity in the staged
-     batch and keeps its number when the rows above it are dropped, which is
-     right for the API and wrong for a column headed #. */
+  /* `row.row` keeps its number when rows above it are dropped - right for the
+     API, wrong for a column headed #. */
   position: number
   busy: boolean
   checked: boolean
@@ -756,8 +713,7 @@ function StagedTableRow({
       </td>
       <td className="num">{position}</td>
       <td>
-        {/* The thumbnail enlarges the specimen, as it does in the review inbox.
-            With no specimen it is the shortest way to supply one. */}
+        {/* Enlarges the specimen, or supplies one when the row has none. */}
         <button
           type="button"
           className="thumb"
@@ -801,11 +757,8 @@ function StagedTableRow({
       </td>
       <td className="staged-actions">
         <div className="row">
-          {/* PRD §5.5 flags a fuzzy pairing "for visual confirmation before
-              commit", and until now the only answer the preview offered was to
-              change it. Confirming re-sends the image the row already holds:
-              batching.assign treats any human assignment as `matched`, and
-              re-asserting a row's own image is idempotent. */}
+          {/* PRD §5.5 wants "visual confirmation before commit". Confirming
+              re-sends the row's own image; assign treats that as `matched`. */}
           {row.bucket === 'matched_fuzzy' && (
             <button className="btn btn-quiet btn-sm" disabled={busy} onClick={onConfirm}>
               Confirm
@@ -832,10 +785,9 @@ function StagedTableRow({
 }
 
 /**
- * Pair one staged row with an image: its own candidates first, then anything no
- * other row claimed, then a file off the reviewer's machine. This is also how
- * an ambiguous row is settled - two uploads normalising to one name are both
- * listed, and the spare can be dropped from the batch here.
+ * Pair a staged row with an image: its own candidates, then anything unclaimed,
+ * then a file off the machine. Also how an ambiguous row is settled - both
+ * candidates are listed and the spare can be dropped here.
  */
 function ImagePicker({
   row,
@@ -857,69 +809,27 @@ function ImagePicker({
   onClose: () => void
 }) {
   const pick = useRef<HTMLInputElement>(null)
-  // The uploads that made this row ambiguous are the answer to the question the
-  // reviewer opened this dialog with, so they lead, under their own heading,
-  // rather than being mixed in with every other unclaimed file.
+  // The uploads that made this row ambiguous lead under their own heading,
+  // rather than mixed in with every other unclaimed file.
   const conflicting = row.bucket === 'ambiguous' ? row.candidate_filenames : []
   const others = [
     ...new Set([...(row.image ? [row.image] : []), ...row.candidate_filenames, ...unused]),
   ].filter((name) => !conflicting.includes(name))
   return (
-    <div className="dialog-backdrop" role="presentation" onClick={onClose}>
-      <div
-        className="dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="picker-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="dialog-head">
-          <h2 id="picker-title">Image for row {position}</h2>
-          <p className="card-note">
-            Filed as <span className="mono">{row.filename || 'no filename'}</span>
-            {row.bucket === 'ambiguous' &&
-              '. More than one upload matches this name, so pick the right one.'}
-          </p>
-        </div>
-
-        <div className="dialog-body">
-          {conflicting.length === 0 && others.length === 0 && (
-            <p className="card-note">
-              No unclaimed images are left in this batch. Upload the label instead.
-            </p>
-          )}
-          {conflicting.length > 0 && (
-            <>
-              <div className="picker-group">
-                {conflicting.length} uploads normalise to this row&rsquo;s filename. Pick the one
-                that belongs to it, and remove the other with its × so it stops matching.
-              </div>
-              <ImageChoices
-                names={conflicting}
-                row={row}
-                busy={busy}
-                onPick={onPick}
-                onDiscard={onDiscard}
-              />
-            </>
-          )}
-          {others.length > 0 && (
-            <>
-              {conflicting.length > 0 && (
-                <div className="picker-group">Other unclaimed uploads</div>
-              )}
-              <ImageChoices
-                names={others}
-                row={row}
-                busy={busy}
-                onPick={onPick}
-                onDiscard={onDiscard}
-              />
-            </>
-          )}
-        </div>
-
-        <div className="dialog-foot">
+    <Dialog
+      title={`Image for row ${position}`}
+      titleId="picker-title"
+      wide
+      onClose={onClose}
+      subtitle={
+        <p className="card-note">
+          Filed as <span className="mono">{row.filename || 'no filename'}</span>
+          {row.bucket === 'ambiguous' &&
+            '. More than one upload matches this name, so pick the right one.'}
+        </p>
+      }
+      footer={
+        <>
           <input
             ref={pick}
             type="file"
@@ -943,14 +853,48 @@ function ImagePicker({
           <button className="btn btn-quiet push" onClick={onClose}>
             Close
           </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      {conflicting.length === 0 && others.length === 0 && (
+        <p className="card-note">
+          No unclaimed images are left in this batch. Upload the label instead.
+        </p>
+      )}
+      {conflicting.length > 0 && (
+        <>
+          <div className="picker-group">
+            {conflicting.length} uploads normalise to this row&rsquo;s filename. Pick the one
+            that belongs to it, and remove the other with its × so it stops matching.
+          </div>
+          <ImageChoices
+            names={conflicting}
+            row={row}
+            busy={busy}
+            onPick={onPick}
+            onDiscard={onDiscard}
+          />
+        </>
+      )}
+      {others.length > 0 && (
+        <>
+          {conflicting.length > 0 && (
+            <div className="picker-group">Other unclaimed uploads</div>
+          )}
+          <ImageChoices
+            names={others}
+            row={row}
+            busy={busy}
+            onPick={onPick}
+            onDiscard={onDiscard}
+          />
+        </>
+      )}
+    </Dialog>
   )
 }
 
-/** The thumbnails one group of the picker offers: click to pair the row with
-    it, × to drop the file from the batch entirely. */
+/** Click to pair the row with it, × to drop the file from the batch. */
 function ImageChoices({
   names,
   row,

@@ -1,5 +1,4 @@
-/* Design tokens transcribed verbatim from PRD §6.2 — the prototype's values,
-   not approximations. */
+/* Design tokens transcribed verbatim from PRD §6.2, not approximated. */
 
 :root {
   /* surfaces */
@@ -22,12 +21,9 @@
   --ink-3: #3c4855;
   --ink-4: #55606e;
   --ink-5: #6a7481;
-  /* Darkened from the prototype's #78838f, a deliberate deviation from PRD
-     §6.2. It carries small secondary text - filenames, hints, the "Not
-     declared" placeholder - and at #78838f that text measured 3.6-3.9:1,
-     under WCAG AA's 4.5:1 for normal-size type. #66707d is the smallest
-     darkening that clears AA on every surface it lands on, including the
-     sunk panels and the tinted verdict headers (axe, e2e/a11y.spec.ts). */
+  /* PRD §6.2 deviation: the prototype's #78838f measured 3.6-3.9:1 on small
+     secondary text, under AA's 4.5:1. This is the smallest darkening that
+     clears AA on every surface it lands on (axe, e2e/a11y.spec.ts). */
   --ink-6: #66707d;
 
   /* action */
@@ -51,8 +47,8 @@
   --pending-bg: #e9eef4; --pending-fg: #3c4855; --pending-bd: #cdd5df; --pending-dot: #8b95a1;
   --pending-head: #f3f6f9; --pending-head-bd: #d3dae3;
 
-  /* invalid (PRD §3.2 ext): deliberately not the fail red - the label did not
-     fail, the wrong image was filed. Slate, so it reads as "no determination". */
+  /* invalid (PRD §3.2 ext): slate, not the fail red - the label did not fail,
+     the wrong image was filed. */
   --invalid-bg: #e7eaee; --invalid-fg: #3f4a57; --invalid-bd: #c3cad3;
   --invalid-dot: #6a7481; --invalid-head: #f0f2f5; --invalid-head-bd: #d3dae3;
 
@@ -62,11 +58,8 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
-/* The masthead and main are both `max-width: 1280px; margin: 0 auto`, so a
-   scrollbar that comes and goes moves every centred thing on the page. The
-   inbox and the single-label form scroll; the batch and export pages do not,
-   and stepping between them slid the whole navigation sideways. Reserve the
-   gutter and the page stops moving. */
+/* Masthead and main are both centred at 1280px, so a scrollbar that comes and
+   goes slides the whole navigation sideways between routes. */
 html { scrollbar-gutter: stable; }
 body {
   background: var(--desk);
@@ -113,9 +106,8 @@ input, textarea, select { font-family: inherit; }
 }
 .nav a:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
 .nav a.active { background: #14507d; border-color: #2f6d9e; color: #fff; }
-/* Masthead-wide notice: the reader that is actually running is not the one
-   verdict quality assumes. Sits under the masthead so it is unmissable and
-   pushes the page rather than covering it. */
+/* The running reader is not the one verdict quality assumes. Under the masthead
+   so it pushes the page rather than covering it. */
 .strip-warn {
   background: var(--review-head); border-bottom: 1px solid var(--review-head-bd);
   color: #6b4a05; font-size: 13px; line-height: 1.5;
@@ -153,8 +145,7 @@ h1 { margin: 0; font-size: 27px; font-weight: 700; letter-spacing: -0.022em; col
 .lede { font-size: 14.5px; color: var(--ink-3); line-height: 1.6; max-width: 640px; margin: 10px 0 0; }
 
 .mono { font-family: var(--mono); }
-/* Announced, not shown. PRD §8 asks for a live-region announcement on
-   verification completion, and a bare spinner is a sighted-only signal. */
+/* Announced, not shown: PRD §8 wants more than a sighted-only spinner. */
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
@@ -177,8 +168,8 @@ h1 { margin: 0; font-size: 27px; font-weight: 700; letter-spacing: -0.022em; col
   font-family: var(--mono); font-size: 30px; font-weight: 600; line-height: 1;
   letter-spacing: -0.02em; color: var(--pending-dot);
 }
-/* --ink-4, not --ink-6: at 11.5px this is normal-size text, and --ink-6 comes
-   in at 3.9:1 against the card, under WCAG AA's 4.5:1 (axe, e2e/a11y.spec.ts). */
+/* --ink-4, not --ink-6: at 11.5px this is normal-size text, and --ink-6 is
+   3.9:1 against the card, under AA (axe, e2e/a11y.spec.ts). */
 .kpi-hint { font-size: 11.5px; color: var(--ink-4); margin-top: 7px; font-weight: 400; }
 .kpi-pending { border-left-color: var(--pending-dot); }
 .kpi-pending .kpi-value { color: var(--pending-dot); }
@@ -206,8 +197,7 @@ h1 { margin: 0; font-size: 27px; font-weight: 700; letter-spacing: -0.022em; col
   background: var(--fail-head); border: 1px solid var(--fail-bd); color: var(--fail-fg);
   border-radius: 4px; padding: 13px 16px; margin-bottom: 18px; font-size: 13.5px; line-height: 1.5;
 }
-/* Same shape as .banner, in the fail palette, for the times an error wants the
-   mark beside it rather than a wall of red text. */
+/* .banner's shape in the fail palette, for an error wanting the mark beside it. */
 .banner-error.banner { background: var(--fail-head); border-color: var(--fail-bd); }
 .banner-error .banner-mark { background: var(--fail-fg); }
 .banner-error .banner-text { color: var(--fail-fg); }
@@ -268,10 +258,8 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 .segmented button[aria-pressed='true'] {
   background: var(--paper); color: var(--ink); box-shadow: 0 1px 2px rgba(16, 40, 61, 0.14);
 }
-/* Dimmed by tone rather than opacity: 0.65 over --ink-4 dropped the count to
-   3.4:1 against the control's own background. --ink-5 clears AA on the pressed
-   button's white ground but not on the control's tint, so the unpressed state
-   takes the darker one. */
+/* Dimmed by tone, not opacity: 0.65 dropped the count to 3.4:1. --ink-5 clears
+   AA on the pressed button's white but not the control's tint. */
 .segmented .count { font-family: var(--mono); color: var(--ink-4); }
 .segmented button[aria-pressed='true'] .count { color: var(--ink-5); }
 
@@ -288,18 +276,16 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 }
 .card-note { font-size: 12.5px; color: var(--ink-5); line-height: 1.55; margin: 6px 0 0; }
 
-/* Hover/focus help affordance. The explanation lives in the native `title`
-   tooltip, so there is no popover to position or dismiss. */
+/* Hover/focus help affordance; the bubble below is the explanation. */
 .help-dot {
+  position: relative;
   width: 18px; height: 18px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
   border: 1px solid var(--field); background: var(--paper); color: var(--ink-4);
   font-size: 11px; font-weight: 700; cursor: help; user-select: none;
 }
-.help-dot { position: relative; }
 .help-dot:hover, .help-dot:focus-visible { color: var(--ink-2); border-color: var(--ink-4); }
-/* The explanation, as a bubble on the dot itself. A native `title` needs a
-   second of hover to appear, which is long enough to miss. */
+/* A bubble on the dot: a native `title` takes a second to appear. */
 .help-dot::after {
   content: attr(data-tip);
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 30;
@@ -318,8 +304,7 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 .queue-head {
   display: grid; grid-template-columns: 34px 30px 76px minmax(0, 1fr); gap: 14px;
   align-items: center;
-  /* Shared with .bulkbar, which replaces this row while a selection is active:
-     equal heights are what stop the table jumping when the first box is ticked. */
+  /* Shared with .bulkbar, which replaces this row: equal heights stop the jump. */
   min-height: 44px;
   padding-left: 16px;
   background: var(--sunk); border-bottom: 1px solid var(--rule);
@@ -327,8 +312,7 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
   color: var(--ink-4);
 }
 .queue-item { border-bottom: 1px solid var(--rule-soft); }
-/* The header and the row share the same 34px track, so the box is centred in it
-   rather than left-aligned with the browser's asymmetric default margin. */
+/* Header and row share the 34px track, so the box centres in it. */
 .queue-head > :first-child, .queue-row > :first-child { justify-self: center; margin: 0; }
 .dot { width: 11px; height: 11px; border-radius: 50%; margin: 0 auto; }
 .thumb {
@@ -389,21 +373,16 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 .fields-name { font-size: 14px; font-weight: 700; color: var(--ink); letter-spacing: -0.008em; }
 .fields-note { font-size: 12px; color: var(--ink-5); margin-top: 4px; line-height: 1.5; }
 .fields-value { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
-/* The application column doubles as the correction form: the reviewer types
-   into the determination itself rather than into a second copy of the seven
-   fields kept somewhere else on the page. */
+/* The application column doubles as the correction form. */
 .fields-edit { font-size: 13px; }
 .fields-row .check-row { padding: 8px 10px; min-height: 40px; font-size: 12px; }
-/* The application cell keeps the input's own box whether or not it holds one,
-   so turning the column into the form moves nothing on the page. */
+/* Keeps the input's box either way, so becoming the form moves nothing. */
 .fields-app {
   display: flex;
   align-items: center;
-  /* The input's own outer height, so the row is the same height whether it
-     holds a value or the field it is typed into. */
+  /* The input's own outer height, so the row does not change height. */
   min-height: 40px;
-  /* Inset by the input's own padding and pulled back by it, so the value lines
-     up with the column heading and with the input that replaces it. */
+  /* Inset by the input's padding and pulled back, so the value stays aligned. */
   padding-left: 11px;
   margin-left: -11px;
 }
@@ -412,16 +391,14 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 
 /* ---------------- determination header ---------------- */
 
-/* Previous / Next live in the header, not below the field table: down there
-   their position moved with the number of per-field notes. */
+/* In the header, not below the table: down there they moved with the notes. */
 .result-head {
   padding: 16px 20px; display: grid; gap: 18px;
   align-items: center; border-bottom: 1px solid var(--rule);
 }
 /* Verdict left, Previous / Next right. */
 .qn-c { grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; }
-/* DOM order is always [previous, centre, next] so the tab order matches the
-   reading order; C only moves them visually. */
+/* DOM order stays [previous, centre, next]; this only moves them visually. */
 .qn-c .queue-nav-place { order: 0; text-align: left; }
 .qn-c .queue-nav-step.left { order: 1; }
 .qn-c .queue-nav-step.right { order: 2; }
@@ -439,8 +416,7 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
   padding: 18px 20px; display: flex; align-items: center; gap: 12px;
   flex-wrap: wrap; background: var(--sunk-2);
 }
-/* The determination once it is closed, in place of the decision bar. Was inline
-   styles with a hardcoded rule colour that had drifted off --rule. */
+/* The closed determination, in place of the decision bar. */
 .decided-note {
   flex: 1; min-width: 0;
   padding: 10px 14px; background: var(--paper);
@@ -467,11 +443,8 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 .push { margin-left: auto; }
 .grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
 
-
-/* The batch page as one grid rather than two independent columns. Cards placed
-   by area share a row, so "Step 2" and "No files handy?" line up because the
-   grid says so - not because the cards above them happen to be the same height,
-   which they are not. */
+/* One grid, not two columns: cards placed by area line up because the grid says
+   so, not because the cards above them happen to match. */
 .batch-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
@@ -483,20 +456,19 @@ input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; accent-color:
 }
 .area-step1 { grid-area: step1; }
 .area-step2 { grid-area: step2; align-self: stretch; display: flex; flex-direction: column; }
-/* The empty state grows into whatever height the row has, so the staged table
-   and the card beside it end flush even before a batch is staged. */
+/* Grows into the row's height, so it ends flush before a batch is staged. */
 .batch-empty { flex: 1; display: flex; align-items: center; justify-content: center; }
 .area-run { grid-area: run; }
 .area-nofiles {
   grid-area: nofiles;
-  /* Ends flush with the Application CSV card beside it rather than floating
-     short of it. */
+  /* Ends flush with the card beside it rather than floating short. */
   align-self: stretch; display: flex; flex-direction: column;
 }
 .area-nofiles .btn:first-of-type { margin-top: auto; }
 .dropzone {
   border: 1px dashed var(--field); border-radius: 4px; background: var(--sunk-2);
   padding: 26px; text-align: center;
+  width: 100%; font: inherit; color: inherit; min-height: 0; cursor: pointer;
 }
 .dropzone-title { font-size: 14px; font-weight: 600; color: var(--link); }
 .dropzone-hint { font-size: 12.5px; color: var(--ink-5); margin-top: 5px; }
@@ -530,8 +502,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 
 .queue-row {
   display: grid;
-  /* The dot and the thumbnail sit here rather than inside .queue-main, because
-     the thumbnail is its own button and buttons cannot nest. */
+  /* Outside .queue-main: the thumbnail is a button and buttons cannot nest. */
   grid-template-columns: 34px 30px 76px minmax(0, 1fr);
   gap: 14px;
   align-items: center;
@@ -574,8 +545,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
   color: #fff;
   border-bottom: 1px solid var(--rule);
 }
-/* Mirrors the header/row checkbox track, so the select-all box does not move
-   sideways when the bar replaces the header. */
+/* Mirrors the header/row checkbox track, so the box does not move sideways. */
 .bulkbar-check { width: 34px; display: flex; justify-content: center; }
 .bulkbar-count { font-size: 13px; font-weight: 600; }
 .bulkbar .btn-quiet { border-color: rgba(255, 255, 255, 0.35); }
@@ -623,8 +593,7 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 .override-row:last-child { border-bottom: none; }
 .override-fields { color: var(--ink-5); font-size: 12px; }
 
-/* A read-only information panel. Distinct from .check-row, which is a form
-   control with a 44px hit target and has no business displaying prose. */
+/* Read-only prose. Distinct from .check-row, which is a form control. */
 .readout {
   margin-top: 12px;
   padding: 12px 14px;
@@ -638,19 +607,6 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 
 /* ---------------- queue navigation ---------------- */
 
-/* Previous / Next under the determination, replacing the worklist that sat
-   beside it — seventeen rows of chrome competing with one determination. */
-.queue-nav {
-  display: grid;
-  /* Fixed, not `auto`: an auto centre is sized by "1 of 25" and then by
-     "10 of 25", and both steps slide sideways as the reviewer works down the
-     queue. */
-  grid-template-columns: 1fr 200px 1fr;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  margin-top: 16px;
-}
 .queue-nav-step {
   display: block;
   text-decoration: none;
@@ -661,10 +617,8 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 }
 .queue-nav-step.right { text-align: right; }
 .queue-nav-step:hover { background: var(--sunk); color: inherit; }
-/* Muted by tone, not opacity. At 0.4 the end-of-queue text fell to about 2:1.
-   --ink-4 rather than --ink-5 because this bar sits on the tinted verdict
-   header, where --ink-5 lands at 4.2-4.4:1 - under AA on every verdict colour
-   (axe, e2e/a11y.spec.ts). */
+/* Muted by tone, not opacity: at 0.4 this fell to 2:1. --ink-4 because on the
+   tinted verdict header --ink-5 is 4.2-4.4:1, under AA (axe, a11y.spec.ts). */
 .queue-nav-step.is-end .queue-nav-brand,
 .queue-nav-step.is-end .queue-nav-label,
 .queue-nav-step.is-end { color: var(--ink-4); }
@@ -682,20 +636,15 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 .queue-nav-count {
   font-size: 11.5px;
   font-weight: 600;
-  /* --ink-4 for the same reason the end-of-queue text above uses it: this bar
-     sits on the tinted verdict header, where --ink-5 is under AA (axe,
-     e2e/a11y.spec.ts). */
+  /* --ink-4 for the reason above: --ink-5 is under AA on the tinted header. */
   color: var(--ink-4);
   font-variant-numeric: tabular-nums;
   margin-top: 4px;
 }
 .result-head .queue-nav-place { white-space: normal; }
 
-/* A fixed frame for the label, so the page stops resizing as a reviewer works
-   through the queue: card height was previously driven by each label's aspect
-   ratio. `contain` rather than `cover` because the panel exists to be read, and
-   the government warning is the smallest type on the label and the first thing
-   a crop would take. */
+/* Fixed, so card height stops following each label's aspect ratio. `contain`
+   not `cover`: the warning is the smallest type and the first thing a crop takes. */
 .label-frame {
   aspect-ratio: 3 / 4;
   background: #efeadd;
@@ -708,14 +657,10 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 }
 .label-frame img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 
-/* The label stays readable while the reviewer works down the form - the fields
-   are transcribed from it - and the frame takes whatever height is left rather
-   than dictating the card's. */
+/* The frame takes the height left over rather than dictating the card's. */
 .specimen-side { display: flex; flex-direction: column; }
 .specimen-side .label-frame { width: 100%; aspect-ratio: auto; flex: 1; min-height: 220px; }
 .specimen-side .dropzone { flex: 1; display: flex; flex-direction: column; justify-content: center; }
-
-
 
 @media (max-width: 1100px) {
   .kpis { grid-template-columns: repeat(2, 1fr); }
@@ -783,13 +728,10 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 .chip-warn { background: var(--review-bg); border-color: var(--review-bd); color: var(--review-fg); }
-.btn.disabled { opacity: 0.4; pointer-events: none; }
-.dropzone { width: 100%; font: inherit; color: inherit; min-height: 0; cursor: pointer; }
 .dropzone:hover { background: #f3f6f9; }
 .dropzone.dragging { border-color: var(--link); border-style: solid; background: #f0f6fb; }
 
-/* An unpaired row still occupies a thumbnail's worth of space, so the table
-   does not reflow as rows are paired. */
+/* An unpaired row keeps a thumbnail's space, so the table does not reflow. */
 .thumb-empty {
   font-size: 10px;
   color: var(--ink-6);
@@ -806,11 +748,9 @@ td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabu
 }
 .fields-unrecorded { color: var(--ink-6); font-style: italic; }
 
-
 /* ---------------- staged batch: thumbnails, row detail, lightbox ---------------- */
 
-/* A thumbnail is the handle for both actions on an image, so it is a button
-   wherever it is one - reset the chrome rather than wrap it in another box. */
+/* A thumbnail is a button wherever it is one; reset the chrome, do not wrap. */
 button.thumb, .thumb-open {
   appearance: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit;
   background: none; cursor: pointer;
@@ -828,35 +768,27 @@ button.thumb { border: 1px solid var(--rule); cursor: zoom-in; }
 .thumb-x:hover, .cell-x:hover:not(:disabled) { color: var(--fail-fg); border-color: var(--fail-bd); }
 .cell-x:disabled { opacity: 0.3; cursor: default; }
 
-button.caret { appearance: none; border: 0; background: none; cursor: pointer; padding: 0 4px; }
 tr.staged-selected > td { background: var(--sunk-2); }
-/* Scoped, not global: the export and determination tables want the top
-   alignment that long field values read better in. */
+/* Scoped: the other tables want top alignment for long field values. */
 .staged-table td { vertical-align: middle; }
 .staged-table thead th { height: 44px; }
 .staged-table th:first-child, .staged-table td:first-child {
   width: 44px; padding-left: 0; padding-right: 0; text-align: center;
 }
 .staged-table th:first-child input, .staged-table td:first-child input { margin: 0; }
-/* The bar replaces the header row inside the table, so it scrolls with the
-   columns instead of drifting from them. */
+/* Inside the table, so the bar scrolls with the columns it acts on. */
 .staged-table th.bulkbar-cell {
-  /* thead th is uppercase, letter-spaced and 10.5px; the bar is not a header. */
+  /* thead th is uppercase and 10.5px; the bar is not a header. */
   padding: 0; text-transform: none; letter-spacing: normal; font-weight: 400;
 }
 .staged-table .bulkbar { padding-left: 0; }
 .staged-table .bulkbar-check { width: 44px; }
-/* Room for two buttons, whether or not the row has two.
-   A fuzzy row carries a Confirm alongside the picker button, and in an
-   auto-laid-out table the column re-measures the moment Confirm resolves the
-   row and disappears - which shifted every column in the table sideways.
-   Declaring the full two-button width means the content never exceeds it, so
-   the column never re-measures; anchoring right means the button that is
-   always there does not move either. 2 x 84 + 6 gap + 2 x 14 padding. */
+/* Room for two buttons whether or not the row has two: otherwise the column
+   re-measures the moment Confirm resolves a row and disappears, shifting the
+   whole table sideways. 2 x 84 + 6 gap + 2 x 14 padding. */
 .staged-actions { width: 202px; text-align: right; white-space: nowrap; }
 .staged-actions .row { justify-content: flex-end; gap: 6px; flex-wrap: nowrap; }
-/* One width for every label - Confirm, Change, Select, Attach - so the buttons
-   line up down the column instead of each being as wide as its own word. */
+/* One width for every label, so the buttons line up down the column. */
 .staged-actions .btn { width: 84px; padding-left: 0; padding-right: 0; }
 
 /* The image the row is paired with, marked in the picker. */
@@ -877,7 +809,6 @@ tr.staged-selected > td { background: var(--sunk-2); }
 }
 .lightbox img { display: block; max-width: 100%; max-height: 74vh; object-fit: contain; }
 .lightbox figcaption { font-size: 11.5px; color: var(--ink-6); margin-top: 8px; text-align: center; }
-
 
 /* The label frame doubles as the enlarge trigger on a determination. */
 .label-frame-zoom { appearance: none; padding: 0; cursor: zoom-in; width: 100%; }

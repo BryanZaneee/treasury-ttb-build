@@ -2,19 +2,16 @@ import { readFileSync } from 'node:fs'
 
 import { defineConfig, devices } from '@playwright/test'
 
-// The tokens live in the root .env, which Vite loads for the browser bundle but
-// Node does not load for this process. The specs need them to reset fixtures.
+// The root .env is loaded by Vite but not by Node; the specs need its tokens.
 for (const line of readFileSync('../.env', 'utf8').split('\n')) {
   const [key, ...rest] = line.split('=')
   if (key && !key.startsWith('#') && rest.length) process.env[key.trim()] ??= rest.join('=').trim()
 }
 
 /**
- * End-to-end suite (PRD §10 M7).
- *
- * Runs against the fake reader so the whole thing is deterministic, free and
- * offline — the same reason CI uses it. Both servers are started here rather
- * than being assumed, so `npm run e2e` works from a cold checkout.
+ * End-to-end suite (PRD §10 M7). Runs against the fake reader, so it is
+ * deterministic, free and offline; both servers start here, so `npm run e2e`
+ * works from a cold checkout.
  */
 export default defineConfig({
   testDir: './e2e',
@@ -39,8 +36,7 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      // DEV_API_URL points the dev proxy at the e2e API rather than the
-      // one a developer may already have running on 8000.
+      // Points the dev proxy at the e2e API, not a dev server on 8000.
       command: 'DEV_API_URL=http://127.0.0.1:8031 npm run dev -- --port 5273 --strictPort',
       url: 'http://localhost:5273',
       reuseExistingServer: !process.env.CI,

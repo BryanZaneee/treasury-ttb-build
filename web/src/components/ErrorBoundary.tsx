@@ -2,12 +2,9 @@ import { Component } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 
 /**
- * A render-time throw anywhere under the router blanks the whole page, which
- * for a reviewer mid-determination looks like the service went down. React
- * offers no hook equivalent, so this is the one class component in the app.
- *
- * Callers pass the route as `key` so navigating remounts the boundary, which
- * clears the error - a single bad record must not trap the reviewer on it.
+ * A render-time throw blanks the page, which mid-determination reads as an
+ * outage. React has no hook equivalent, so this is the app's one class component.
+ * Callers pass the route as `key`, so navigating clears the error.
  */
 export class ErrorBoundary extends Component<
   { children: ReactNode },

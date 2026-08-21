@@ -1,18 +1,11 @@
 /**
- * API client. One place that knows the base URL and the shared access token,
- * so no component has to think about either.
+ * API client: the one place that knows the base URL and the shared token.
  *
- * PRD §8: there are no user accounts. Mutating endpoints take a shared bearer
- * token. In production a reviewer supplies it; for local dev it comes from
- * VITE_ACCESS_TOKEN. The *reader* API key never reaches the browser.
- */
-
-/**
- * The app is served under PUBLIC_BASE_PATH in production (`/ttb-build`) and at
- * the root in dev. `import.meta.env.BASE_URL` mirrors Vite `base`, which is
- * driven by that same variable — so every URL the app builds must go through
- * here rather than starting with a bare `/api`, which would escape the subpath
- * and hit whatever else is mounted at the domain root.
+ * PRD §8 has no user accounts, so mutating endpoints take a shared bearer token
+ * (VITE_ACCESS_TOKEN in dev). The reader API key never reaches the browser.
+ *
+ * Every URL goes through `apiUrl`, not a bare `/api`: `import.meta.env.BASE_URL`
+ * mirrors Vite `base`, and a bare path would escape the production subpath.
  */
 const ROOT = import.meta.env.BASE_URL.replace(/\/$/, '')
 const BASE = `${ROOT}/api`
@@ -20,11 +13,9 @@ const BASE = `${ROOT}/api`
 export const apiUrl = (path: string) => `${BASE}${path}`
 
 /**
- * The Cloudflare zone in front of the deployment caches everything and ignores
- * origin `Cache-Control: no-store`, so it served stale inbox counts. A unique
- * query param makes every read a distinct URL.
- * ponytail: client-side workaround; the real fix is a cache-bypass rule for
- * /ttb-build/api/* in the Cloudflare dashboard.
+ * The Cloudflare zone caches everything and ignores `Cache-Control: no-store`,
+ * so a unique query param makes every read a distinct URL.
+ * ponytail: client-side workaround; the fix is a cache-bypass rule on the zone.
  */
 const uncacheable = (url: string) =>
   `${url}${url.includes('?') ? '&' : '?'}_=${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
@@ -82,10 +73,7 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   return (await response.json()) as T
 }
 
-/**
- * `invalid` extends PRD §3.2's three-value enum: the vision reader flags a
- * specimen that is not a label at all, which is not a label that failed.
- */
+/** `invalid` extends PRD §3.2's enum: not a label, rather than a failed one. */
 export type Verdict = 'match' | 'review' | 'fail' | 'invalid'
 
 export type Health = {
@@ -188,8 +176,7 @@ export type StagedBatch = {
   blocks_commit: boolean
 }
 
-/** One record's outcome, appended as the job runs. `record` and `error` both
- *  name the record, which is how the inbox knows a row has finished. */
+/** One record's outcome; both kinds name the record, so the inbox can release it. */
 export type JobEvent = {
   event: 'record' | 'error' | 'done'
   record_id?: string

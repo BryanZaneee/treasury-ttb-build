@@ -4,13 +4,24 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, freshUrl, imageUrl } from '../api/client'
 import type { Job, RecordRow, RecordsPage, FieldResult, RecordDetail } from '../api/client'
 import { Pill } from '../components/Pill'
-import { DOT_COLOR, contestedAccept, kindOf } from '../lib/verdict'
-import { FIELD_LABEL, QUALITY_LABEL, fieldValues, verdictSummary } from '../lib/copy'
+import {
+  DOT_COLOR,
+  FALLBACK_BODY,
+  FALLBACK_TITLE,
+  FIELD_LABEL,
+  QUALITY_LABEL,
+  contestedAccept,
+  fieldValues,
+  kindOf,
+  readByFallback,
+  verdictSummary,
+} from '../lib/copy'
 import { matchesQuery } from '../lib/search'
 import { BulkDecisionDialog } from '../components/BulkDecisionDialog'
+import { Lightbox } from '../components/Lightbox'
+import { Dialog } from '../components/Dialog'
 import { useEscape } from '../lib/dialog'
 import { useToast } from '../lib/toast'
-import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 import { REVIEWER } from '../lib/session'
 import { waitForJob } from '../lib/job'
 
@@ -33,9 +44,7 @@ function verdictReport(job: Job): string {
 
 export function Inbox() {
   // Seeded from the URL so "Back to review inbox" returns to the queue the
-  // reviewer left, rather than dropping them in the default view. Read once:
-  // the inbox owns its filter after that, and rewriting the URL on every
-  // keystroke would fill the history with search fragments.
+  // reviewer left. Read once: rewriting it per keystroke would fill the history.
   const [entry] = useSearchParams()
   const [filter, setFilterState] = useState<string>(
     () => entry.get('filter') ?? 'attention',
@@ -43,18 +52,16 @@ export function Inbox() {
   const [query, setQueryState] = useState(() => entry.get('q') ?? '')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set())
-  // The running job, polled. Without it the reviewer watches a single spinner
-  // on a button while nothing else on the page moves for a minute.
+  // Polled, so the page moves during a run rather than showing one spinner.
   const [job, setJob] = useState<Job | null>(null)
   const seen = useRef(0)
   const [exporting, setExporting] = useState(false)
   const [verifyingAll, setVerifyingAll] = useState(false)
-  // Selection is scoped to what the reviewer can currently see. Changing the
-  // filter or the search clears it, so a bulk action can never reach a record
-  // that has scrolled out of the view they chose it from.
+  // Scoped to what is on screen: changing the filter or search clears it, so a
+  // bulk action cannot reach a record the reviewer never saw.
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  // Carries the records with the decision: the same dialog confirms a bulk
-  // action and a single row's accept/return, and the row is not in `selected`.
+  // Carries its own records: the same dialog confirms a bulk action and a single
+  // row, and that row is not in `selected`.
   const [confirming, setConfirming] = useState<
     null | { decision: 'accepted' | 'returned'; records: RecordRow[] }
   >(null)
@@ -101,12 +108,9 @@ export function Inbox() {
   /**
    * Start a job and follow it, so every row it covers says so while it waits.
    *
-   * `targets` are marked busy before the request is even sent, rather than
-   * waiting for the job to report them: POST /jobs answers before the worker
-   * thread has filled in `record_ids`, so reading them off the job leaves the
-   * first poll interval with nothing marked - and a cached reading can finish
-   * the whole run inside it. The job's events then release rows one at a time
-   * as each verdict lands.
+   * `targets` are marked busy before the request is sent: POST /jobs answers
+   * before the worker has filled in `record_ids`, and a cached reading can
+   * finish the run inside the first poll. Events then release rows one by one.
    */
   const followJob = async (body: Record<string, unknown>, targets: string[]) => {
     seen.current = 0
@@ -137,10 +141,8 @@ export function Inbox() {
   }
 
   const verifyAll = useMutation({
-    // The rows on screen that the job will pick up. The server derives its own
-    // set, but only rows the reviewer can actually see need to say they are
-    // working - on a tab that lists no unverified records there is nothing to
-    // mark, which is the right answer rather than a missing one.
+    // Only rows on screen need to say they are working; the server derives its
+    // own set, so a tab listing none is right rather than missing something.
     mutationFn: () =>
       followJob(
         { scope: 'pending', verify_now: true },
@@ -153,9 +155,8 @@ export function Inbox() {
         title: `Verified ${job.completed} of ${job.total}`,
         body: verdictReport(job),
       })
-      // One notice for the whole run, not one per record. The run itself has
-      // already succeeded, so a failure to fetch the follow-up notice must not
-      // reject out of onSuccess as an unhandled rejection.
+      // One notice per run. The run already succeeded, so a failed follow-up
+      // must not reject out of onSuccess.
       try {
         const page = await api<RecordsPage>('/records')
         const degraded = page.records.filter((r) =>
@@ -202,8 +203,8 @@ export function Inbox() {
     }) => {
       let applied = 0
       let skipped = 0
-      // One PATCH per record: the override rule is enforced per record server
-      // side, and a record already decided answers 409 rather than reopening.
+      // One PATCH per record: the override rule is enforced per record, and an
+      // already-decided one answers 409 rather than reopening.
       for (const record of records) {
         try {
           await api(`/records/${record.id}`, {
@@ -237,14 +238,9 @@ export function Inbox() {
   })
 
   /**
-   * Ask for confirmation only where confirmation earns its place.
-   *
-   * PRD §5.1's override is still recorded for anything short of a `match` - see
-   * the PATCH body in bulkDecide - but a `review` verdict is a difference in
-   * presentation over content that agrees, which is the ordinary thing the
-   * reviewer is here to wave through. Interrupting them for it is the friction,
-   * not the safeguard. A failed check, a specimen that is not a label, or a
-   * return (which needs a reason typed) all still open the dialog.
+   * Confirm only where confirmation earns its place. PRD §5.1's override is still
+   * recorded for anything short of a `match`; what is narrower is the interruption
+   * — a `review` verdict is the ordinary thing a reviewer waves through.
    */
   const decideOn = (decision: 'accepted' | 'returned', records: RecordRow[]) => {
     if (decision === 'accepted' && !records.some((r) => contestedAccept(r.result))) {
@@ -254,8 +250,7 @@ export function Inbox() {
     setConfirming({ decision, records })
   }
 
-  // Counts are whole-store regardless of the active filter, so the filtered
-  // response carries them - there is no second fetch of every record for them.
+  // Whole-store whatever the filter, so no second fetch just for the counts.
   const counts = view.data?.counts
   const total = counts?.total ?? 0
   const closed = counts?.closed ?? 0
@@ -344,16 +339,13 @@ export function Inbox() {
             disabled={verifyAll.isPending}
           >
             {verifyAll.isPending && <span className="spinner spinner-dark" />}
-            {/* The count is the reassurance on a run that can take a minute;
-                aria-live so it is not a sighted-only signal (PRD §8). */}
+            {/* Reassurance on a slow run; announced too (PRD §8). */}
             {verifyAll.isPending && job
               ? `Verifying ${job.completed} of ${job.total}…`
               : 'Run AI verification on all'}
           </button>
         </div>
       )}
-
-
 
       <div className="toolbar">
         <div className="segmented" role="group" aria-label="Filter records">
@@ -381,9 +373,8 @@ export function Inbox() {
       </div>
 
       <div className="card">
-        {/* One or the other, never both: inserting the bar above the header
-            pushed the whole table down the moment a box was ticked. It carries
-            the select-all box so that does not move either. */}
+        {/* Replaces the header rather than sitting above it, so ticking a box
+            does not push the table down. */}
         {selected.size > 0 ? (
           <div className="bulkbar">
             <span className="bulkbar-check">
@@ -474,30 +465,14 @@ export function Inbox() {
         )}
       </div>
 
-      {/* Reading a label costs a paid call per record, so a run over the whole
-          queue says how many before it starts one. */}
+      {/* A paid call per record, so a whole-queue run says how many first. */}
       {verifyingAll && (
-        <div className="dialog-backdrop" role="presentation" onClick={() => setVerifyingAll(false)}>
-          <div
-            className="dialog dialog-sm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="verify-all-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="dialog-head">
-              <h2 id="verify-all-title">
-                Verify {counts?.pending} application{counts?.pending === 1 ? '' : 's'}?
-              </h2>
-            </div>
-            <div className="dialog-body">
-              <p className="card-note">
-                The AI reads each label and every field is checked against the application as
-                filed. Applications already verified are left alone, and a label that cannot be
-                read stays unverified rather than stopping the run.
-              </p>
-            </div>
-            <div className="dialog-foot">
+        <Dialog
+          title={`Verify ${counts?.pending} application${counts?.pending === 1 ? '' : 's'}?`}
+          titleId="verify-all-title"
+          onClose={() => setVerifyingAll(false)}
+          footer={
+            <>
               <button
                 className="btn"
                 onClick={() => {
@@ -510,32 +485,24 @@ export function Inbox() {
               <button className="btn btn-quiet" onClick={() => setVerifyingAll(false)}>
                 Cancel
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="card-note">
+            The AI reads each label and every field is checked against the application as filed.
+            Applications already verified are left alone, and a label that cannot be read stays
+            unverified rather than stopping the run.
+          </p>
+        </Dialog>
       )}
 
       {exporting && (
-        <div className="dialog-backdrop" role="presentation" onClick={() => setExporting(false)}>
-          <div
-            className="dialog dialog-sm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="export-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="dialog-head">
-              <h2 id="export-title">Export the review inbox</h2>
-            </div>
-            <div className="dialog-body">
-              <p className="card-note">
-                Downloads every application in the store as it stands right now: all {total},
-                not only the {rows.length} this filter is showing. Each row carries the
-                application as filed, the result, any fields that did not match, and the
-                decision.
-              </p>
-            </div>
-            <div className="dialog-foot">
+        <Dialog
+          title="Export the review inbox"
+          titleId="export-title"
+          onClose={() => setExporting(false)}
+          footer={
+            <>
               <a
                 className="btn"
                 href={freshUrl('/export/records.csv')}
@@ -547,9 +514,15 @@ export function Inbox() {
               <button className="btn btn-quiet" onClick={() => setExporting(false)}>
                 Cancel
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="card-note">
+            Downloads every application in the store as it stands right now: all {total}, not only
+            the {rows.length} this filter is showing. Each row carries the application as filed,
+            the result, any fields that did not match, and the decision.
+          </p>
+        </Dialog>
       )}
 
       {confirming && (
@@ -619,8 +592,7 @@ function QueueItem({
           className="dot"
           style={{ background: record.decision ? '#c6d0da' : DOT_COLOR[kind] }}
         />
-        {/* Outside the row button, not inside it: nesting one button in another
-            is invalid, and the thumbnail opens the specimen rather than the row. */}
+        {/* Outside the row button: buttons cannot nest, and this opens the image. */}
         <button
           className="thumb"
           onClick={() => setZoomed(true)}
@@ -684,8 +656,7 @@ function QueueItem({
                 <Link className="btn" to={`/records/${record.id}${queueSearch}`}>
                   Review
                 </Link>
-                {/* The confirmation is the shared decision dialog, which names
-                    the disagreeing fields before an override is recorded. */}
+                {/* The shared dialog names the disagreeing fields first. */}
                 {!record.decision && (
                   <>
                     <button className="btn btn-accept" onClick={() => onDecide('accepted')}>
@@ -722,23 +693,12 @@ function QueueItem({
       )}
 
       {zoomed && (
-        <div
-          className="dialog-backdrop"
-          role="dialog"
-          aria-label={`Label image for ${record.app_brand}`}
-          aria-modal="true"
-          tabIndex={-1}
-          autoFocus
-          onClick={() => setZoomed(false)}
-        >
-          <figure className="lightbox">
-            <img
-              src={imageUrl(record.specimen || record.filename)}
-              alt={`Label image for ${record.app_brand}`}
-            />
-            <figcaption className="mono">{record.filename}</figcaption>
-          </figure>
-        </div>
+        <Lightbox
+          src={imageUrl(record.specimen || record.filename)}
+          alt={`Label image for ${record.app_brand}`}
+          caption={record.filename}
+          onClose={() => setZoomed(false)}
+        />
       )}
     </div>
   )

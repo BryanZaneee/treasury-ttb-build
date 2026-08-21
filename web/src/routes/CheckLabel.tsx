@@ -6,10 +6,18 @@ import type { Health, RecordDetail, RecordRow, SpecimenSummary } from '../api/cl
 import type { Toast } from '../lib/toast'
 import { useEscape } from '../lib/dialog'
 import { useToast } from '../lib/toast'
-import { FIELD_LABEL, RESULT_COPY } from '../lib/copy'
-import { PILL_TEXT, contestedAccept, kindOf } from '../lib/verdict'
+import { Lightbox } from '../components/Lightbox'
+import {
+  FALLBACK_BODY,
+  FALLBACK_TITLE,
+  FIELD_LABEL,
+  PILL_TEXT,
+  RESULT_COPY,
+  contestedAccept,
+  kindOf,
+  readByFallback,
+} from '../lib/copy'
 import { REVIEWER } from '../lib/session'
-import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
 const BLANK = {
   brand: '',
@@ -23,10 +31,8 @@ const BLANK = {
 
 const ACCEPTED = 'image/png,image/jpeg,image/webp'
 
-/** A part-typed application survives leaving the page and reloading it, the
-    way the staged batch does. The image rides along as a data URL when it is
-    small enough to; browser storage is a few MB, and a 12 MB photo is not
-    worth losing the typed fields over. */
+/** A part-typed application survives a reload. The image rides along as a data
+    URL when it is small enough - a 12 MB photo is not worth the typed fields. */
 const DRAFT_KEY = 'ttb.label-draft'
 const DRAFT_IMAGE_LIMIT = 2_000_000
 
@@ -47,8 +53,7 @@ function readDraft(): Draft | null {
 }
 
 function writeDraft(draft: Draft): void {
-  // An oversized image is dropped rather than losing the whole draft, and a
-  // quota error must never escape into a keystroke handler.
+  // Drop the image rather than the draft; a quota error must not reach a keystroke.
   const slim = draft.preview.length > DRAFT_IMAGE_LIMIT ? { ...draft, preview: '' } : draft
   try {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(slim))
@@ -61,8 +66,7 @@ function writeDraft(draft: Draft): void {
   }
 }
 
-/** The file itself cannot be stored, so a reload restores the picture but not
-    the upload. Reading it back as a File is what lets the form submit. */
+/** A reload restores the picture, not the File; this rebuilds one so it submits. */
 function fileFromDataUrl(dataUrl: string, name: string): File | null {
   const [head, body] = dataUrl.split(',')
   if (!head || !body) return null
@@ -81,12 +85,9 @@ const TOAST_KIND: Record<string, Toast['kind']> = {
 }
 
 /**
- * S1/S2: file one application against one label.
- *
- * A specimen is either an uploaded file or a bundled sample, never both — the
- * API refuses a request carrying each, because the two resolve to different
- * images and a record that carries one and verifies the other is worse than an
- * error.
+ * S1/S2: file one application against one label. The specimen is an upload or a
+ * bundled sample, never both - a record carrying one and verifying the other is
+ * worse than the error the API raises instead.
  */
 export function CheckLabel() {
   const navigate = useNavigate()
@@ -134,10 +135,9 @@ export function CheckLabel() {
     },
   })
 
-  // A data URL, not URL.createObjectURL: the site's Content-Security-Policy
-  // allows `img-src 'self' data:` and not `blob:`, so an object URL renders in
-  // dev and is blocked in production - which is what left the preview broken on
-  // the deployed site. A data URL is also a string, so the draft can keep it.
+  // A data URL, not createObjectURL: the CSP allows `data:` and not `blob:`, so
+  // an object URL renders in dev and is blocked in production. Also a string,
+  // which is what lets the draft keep it.
   const takeFile = (chosen: File | undefined) => {
     if (!chosen) return
     setSample('')
@@ -175,10 +175,9 @@ export function CheckLabel() {
   })
 
   /**
-   * Accepting a record that did not pass records an override against the
-   * reviewer's name (PRD §5.1), so the toast names every disagreeing field
-   * before it will do so — the same thing the determination view does, rather
-   * than a one-click bypass of it. The server enforces the rule independently.
+   * Accepting a record that did not pass records an override (PRD §5.1), so the
+   * toast names every disagreeing field first rather than being a one-click
+   * bypass of the determination view. The server enforces the rule anyway.
    */
   const confirmOverride = (record: RecordDetail) => {
     const disagreeing = record.field_results.filter((f) => f.verdict !== 'match')
@@ -278,14 +277,12 @@ export function CheckLabel() {
       )
       if (file) form.set('image', file)
       else form.set('specimen_key', sample)
-      // Filing and verifying in one request. As two, a reviewer who moved on
-      // between them left a record nobody would ever verify.
+      // One request: as two, moving on between them stranded the record.
       form.set('verify_now', 'true')
 
       const record = await api<RecordRow>('/records', { method: 'POST', form })
-      // The determination is already running server-side; this only waits for
-      // it so the toast can name the disagreeing fields. Navigating away
-      // abandons the wait, not the verification.
+      // Already running server-side; this waits only so the toast can name the
+      // fields. Navigating away abandons the wait, not the verification.
       return waitForVerdict(record.id)
     },
     onSuccess: (record) => {
@@ -294,11 +291,10 @@ export function CheckLabel() {
         toast({ kind: 'warn', title: FALLBACK_TITLE, body: FALLBACK_BODY })
       }
       reportVerdict(record)
-      // Stay put and clear the form: filing labels one after another is the
-      // job, and being thrown into the record after each one interrupts it.
-      // The toast carries the verdict and a way in.
+      // Stay put and clear: filing one after another is the job, and the toast
+      // already carries the verdict and a way in.
       setApplication({ ...BLANK })
-        clearImage()
+      clearImage()
       localStorage.removeItem(DRAFT_KEY)
     },
     onError: (e) => setError(String(e)),
@@ -309,8 +305,7 @@ export function CheckLabel() {
 
   const source = file ? file.name : sample
 
-  // Written on every change rather than on unmount: a reviewer who closes the
-  // tab mid-form has not unmounted anything.
+  // On every change, not on unmount: closing the tab unmounts nothing.
   useEffect(() => {
     writeDraft({ application, sample, filename: file?.name ?? '', preview })
   }, [application, sample, file, preview])
@@ -348,8 +343,7 @@ export function CheckLabel() {
             <div className="grid-2">
               {(
                 [
-                  // Placeholders, not values: a reviewer transcribing a label
-                  // needs to see the shape each field is expected in.
+                  // Placeholders, not values: the shape each field is expected in.
                   ['brand', 'Brand name', 'Harbor Mist'],
                   ['class_type', 'Class / type', 'India Pale Ale'],
                   ['abv', 'Alcohol content', '6.8% Alc./Vol.'],
@@ -399,9 +393,8 @@ export function CheckLabel() {
           </div>
         </div>
 
-        {/* Always beside the form, empty or not: the specimen is what the
-            application is transcribed from, and a layout that only appears
-            once an image is chosen moves the form out from under the cursor. */}
+        {/* Always beside the form: a panel that appears once an image is chosen
+            moves the form out from under the cursor. */}
         <div className="card card-pad specimen-side">
           <div className="card-title">Label image</div>
           {shown ? (
@@ -459,20 +452,12 @@ export function CheckLabel() {
       </div>
 
       {zoomed && shown && (
-        <div
-          className="dialog-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Label image ${source}`}
-          tabIndex={-1}
-          autoFocus
-          onClick={() => setZoomed(false)}
-        >
-          <figure className="lightbox">
-            <img src={shown} alt={`Label image ${source}`} />
-            <figcaption className="mono">{source}</figcaption>
-          </figure>
-        </div>
+        <Lightbox
+          src={shown}
+          alt={`Label image ${source}`}
+          caption={source}
+          onClose={() => setZoomed(false)}
+        />
       )}
     </div>
   )

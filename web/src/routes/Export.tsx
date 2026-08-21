@@ -3,11 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, freshUrl } from '../api/client'
 import type { Health, RecordsPage, StoreImport } from '../api/client'
 import { useEscape } from '../lib/dialog'
+import { Dialog } from '../components/Dialog'
 
 /**
- * Export and store administration. The store is read as a normal web page — CSV
- * exists only as a file download (S13), so "view raw CSV" from the prototype is
- * replaced by the record table below.
+ * Export and store administration. CSV exists only as a download (S13), so the
+ * prototype's "view raw CSV" is the record table below.
  */
 export function Export() {
   const client = useQueryClient()
@@ -28,10 +28,8 @@ export function Export() {
     staleTime: 60_000,
   })
 
-  // S11's other half. The reviewer export drops columns (csv_io.REVIEW_COLUMNS),
-  // so the file that restores a store is /export/backup.csv, not the one the
-  // Export button serves - which is why both are offered, named for what they
-  // are for rather than for their format.
+  // S11's other half: the reviewer export drops columns, so the file that
+  // restores a store is /export/backup.csv. Both are offered, named for use.
   const restore = useMutation({
     mutationFn: (file: File) => {
       const form = new FormData()
@@ -138,8 +136,7 @@ export function Export() {
         <div className="card card-pad">
           <div className="row">
             <div style={{ fontSize: 15, fontWeight: 700 }}>How a label is checked</div>
-            {/* The bubble is CSS on the element itself: a native `title` needs a
-                second of hover to appear and is easy to miss entirely. */}
+            {/* CSS, not a native `title`: that needs a second of hover to appear. */}
             <span
               className="help-dot push"
               tabIndex={0}
@@ -196,45 +193,12 @@ export function Export() {
       </div>
 
       {confirming && (
-        <div className="dialog-backdrop" role="presentation" onClick={() => setConfirming(null)}>
-          <div
-            className="dialog dialog-sm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="reset-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="dialog-head">
-              <h2 id="reset-title">
-                {confirming === 'empty' ? 'Remove all records' : 'Load the example set'}
-              </h2>
-            </div>
-            <div className="dialog-body">
-              <div className="banner">
-                <div className="banner-mark" aria-hidden="true">
-                  !
-                </div>
-                <div className="banner-text">
-                  {confirming === 'empty' ? (
-                    <>
-                      Every application and label image on file is removed, leaving an empty
-                      inbox for your own data.
-                    </>
-                  ) : (
-                    <>
-                      Everything on file is replaced with thirteen example applications to
-                      practise on: three still to check, three that matched, three in review,
-                      four that failed, and three already decided.
-                    </>
-                  )}{' '}
-                  A copy of the current store is saved first.
-                </div>
-              </div>
-              <p className="card-note">
-                {rows.length} application{rows.length === 1 ? '' : 's'} will be replaced.
-              </p>
-            </div>
-            <div className="dialog-foot">
+        <Dialog
+          title={confirming === 'empty' ? 'Remove all records' : 'Load the example set'}
+          titleId="reset-title"
+          onClose={() => setConfirming(null)}
+          footer={
+            <>
               <button
                 className={confirming === 'empty' ? 'btn btn-danger' : 'btn'}
                 onClick={() => reset.mutate(confirming)}
@@ -246,9 +210,24 @@ export function Export() {
               <button className="btn btn-quiet" onClick={() => setConfirming(null)}>
                 Cancel
               </button>
+            </>
+          }
+        >
+          <div className="banner">
+            <div className="banner-mark" aria-hidden="true">
+              !
+            </div>
+            <div className="banner-text">
+              {confirming === 'empty'
+                ? 'Every application and label image on file is removed, leaving an empty inbox for your own data.'
+                : 'Everything on file is replaced with thirteen example applications to practise on: three still to check, three that matched, three in review, four that failed, and three already decided.'}{' '}
+              A copy of the current store is saved first.
             </div>
           </div>
-        </div>
+          <p className="card-note">
+            {rows.length} application{rows.length === 1 ? '' : 's'} will be replaced.
+          </p>
+        </Dialog>
       )}
 
       {showStore && (

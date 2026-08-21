@@ -1,12 +1,9 @@
 import { expect, test } from '@playwright/test'
 
 /**
- * The reviewer's path end to end (PRD §10 M7): work the inbox, verify, open the
- * determination, decide. These are the flows no unit test covers, because what
- * breaks them is routing, query invalidation and the proxy — not a function.
- *
- * The store is reset from the fixtures before each spec, so no spec inherits
- * another's decisions.
+ * The reviewer's path end to end (PRD §10 M7): triage, verify, open, decide.
+ * What breaks these is routing, cache invalidation and the proxy, not a
+ * function. The store resets before each spec, so none inherits another's work.
  */
 
 const API = 'http://127.0.0.1:8031'
@@ -36,8 +33,7 @@ test('the inbox opens on the example set, part-worked', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Review inbox' })).toBeVisible()
   // Three of the thirteen are still to check; the rest already carry a verdict.
   await expect(page.getByText(/3 uploaded applications have not been checked/)).toBeVisible()
-  // Scoped to the filter strip: the KPI tiles above it name the same sets, so
-  // an unscoped "Closed" matches both the tab and its tile.
+  // Scoped to the filter strip: the KPI tiles name the same sets.
   const filters = page.getByRole('group', { name: 'Filter records' })
   await expect(filters.getByRole('button', { name: /^Fail/ })).toBeVisible()
   await expect(filters.getByRole('button', { name: /^Closed/ })).toBeVisible()
@@ -52,10 +48,8 @@ test('a determination shows both sides and warns before overriding', async ({ pa
   await verifyAll(page)
   await page.goto('/inbox?filter=fail')
 
-  // Rows expand in place; the determination is a link inside the expanded row.
-  // The example set ships one already-returned failure, and a decided record
-  // shows its determination rather than a decision bar (PRD §12: not
-  // reopenable), so this has to pick a failure nobody has decided yet.
+  // Rows expand in place. The example set ships one already-returned failure,
+  // and a decided record shows no decision bar, so pick an undecided one.
   const open = page
     .locator('.queue-item')
     .filter({ hasNotText: /Accepted|Returned/ })

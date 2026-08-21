@@ -1,4 +1,4 @@
-import type { RecordRow } from '../api/client'
+import type { RecordRow, Verdict } from '../api/client'
 
 /** Field labels as the prototype writes them (PRD §3.1, §6.1). */
 export const FIELD_LABEL: Record<string, string> = {
@@ -11,8 +11,7 @@ export const FIELD_LABEL: Record<string, string> = {
   warning: 'Government warning',
 }
 
-/* Past tense and plural-agnostic, because it is read after a count:
-   "7 needs review" is not a sentence. */
+/* Past tense and plural-agnostic: "7 needs review" is not a sentence. */
 const VERDICT_WORD: Record<string, string> = {
   match: 'matched',
   review: 'to review',
@@ -21,11 +20,8 @@ const VERDICT_WORD: Record<string, string> = {
 }
 
 /**
- * A run's verdict mix as a sentence — "2 failed and 1 to review".
- *
- * Intl.ListFormat rather than a join: it puts in the comma and the "and" that
- * make it read as prose, where a bulleted "2 fail · 1 review" reads as debug
- * output of the verdict enum.
+ * A run's verdict mix as a sentence — "2 failed and 1 to review". Intl.ListFormat
+ * rather than a join, so it reads as prose and not as the verdict enum.
  */
 const LIST = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' })
 
@@ -38,13 +34,9 @@ export function verdictSummary(verdicts: Record<string, number>): string {
 }
 
 /**
- * What the staged batch's per-row image button offers, per pairing bucket
- * (PRD §5.5).
- *
- * Keyed on the bucket rather than on whether the row holds an image: an
- * ambiguous row has no image *precisely because* more than one matched, so
- * "Attach" - which image presence alone would pick - names the opposite of the
- * problem. The reviewer is choosing between candidates, not supplying one.
+ * The per-row image button, per pairing bucket (PRD §5.5). Keyed on the bucket,
+ * not on whether the row has an image: an ambiguous row has none *because* more
+ * than one matched, so "Attach" would name the opposite of the problem.
  */
 export const PICK_LABEL: Record<string, string> = {
   matched: 'Change',
@@ -81,12 +73,9 @@ export function received(record: RecordRow) {
 }
 
 /**
- * What a field's recorded values should read as.
- *
- * The CSV mirror carries verdict and note but not the observed values (PRD
- * §4.2), so a record restored from an export has a verdict and no evidence.
- * Rendering that as "Not on label" states something the store does not know —
- * and next to a Match verdict it reads as a contradiction.
+ * What a field's recorded values should read as. A record restored from an older
+ * export has a verdict and no evidence, and "Not on label" would state something
+ * the store does not know — beside a Match verdict, a contradiction.
  */
 export function fieldValues(field: { app_value: string | null; label_value: string | null }) {
   const recorded = field.app_value != null || field.label_value != null
@@ -96,3 +85,51 @@ export function fieldValues(field: { app_value: string | null; label_value: stri
     recorded,
   }
 }
+
+/** Prototype pill vocabulary — verdict is never colour alone (PRD §8). */
+export const PILL_TEXT: Record<string, string> = {
+  match: 'Match',
+  review: 'Needs review',
+  fail: 'Fail',
+  invalid: 'Not a label',
+  pending: 'Awaiting AI verification',
+}
+
+export const DOT_COLOR: Record<string, string> = {
+  match: 'var(--match-dot)',
+  review: 'var(--review-dot)',
+  fail: 'var(--fail-dot)',
+  invalid: 'var(--invalid-dot)',
+  pending: 'var(--pending-dot)',
+}
+
+/** No verdict yet reads as *awaiting AI*, not as a fourth verdict (PRD §3.2). */
+export function kindOf(verdict: Verdict | null | undefined) {
+  return verdict ?? 'pending'
+}
+
+/**
+ * Whether accepting this verdict should be challenged before it is recorded.
+ *
+ * PRD §5.1 records an override for anything that is not a `match`, and that is
+ * unchanged. What is contested is narrower: a `review` verdict is a difference
+ * in presentation over content that agrees, which is the ordinary thing a
+ * reviewer is here to wave through, so only a failed check or a specimen that
+ * is not a label is worth interrupting them for.
+ */
+export function contestedAccept(verdict: Verdict | null | undefined) {
+  return verdict === 'fail' || verdict === 'invalid'
+}
+
+/** Detectable because the backend stores the reader that ran, not the configured one. */
+export function readByFallback(record: Pick<RecordRow, 'reader_provider'>, configured?: string) {
+  if (!configured || configured === 'ocr') return false
+  return record.reader_provider === 'ocr'
+}
+
+export const FALLBACK_TITLE = 'Read by local OCR: accuracy may be lower'
+
+export const FALLBACK_BODY =
+  'The vision reader was unavailable, so the label was read by local OCR. ' +
+  'Blurred, angled or low-contrast captures read less reliably this way. ' +
+  'Confirm the fields against the label before closing the record.'

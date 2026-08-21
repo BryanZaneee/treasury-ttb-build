@@ -1,8 +1,14 @@
 import { describe, expect, test } from 'vitest'
 import { matchesQuery } from './search'
-import { PILL_TEXT, contestedAccept, kindOf } from './verdict'
-import { PICK_LABEL, fieldValues, verdictSummary } from './copy'
-import { readByFallback } from './fallback'
+import {
+  PICK_LABEL,
+  PILL_TEXT,
+  contestedAccept,
+  fieldValues,
+  kindOf,
+  readByFallback,
+  verdictSummary,
+} from './copy'
 
 const record = (over: Partial<Parameters<typeof matchesQuery>[0]> = {}) => ({
   id: 'COLA-2026-4100',

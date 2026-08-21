@@ -6,18 +6,14 @@ import type { RecordRow, RecordsPage } from '../api/client'
 import { matchesQuery } from '../lib/search'
 
 /**
- * Step through the queue the reviewer came from. Filter and search arrive as
- * URL params and go through lib/search, the same predicate the inbox uses — if
- * they diverged, Next would walk a different set. Always renders, including
- * while loading: it carries the verdict in `children`.
+ * Step through the queue the reviewer came from, using the same predicate the
+ * inbox does - if they diverged, Next would walk a different set. Always renders,
+ * loading included: it carries the verdict in `children`.
  */
 
 function useQueuePlace(currentId: string, filter: string, query: string) {
-  // Deliberately not invalidated by a decision - see RecordDetail's refresh().
-  // Deciding a record drops it out of the `attention` filter (`decision IS
-  // NULL`), so refetching this list mid-review would delete the reviewer's own
-  // position from under them and dead-end both Previous and Next. The inbox
-  // refetches on mount, so it is still truthful when they go back to it.
+  // Not invalidated by a decision (see RecordDetail's refresh): deciding drops
+  // the record out of `attention`, which would dead-end Previous and Next.
   const records = useQuery({
     queryKey: ['records', filter],
     queryFn: () => api<RecordsPage>(`/records${filter ? `?filter=${filter}` : ''}`),
@@ -44,13 +40,13 @@ export function QueueNav({
   currentId,
   filter,
   query,
-  className = 'card queue-nav',
+  className,
   children,
 }: {
   currentId: string
   filter: string
   query: string
-  className?: string
+  className: string
   children?: ReactNode
 }) {
   const place = useQueuePlace(currentId, filter, query)
@@ -65,8 +61,7 @@ export function QueueNav({
 
       <div className="queue-nav-place">
         {children}
-        {/* Where this record sits in the queue being stepped through, so the
-            reviewer knows how much of it is left before pressing Next. */}
+        {/* How much of the queue is left before pressing Next. */}
         {place.total > 0 && (
           <div className="queue-nav-count">
             {place.index >= 0
@@ -85,7 +80,7 @@ export function QueueNav({
   )
 }
 
-/** One end of the pair. Naming the record is what makes it worth pressing. */
+/** One end of the pair; naming the record is what makes it worth pressing. */
 function Step({
   to,
   record,

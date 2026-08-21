@@ -4,22 +4,27 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api, imageUrl } from '../api/client'
 import type { Health, RecordDetail as Detail } from '../api/client'
 import { Pill } from '../components/Pill'
-import { contestedAccept, kindOf } from '../lib/verdict'
-import { FIELD_LABEL, RESULT_COPY, fieldValues } from '../lib/copy'
+import {
+  FALLBACK_BODY,
+  FALLBACK_TITLE,
+  FIELD_LABEL,
+  RESULT_COPY,
+  contestedAccept,
+  fieldValues,
+  kindOf,
+  readByFallback,
+} from '../lib/copy'
 import { REVIEWER } from '../lib/session'
 import { QueueNav } from '../components/QueueNav'
+import { Lightbox } from '../components/Lightbox'
 import { useEscape } from '../lib/dialog'
 import { useToast } from '../lib/toast'
 import { readPanel, writePanel } from '../lib/review'
-import { FALLBACK_BODY, FALLBACK_TITLE, readByFallback } from '../lib/fallback'
 
 /**
- * The seven verified fields (PRD §3.1), each tying the adjudicated field key to
- * the record column it was filed in and the key a PATCH sends it back under.
- *
- * The comparison table is driven by this list rather than by the field results,
- * so every field has a row to type in: a record that has never been verified,
- * or one read as `invalid`, has no field rows at all (PRD §3.2 extension).
+ * The seven verified fields (PRD §3.1), tying each field key to its record column
+ * and its PATCH key. The comparison table is driven by this rather than by the
+ * field results, so an unverified or `invalid` record still has rows to type in.
  */
 const FIELDS = [
   { key: 'brand', column: 'app_brand', app: 'brand' },
@@ -53,8 +58,7 @@ const draftFrom = (r: Detail): Draft => ({
 
 /**
  * Previous and Next change the id without unmounting, which would carry a
- * half-typed correction - and the confirmation state under it - onto the next
- * record. Keying on the id makes stepping through the queue a fresh page.
+ * half-typed correction onto the next record. The key makes each one a fresh page.
  */
 export function RecordDetail() {
   const { id = '' } = useParams()
@@ -64,27 +68,22 @@ export function RecordDetail() {
 function Determination() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  // The queue the reviewer came from. Deep-linking straight to a record with no
-  // params falls back to the inbox's own default view.
+  // The queue the reviewer came from. An explicit empty filter is "All records";
+  // no params at all is a deep link, which falls back to the inbox's default.
   const [params] = useSearchParams()
-  // An explicit empty filter is the "All records" queue, which is different
-  // from arriving with no params at all - that is a deep link, and the inbox's
-  // own default view is the sensible queue for it.
   const filter = params.has('filter') ? (params.get('filter') ?? '') : 'attention'
   const query = params.get('q') ?? ''
   const backToInbox = `/inbox${params.toString() ? `?${params}` : ''}`
   const client = useQueryClient()
   const [zoomed, setZoomed] = useState(false)
-  // S10: minimised on this device, for this record. `key={id}` on the wrapper
-  // remounts per record, so the initialiser runs against the right id.
+  // S10: `key={id}` remounts per record, so this reads the right id.
   const [minimised, setMinimised] = useState(() => readPanel(id))
   useEffect(() => writePanel({ recordId: id, minimised }), [id, minimised])
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<null | 'accepted' | 'returned'>(null)
-  // Non-null while the application is being corrected in place. The reviewer
-  // types into the "Application says" column itself, so there is no separate
-  // form and no second copy of the seven fields to keep in step.
+  // Non-null while correcting in place: the reviewer types into the "Application
+  // says" column itself, so there is no second copy of the seven fields.
   const [draft, setDraft] = useState<Draft | null>(null)
   useEscape(() => setZoomed(false))
 
@@ -101,13 +100,9 @@ function Determination() {
     staleTime: 60_000,
   })
 
-  // Narrow on purpose. Invalidating the whole ['records'] prefix also refetches
-  // the queue QueueNav is stepping through, and deciding a record drops it out
-  // of the default `attention` filter (`decision IS NULL`) - so a broad
-  // invalidation deleted the reviewer's own position mid-review and left both
-  // Previous and Next dead. The inbox refetches on mount, so it is still
-  // truthful on the way back; only the masthead badge, which is cached for 30s,
-  // has to be told.
+  // Narrow on purpose: deciding a record drops it out of the `attention` filter,
+  // so invalidating the whole prefix would delete the reviewer's own position and
+  // dead-end Previous and Next. The inbox refetches on mount anyway.
   const refresh = () => {
     client.invalidateQueries({ queryKey: ['record', id] })
     client.invalidateQueries({ queryKey: ['records', 'counts'] })
@@ -124,9 +119,8 @@ function Determination() {
     onError: (e) => toast({ kind: 'error', title: 'Verification failed', body: String(e) }),
   })
 
-  // The correction is only ever adjudicated against the reading already on
-  // file: the application changed, the label did not, so the API re-runs the
-  // rules and never asks a reader to read the same image again.
+  // Adjudicated against the reading on file: the application changed, the label
+  // did not, so no reader is asked to read the same image again.
   const save = useMutation({
     mutationFn: (draft: Draft) =>
       api<Detail>(`/records/${id}`, {
@@ -182,22 +176,15 @@ function Determination() {
 
   const kind = kindOf(data.result)
   const disagreeing = data.field_results.filter((f) => f.verdict !== 'match')
-  // Not derived from the field list: an `invalid` specimen is adjudicated as a
-  // whole and writes no field rows at all (PRD §3.2 extension), so a flag taken
-  // from `disagreeing.length` would send override:false and be refused by the
-  // store with an empty list of fields to explain why.
+  // Not from the field list: an `invalid` specimen writes no field rows, so
+  // `disagreeing.length` would send override:false and be refused (PRD §3.2 ext).
   const needsOverride = data.result !== 'match'
   const closed = data.decision != null
 
   /**
-   * Accept, challenging it only when the challenge is worth making.
-   *
-   * PRD §5.1 records an override for anything short of a `match`, and that is
-   * unchanged - it is enforced server side and it is what S8 exists to produce.
-   * What is narrower is the interruption: a `review` verdict is a difference in
-   * presentation over content that agrees, which is the ordinary thing the
-   * reviewer is here to wave through. Only a failed check or a specimen that is
-   * not a label earns a confirm step.
+   * Accept, challenging only when the challenge is worth making. PRD §5.1 still
+   * records an override for anything short of a `match`; only a failed check or a
+   * non-label earns the confirm step.
    */
   const acceptNow = () => {
     if (contestedAccept(data.result)) {
@@ -238,9 +225,7 @@ function Determination() {
     </QueueNav>
   )
 
-  /* The application as filed, for the "Application says" column. Read from the
-     record rather than from the field result, so a correction shows the moment
-     it is saved even though adjudication cleared the field rows. */
+  /* Read from the record, not the field result, so a correction shows at once. */
   const current = draftFrom(data)
   const filed = (app: (typeof FIELDS)[number]['app']) =>
     app === 'warning' ? (current.warning ? 'Declared' : null) : current[app] || null
@@ -291,9 +276,8 @@ function Determination() {
               {result ? (
                 fieldValues(result).label
               ) : (
-                /* No field row: either nothing has been read yet, or this
-                   optional field was left undeclared and so was never
-                   adjudicated against the label. */
+                /* Nothing read yet, or an optional field never declared and so
+                   never adjudicated. */
                 <span className="fields-unrecorded">
                   {data.verified ? 'Not compared' : 'Not read yet'}
                 </span>
@@ -332,8 +316,7 @@ function Determination() {
                 {data.filename}
               </div>
             </div>
-            {/* Same click-to-enlarge as the staged batch preview: a specimen
-                is the evidence, and 3:4 in a column is too small to read. */}
+            {/* A specimen is the evidence; 3:4 in a column is too small to read. */}
             <button
               type="button"
               className="label-frame label-frame-zoom"
@@ -356,10 +339,8 @@ function Determination() {
         <div className="card">
           {header}
 
-          {/* PRD §6.1 puts minimise on the decision bar, but a decided record
-              renders no decision bar - and collapsing one of those is exactly
-              the case S10 describes. It sits above the comparison it collapses,
-              which is where it is true of every record. */}
+          {/* PRD §6.1 puts this on the decision bar, but a decided record has
+              none - and that is exactly the case S10 describes. */}
           <div className="row" style={{ padding: '10px 14px 0', justifyContent: 'flex-end' }}>
             <button
               className="btn btn-quiet btn-sm"
@@ -372,9 +353,8 @@ function Determination() {
           </div>
 
           {minimised && !draft ? (
-            /* S10: the comparison collapses, the verdict header above stays -
-               a minimised panel a reviewer cannot identify is not one they
-               come back to. */
+            /* The verdict header stays: a panel they cannot identify is not one
+               they come back to. */
             <div className="empty">
               <div className="empty-title">Comparison minimised</div>
               <div className="empty-hint">
@@ -383,8 +363,8 @@ function Determination() {
               </div>
             </div>
           ) : data.result === 'invalid' && !draft ? (
-            /* No fields were adjudicated (PRD §3.2 ext), so the comparison
-               table would be four column headers over nothing. */
+            /* Nothing was adjudicated (PRD §3.2 ext), so the table would be
+               four column headers over nothing. */
             <div className="empty">
               <div className="empty-title">Nothing to compare</div>
               <div className="empty-hint">
@@ -398,9 +378,8 @@ function Determination() {
 
           <div className="result-foot">
             {closed ? (
-              /* Who decided it, and why if they said. The override flag and the
-                 timestamp are recorded and exported, but a reviewer reading a
-                 closed record does not need the machinery restated at them. */
+              /* Who decided it, and why. The flag and timestamp are recorded and
+                 exported; a reviewer reading it back does not need them restated. */
               <div className="decided-note">
                 {data.decision === 'accepted' ? 'Accepted' : 'Returned to applicant'} by{' '}
                 {data.decided_by || 'unnamed reviewer'}
@@ -417,10 +396,8 @@ function Determination() {
                 </button>
               </div>
             ) : confirming === null ? (
-              /* The two decisions lead, because deciding is the job. Fixing
-                 the application and reading the label again are how a reviewer
-                 gets to one, so they follow. An unverified record has no
-                 determination to accept, so verification takes the front. */
+              /* Deciding is the job, so the decisions lead; an unverified record
+                 has nothing to accept, so verification takes the front. */
               <div className="row">
                 {data.verified ? (
                   <button
@@ -549,23 +526,12 @@ function Determination() {
       </div>
 
       {zoomed && (
-        <div
-          className="dialog-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Label image for ${data.app_brand}`}
-          tabIndex={-1}
-          autoFocus
-          onClick={() => setZoomed(false)}
-        >
-          <figure className="lightbox">
-            <img
-              src={imageUrl(data.specimen || data.filename)}
-              alt={`Label image for ${data.app_brand}`}
-            />
-            <figcaption className="mono">{data.filename}</figcaption>
-          </figure>
-        </div>
+        <Lightbox
+          src={imageUrl(data.specimen || data.filename)}
+          alt={`Label image for ${data.app_brand}`}
+          caption={data.filename}
+          onClose={() => setZoomed(false)}
+        />
       )}
     </div>
   )
