@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, freshUrl } from '../api/client'
+import { api, download, freshUrl, hasAdminToken, setAdminToken } from '../api/client'
 import type { Health, RecordsPage, StoreImport } from '../api/client'
 import { useEscape } from '../lib/dialog'
 import { Dialog } from '../components/Dialog'
@@ -15,7 +15,20 @@ export function Export() {
   const [message, setMessage] = useState<string | null>(null)
   const [showStore, setShowStore] = useState(false)
   const restoreRef = useRef<HTMLInputElement>(null)
-  useEscape(() => setConfirming(null))
+  // Set when an admin action is attempted with no token: it holds the action
+  // until one is supplied, so the reviewer is asked once rather than per click.
+  const [pending, setPending] = useState<null | (() => void)>(null)
+  const [token, setToken] = useState('')
+  useEscape(() => {
+    setConfirming(null)
+    setPending(null)
+  })
+
+  /** Run an admin action, asking for the token first when there is not one. */
+  const asAdmin = (action: () => void) => {
+    if (hasAdminToken()) action()
+    else setPending(() => action)
+  }
 
   const records = useQuery({
     queryKey: ['records', ''],
@@ -98,16 +111,27 @@ export function Export() {
             <a className="btn btn-wide" href={freshUrl('/export/records.csv')} download>
               Export records as CSV
             </a>
-            <button className="btn btn-wide" onClick={() => setConfirming('reset')}>
+            <button className="btn btn-wide" onClick={() => asAdmin(() => setConfirming('reset'))}>
               Load the example set
             </button>
-            <a className="btn btn-quiet btn-wide" href={freshUrl('/export/backup.csv')} download>
+            <button
+              className="btn btn-quiet btn-wide"
+              onClick={() =>
+                asAdmin(() => {
+                  // Admin-gated (it carries applicant and reviewer names), so it
+                  // is fetched with the header rather than linked to directly.
+                  download('/export/backup.csv', 'records-backup.csv', true).catch((e) =>
+                    setMessage(`The backup could not be downloaded. ${String(e)}`),
+                  )
+                })
+              }
+            >
               Download a restorable backup
-            </a>
+            </button>
             <button
               className="btn btn-quiet btn-wide"
               disabled={restore.isPending}
-              onClick={() => restoreRef.current?.click()}
+              onClick={() => asAdmin(() => restoreRef.current?.click())}
             >
               {restore.isPending && <span className="spinner" />}
               Restore from a backup
@@ -115,7 +139,10 @@ export function Export() {
             <button className="btn btn-quiet btn-wide" onClick={() => setShowStore((v) => !v)}>
               {showStore ? 'Hide record table' : 'View record table'}
             </button>
-            <button className="btn btn-danger btn-wide" onClick={() => setConfirming('empty')}>
+            <button
+              className="btn btn-danger btn-wide"
+              onClick={() => asAdmin(() => setConfirming('empty'))}
+            >
               Remove all records
             </button>
           </div>
@@ -191,6 +218,57 @@ export function Export() {
           </ul>
         </div>
       </div>
+
+      {pending && (
+        <Dialog
+          title="Administrator token required"
+          titleId="admin-token-title"
+          onClose={() => setPending(null)}
+          footer={
+            <>
+              <button
+                className="btn"
+                disabled={!token.trim()}
+                onClick={() => {
+                  setAdminToken(token)
+                  setToken('')
+                  const action = pending
+                  setPending(null)
+                  action()
+                }}
+              >
+                Continue
+              </button>
+              <button className="btn btn-quiet" onClick={() => setPending(null)}>
+                Cancel
+              </button>
+            </>
+          }
+        >
+          <p className="card-note">
+            Replacing the store, resetting it and downloading a full backup are
+            administrator actions. Enter the shared administrator token to continue; it is
+            kept for this browser tab only and is never written into the page.
+          </p>
+          <label className="field">
+            <span>Administrator token</span>
+            <input
+              type="password"
+              autoComplete="off"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter' || !token.trim()) return
+                setAdminToken(token)
+                setToken('')
+                const action = pending
+                setPending(null)
+                action()
+              }}
+            />
+          </label>
+        </Dialog>
+      )}
 
       {confirming && (
         <Dialog

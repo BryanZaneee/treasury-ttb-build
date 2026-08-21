@@ -24,7 +24,36 @@ export const freshUrl = (path: string) => uncacheable(apiUrl(path))
 
 export const imageUrl = (name: string) => `${BASE}/images/${encodeURIComponent(name)}`
 const ACCESS_TOKEN = import.meta.env.VITE_ACCESS_TOKEN ?? ''
-const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN ?? ''
+
+/**
+ * The admin token gates replacing the store and resetting fixtures (PRD §8), so
+ * it must not be compiled into a bundle anyone can fetch - `deploy.sh` builds on
+ * the app host, against that host's .env. A build-time value stays for local dev
+ * and CI; production leaves VITE_ADMIN_TOKEN empty and a reviewer supplies one,
+ * held for this tab only.
+ */
+const ADMIN_KEY = 'ttb.admin-token'
+
+function storedAdminToken(): string {
+  try {
+    return sessionStorage.getItem(ADMIN_KEY) ?? ''
+  } catch {
+    return '' // private mode, or storage disabled
+  }
+}
+
+let adminToken = (import.meta.env.VITE_ADMIN_TOKEN ?? '') || storedAdminToken()
+
+export const hasAdminToken = () => Boolean(adminToken)
+
+export function setAdminToken(token: string) {
+  adminToken = token.trim()
+  try {
+    sessionStorage.setItem(ADMIN_KEY, adminToken)
+  } catch {
+    // Not persisting is survivable; the token still works for this page.
+  }
+}
 
 export class ApiError extends Error {
   status: number
@@ -42,12 +71,14 @@ type Options = {
   body?: unknown
   admin?: boolean
   form?: FormData
+  /** CSV exports come back as a file, not JSON. */
+  blob?: boolean
 }
 
 export async function api<T>(path: string, options: Options = {}): Promise<T> {
-  const { method = 'GET', body, admin = false, form } = options
+  const { method = 'GET', body, admin = false, form, blob = false } = options
   const headers: Record<string, string> = {}
-  const token = admin ? ADMIN_TOKEN : ACCESS_TOKEN
+  const token = admin ? adminToken : ACCESS_TOKEN
   if (token) headers.Authorization = `Bearer ${token}`
   if (body !== undefined) headers['Content-Type'] = 'application/json'
 
@@ -70,6 +101,7 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
     throw new ApiError(response.status, detail)
   }
   if (response.status === 204) return undefined as T
+  if (blob) return (await response.blob()) as T
   return (await response.json()) as T
 }
 
@@ -201,4 +233,20 @@ export type StoreImport = {
   imported: number
   skipped: number
   errors: string[]
+}
+
+/**
+ * Download a file the API gates on a token. A plain `<a download>` cannot carry
+ * an Authorization header, so the body is fetched and saved from a blob.
+ */
+export async function download(path: string, filename: string, admin = false) {
+  const blob = await api<Blob>(path, { admin, blob: true })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
 }
