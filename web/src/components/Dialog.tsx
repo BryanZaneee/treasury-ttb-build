@@ -1,4 +1,7 @@
+import { useRef } from 'react'
 import type { ReactNode } from 'react'
+
+import { useFocusTrap } from '../lib/dialog'
 
 /** The modal shell: backdrop, focus semantics and the head/body/foot frame.
  *  Only the chrome is shared - every caller writes its own copy. */
@@ -20,13 +23,18 @@ export function Dialog({
   children: ReactNode
   footer: ReactNode
 }) {
+  const panel = useRef<HTMLDivElement>(null)
+  useFocusTrap(panel)
   return (
     <div className="dialog-backdrop" role="presentation" onClick={onClose}>
       <div
+        ref={panel}
         className={`dialog${wide ? '' : ' dialog-sm'}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        // -1 so the panel itself can hold focus when it has no focusable child.
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="dialog-head">

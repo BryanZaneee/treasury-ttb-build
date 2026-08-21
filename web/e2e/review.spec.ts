@@ -192,3 +192,30 @@ test('a minimised determination is still minimised after a reload (S10)', async 
   await page.getByRole('button', { name: 'Expand' }).click()
   await expect(page.getByText('Application says')).toBeVisible()
 })
+
+test('an open dialog keeps Tab inside it and gives focus back on close', async ({ page }) => {
+  // `aria-modal="true"` tells assistive tech the page behind is inert, so a
+  // dialog Tab can leave is misdescribing itself. axe cannot see focus
+  // behaviour - it audits markup - so this is the check that covers it.
+  await page.goto('/inbox')
+  const opener = page.getByRole('button', { name: 'Run AI verification on all' })
+  await opener.click()
+
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+
+  // Focus starts inside, and ten tabs never take it out.
+  await expect(dialog.locator(':focus')).toHaveCount(1)
+  for (let i = 0; i < 10; i++) {
+    await page.keyboard.press('Tab')
+    expect(
+      await dialog.evaluate((el) => el.contains(document.activeElement)),
+      `Tab ${i + 1} escaped the dialog`,
+    ).toBe(true)
+  }
+
+  // Escape closes it and the opener gets focus back.
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(opener).toBeFocused()
+})
