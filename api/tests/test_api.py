@@ -344,8 +344,8 @@ def test_stage_batch_pairs_an_image_and_reports_an_unused_one() -> None:
         headers=ACCESS,
         files=[
             ("applications_csv", ("apps.csv", SAMPLE_CSV, "text/csv")),
-            ("images", ("old-tom-pass.jpg", b"\x89PNG fake", "image/png")),
-            ("images", ("nobody-claims-me.png", b"\x89PNG fake", "image/png")),
+            ("images", ("old-tom-pass.jpg", _png(), "image/png")),
+            ("images", ("nobody-claims-me.png", _png("blue"), "image/png")),
         ],
     )
     assert resp.status_code == 200
@@ -463,7 +463,7 @@ def test_store_import() -> None:
 def _export() -> bytes:
     """The full mirror, which is the half of the export that round-trips. The
     reviewer-facing /export/records.csv drops columns on purpose."""
-    resp = client.get("/api/export/backup.csv")
+    resp = client.get("/api/export/backup.csv", headers=ADMIN)
     assert resp.status_code == 200
     return resp.content
 
@@ -606,6 +606,15 @@ def test_replace_mode_leaves_only_what_the_file_contained() -> None:
     _import(csv_bytes, mode="replace")
     records = client.get("/api/records").json()["records"]
     assert [r["id"] for r in records] == ["rec-1"]
+
+
+def test_the_full_backup_export_requires_admin() -> None:
+    """It carries applicant and reviewer names and free-text reasons - the
+    fields logs.py redacts (PRD §8). The reviewer export stays open."""
+    assert client.get("/api/export/backup.csv").status_code == 401
+    assert client.get("/api/export/backup.csv", headers=ACCESS).status_code == 401
+    assert client.get("/api/export/backup.csv", headers=ADMIN).status_code == 200
+    assert client.get("/api/export/records.csv").status_code == 200
 
 
 def test_fixtures_reset_requires_admin() -> None:

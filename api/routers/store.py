@@ -1,5 +1,6 @@
 """Fixture and store-import endpoints (PRD §5.1)."""
 
+import hmac
 from typing import Any, Literal
 
 from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
@@ -36,7 +37,7 @@ class StoreImportResponse(BaseModel):
 
 def _require_admin(authorization: str | None) -> None:
     token = (authorization or "").removeprefix("Bearer ").strip()
-    if not settings.admin_token or token != settings.admin_token:
+    if not settings.admin_token or not hmac.compare_digest(token, settings.admin_token):
         raise HTTPException(status_code=401, detail="admin token required")
 
 
@@ -53,8 +54,13 @@ def export_records_csv() -> Response:
 
 
 @router.get("/export/backup.csv")
-def export_backup_csv() -> Response:
-    """The full mirror (PRD §4.2), which is what `POST /store/import` reads back."""
+def export_backup_csv(authorization: str | None = Header(default=None)) -> Response:
+    """The full mirror (PRD §4.2), which is what `POST /store/import` reads back.
+
+    Admin-gated: unlike the reviewer export this carries applicant and reviewer
+    names and free-text reasons, the fields logs.py redacts (PRD §8).
+    """
+    _require_admin(authorization)
     return Response(
         content=csv_io.to_csv(db.mirror_rows()),
         media_type="text/csv",

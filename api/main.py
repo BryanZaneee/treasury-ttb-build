@@ -1,5 +1,6 @@
 """App factory: FastAPI instance, CORS, token middleware, health, routers."""
 
+import hmac
 import threading
 import time
 from typing import Any
@@ -88,12 +89,14 @@ class TokenMiddleware(BaseHTTPMiddleware):
             auth = request.headers.get("authorization", "")
             token = auth.removeprefix("Bearer ").strip() if auth else ""
             if needs_admin:
-                ok = bool(settings.admin_token) and token == settings.admin_token
+                ok = bool(settings.admin_token) and hmac.compare_digest(
+                    token, settings.admin_token
+                )
             else:
                 # An admin can do anything a reviewer can. An empty token is
                 # rejected outright so an unset admin_token cannot match one.
-                valid = {t for t in (settings.access_token, settings.admin_token) if t}
-                ok = bool(token) and token in valid
+                valid = [t for t in (settings.access_token, settings.admin_token) if t]
+                ok = bool(token) and any(hmac.compare_digest(token, t) for t in valid)
             if not ok:
                 return JSONResponse({"detail": "unauthorized"}, status_code=401)
 
