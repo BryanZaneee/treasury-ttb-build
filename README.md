@@ -111,20 +111,31 @@ No API key needed — every suite runs against the fixture replayer. See
 | `READER_BASE_URL` | Override for any OpenAI-compatible endpoint. Empty uses the OpenAI default. |
 | `READER_EFFORT` | Reasoning effort, `gpt-5.x` only. `none` in production. |
 | `READER_SERVICE_TIER` | Request tier. `standard` is mapped onto the API's `auto` — it does not accept the literal word. |
-| `READER_API_KEY` | Key for the vision reader. `OPENAI_API_KEY` takes precedence. |
+| `READER_API_KEY` | Key for the vision reader. |
+| `OPENAI_API_KEY` | The same key, and it takes precedence over `READER_API_KEY`. |
 | `READER_TIMEOUT_S` | Per-call timeout before the service degrades to local OCR. |
 | `READER_CONCURRENCY` | Labels read at once during a batch run. Default 10. |
 | `DAILY_VISION_CALL_CAP` | Paid vision calls allowed per UTC day. Once breached, records finish with rules-only verdicts rather than failing. `0` disables it. |
 | `ACCESS_TOKEN` / `ADMIN_TOKEN` | Shared bearer tokens. There are no user accounts (PRD §8). |
-| `VITE_ACCESS_TOKEN` / `VITE_ADMIN_TOKEN` | The same two tokens, exposed to the browser bundle for local dev. |
+| `VITE_ACCESS_TOKEN` | The reviewer token, compiled into the browser bundle. There are no accounts, so this is the shared token by design. |
+| `VITE_ADMIN_TOKEN` | The admin token for local dev only. **Leave it empty in production** — see the warning below. |
+| `DEV_API_URL` | Where `npm run dev` proxies `/api`. Defaults to `http://127.0.0.1:8000`. |
+| `LIVE_READER` | Set to run the three live-reader injection tests, which are skipped in CI because they cost money. |
 | `AUTO_APPROVE_MATCHES` | Whether clean matches close themselves. Defaults to off (PRD §5.3). |
 | `QA_SAMPLE_RATE` | Fraction of auto-close-eligible records sent to a human anyway. Default 0.05. |
 | `DATA_DIR` | Where the SQLite store, images and snapshots live. |
 | `PUBLIC_BASE_PATH` | Subpath the app is served under in production. Empty locally. |
 | `BACKUP_DEST` / `BACKUP_RECIPIENT` | Off-box backup target and the `age` public key it is encrypted to. Read by `deploy/backup.sh` from the same `.env`; the script refuses to run without them. |
 
-**Never give the reader API key a `VITE_` prefix.** Anything prefixed `VITE_` is compiled into
-the browser bundle and is therefore public (PRD §8).
+**Anything prefixed `VITE_` is compiled into the browser bundle and is therefore public**
+(PRD §8). Two consequences:
+
+- **Never give the reader API key a `VITE_` prefix.** It would be handed to every visitor.
+- **Leave `VITE_ADMIN_TOKEN` empty in production.** The admin token authorises replacing the
+  store and resetting it, and `deploy/deploy.sh` builds on the app host against that host's
+  `.env` — so a value set there ships to the public. With it empty, the app asks a reviewer for
+  the token when they reach for an admin action and keeps it for that browser tab only. The
+  reviewer token is a different case: there are no accounts, so it is shared by design.
 
 ---
 
@@ -185,6 +196,52 @@ data.
 **Records → Download a restorable backup** takes the full 26-column mirror, and **Restore from
 a backup** reads one back (both admin-token gated). The plain **Export records as CSV** is the
 reviewer's 18-column take-away and drops columns, so it is not the file to restore from.
+
+---
+
+## Features
+
+What the service does, in the order the stories were written (PRD §2). Each is
+reachable from the running app with the bundled data — nothing here needs an API
+key or a file of your own.
+
+| Feature | Where to use it |
+| --- | --- |
+| **Check one label** — file a specimen and the seven application fields, and get a verdict back with a way into the record | Check one label |
+| **Named-sample prefill** — twelve documented specimens, each with a one-line note on what it demonstrates, so the form can be driven without knowing filenames | Check one label → *Use a sample* |
+| **Batch upload** — an application CSV plus a folder of images, paired on filename across all five pairing buckets, with commit blocked while a row is ambiguous | Batch upload |
+| **The bundled sample batch in one click** — all 25 fixtures staged, three left in the other pairing states on purpose | Batch upload → *Load bundled sample batch* |
+| **Filtered inbox with search** — needs attention, awaiting AI, review, fail and closed, searched over ID, applicant, brand and filename, case- and punctuation-insensitively | Review inbox |
+| **Verify one record in place** — fill what is missing and check it without leaving the queue; the row shows it is working and resolves to a verdict | Review inbox → any row, or a determination |
+| **Verify everything pending in one action** — per-record progress, and one failure does not abort the rest | Review inbox → *Run AI verification on all* |
+| **Accept a flagged record behind a confirmation that names every disagreeing field** — the acceptance stores the reviewer, the timestamp and an override flag | Determination → *Accept* |
+| **Return a record to the applicant with an editable reason** — the reason persists, appears in the export, and the record does not reopen | Determination → *Return to applicant* |
+| **A determination that stays where you left it** — the minimised panel and the open record survive a reload, on this device | Determination |
+| **CSV export, import and a blank template** — a reviewer-facing export, a full restorable backup, and a round trip that is byte-identical | Records |
+| **Reset to the example set** — admin-gated and confirmed, snapshotting the current store before it replaces it | Records → *Load the example set* |
+| **Every view is a rendered page** — CSV appears only as a file download, never as something to read on screen | Throughout |
+
+Underneath those, and shared by all of them:
+
+- **The rules engine owns the verdict.** The reader reports what is printed on
+  the label; it never sees the application and has no verdict field to express,
+  so PRD §3.2's "a reader may never improve a verdict" holds by construction
+  rather than by a check that could be forgotten.
+- **Verification degrades rather than blocking.** An unreachable or slow vision
+  reader falls back to local OCR, the record carries a *Read by local OCR* chip,
+  and the engine string names whatever actually read the label.
+- **Nothing is read until asked.** No reader runs on upload, so an application
+  that is filed and never verified costs nothing.
+- **Repeat reads are free.** Extraction is cached on the image, prompt version,
+  provider, model and effort, so re-adjudicating a corrected application does
+  not pay for a second call.
+- **Spend has a ceiling.** `DAILY_VISION_CALL_CAP` stops paid calls for the UTC
+  day and finishes records with rules-only verdicts instead of failing them.
+- **Every determination is auditable.** Decisions, overrides, imports and resets
+  append to a log that is never rewritten; re-verifying adds to it.
+- **Label text is untrusted.** A specimen instructing the reader to approve it is
+  transcribed as label text and then fails the comparison like any other
+  mismatch (PRD §3.3).
 
 ---
 
@@ -375,9 +432,9 @@ string names what actually read the label.
 ## Quality gates
 
 ```bash
-cd api && uv run ruff check . && uv run mypy . && uv run pytest -q     # 194 tests, 3 skipped
-cd web && npm run lint && npm run test && npm run build                # 15 tests
-cd web && npx playwright test                                          # 15 specs
+cd api && uv run ruff check . && uv run mypy . && uv run pytest -q     # 205 tests, 3 skipped
+cd web && npm run lint && npm run test && npm run build                # 16 tests
+cd web && npx playwright test                                          # 16 specs
 ```
 
 The three skipped tests are the live-reader injection cases; they run against a real provider
@@ -413,6 +470,8 @@ Run a single test with `uv run pytest tests/test_db.py::test_round_trip -q`,
 | Amber strip: **"Verification is not using the vision reader"** | `READER_PROVIDER` is `fake` or `ocr`, or the vision reader could not be built. Check `OPENAI_API_KEY` and `GET /api/health`'s `reader_reachable`. |
 | A record carries a **"Read by local OCR"** chip | The vision reader was unreachable for that call and the service degraded rather than failing. The verdict stands; accuracy is lower on poor captures. |
 | Engine string says **"daily paid-call cap reached"** | Not a fault. `DAILY_VISION_CALL_CAP` is spent until UTC midnight; records finish with rules-only verdicts, read by local OCR. |
+| Asked for an **administrator token** on Records | Working as intended when `VITE_ADMIN_TOKEN` is empty, which is how production is configured. Enter `ADMIN_TOKEN` from the host's `.env`; it is kept for that browser tab only. |
+| **401 downloading a restorable backup** | It is admin-gated (it carries applicant and reviewer names). The plain **Export records as CSV** is not. |
 | `npm install` fails on peer dependencies | Use `--legacy-peer-deps`, as CI does. |
 | `pytesseract`/Tesseract errors | Only needed for `READER_PROVIDER=ocr` and for the OCR fallback path: `brew install tesseract`. |
 | Port already in use | Both ports are explicit: `--port` on uvicorn, `--port` on `npm run dev`. |
@@ -457,3 +516,52 @@ Before a deploy that carries a migration, take a copy first:
 ```bash
 sqlite3 /var/www/ttb-build/data/records.db ".backup '/var/backups/ttb-build/pre-deploy.db'"
 ```
+
+---
+
+## Stretch goals
+
+What a further pass would take on, in the order it would be worth doing.
+
+### Finish the hardening milestone
+
+Two exit criteria from PRD §10's M7 are still open. Neither blocks use, and both
+are the kind of thing that is only worth anything when actually rehearsed:
+
+- **A load pass at ten concurrent reviewers.** The target is single-tenant, 1–10
+  concurrent (PRD §8), and the per-record latency is measured — but the
+  contention story is reasoned about rather than observed.
+- **A restore rehearsal.** Backups run nightly, encrypted and off-box, and the
+  restore path is exercised through the UI. What has not happened is someone who
+  did not build the system following the runbook from a cold box.
+
+### Known limitations
+
+Real, understood, and left alone deliberately rather than half-fixed — each
+would be a design change rather than a patch:
+
+| Limitation | What it costs today |
+| --- | --- |
+| **A batch commit is not atomic across claim and insert.** Rows are removed from staging in one transaction and filed one at a time after it | A failure midway through a large commit leaves the remaining rows neither staged nor filed |
+| **Resetting or replacing the store while a job is running** joins background threads for five seconds, then deletes the database file; the verification pool is not among those threads | Verifications in flight are silently discarded |
+| **Two reviewers deciding the same record at the same moment** both pass the "already closed" check before either writes | The second decision wins, and both append to the audit log |
+| **An imported CSV is not validated against the verdict and decision enums** before it is written | A hand-edited backup with an out-of-enum value imports cleanly and then breaks the record list until it is corrected |
+| **Job progress polling has no cancellation.** Navigating away leaves the poll running until the job ends | Wasted requests, and a toast that can arrive on a page the reviewer has already left |
+| **A new HTTP client is built per verification** rather than pooled | Connection reuse is lost across a large batch — the cost is latency, not correctness |
+| **The per-IP rate limiter keeps a counter per address for the life of the process** | Memory grows with distinct clients; immaterial at this scale, wrong at any other |
+| **The government warning is judged on the specimen filed.** PRD §12 leaves open whether a warning legitimately printed on a back label should count | A single-image filing whose warning is on the other side fails, which may be a false rejection |
+
+### Out of scope for v1, by decision
+
+Ruled out at the start (PRD §1) so the rules engine got the time instead, and
+still the right call for a single-tenant internal tool:
+
+multi-tenancy · an applicant-facing portal · TTB system integration and e-filing
+· artwork editing · PDF specimens · e-signature · user accounts with a role
+hierarchy.
+
+The last is the one that unlocks the others. Shared-token access is what stands
+in for it (PRD §8), and `web/src/lib/session.ts` is a mock session with a single
+definition read by both the masthead and every determination — so replacing it
+with real authentication is one change, not a refactor. Real accounts are also
+what would let the admin token stop being a shared secret typed by hand.
