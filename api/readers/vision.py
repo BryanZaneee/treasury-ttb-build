@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import threading
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -49,17 +50,21 @@ class SpendCapReached(ReaderError):
 # ponytail: in-process, so per-worker and reset on restart - move it to the
 # audit table if the cap ever has to hold across either.
 _calls: dict[str, int] = {}
+# Batch verification charges from READER_CONCURRENCY threads, so the
+# read-modify-write below has to be atomic or the cap over-runs.
+_calls_lock = threading.Lock()
 
 
 def _charge_one_call(cap: int) -> None:
     today = datetime.now(UTC).date().isoformat()
-    spent = _calls.get(today, 0)
-    if cap and spent >= cap:
-        raise SpendCapReached(
-            f"daily paid-call cap of {cap} reached; verification is rules-only "
-            "until UTC midnight"
-        )
-    _calls[today] = spent + 1
+    with _calls_lock:
+        spent = _calls.get(today, 0)
+        if cap and spent >= cap:
+            raise SpendCapReached(
+                f"daily paid-call cap of {cap} reached; verification is rules-only "
+                "until UTC midnight"
+            )
+        _calls[today] = spent + 1
 
 
 def calls_today() -> int:
