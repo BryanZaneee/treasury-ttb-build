@@ -1145,7 +1145,7 @@ def test_overriding_a_failure_must_be_attributed() -> None:
     assert entry["result"] == "fail"
 
 
-def test_the_engine_string_names_a_spend_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_engine_string_names_the_call_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     """Acceptance test 17: on a cap breach the record must say so.
 
     "openai unavailable" reads as an outage worth retrying. A cap is not - it

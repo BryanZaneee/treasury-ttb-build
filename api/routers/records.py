@@ -265,7 +265,7 @@ def read_specimen(specimen: str, image_path: Path) -> tuple[LabelReading, str, s
         raise HTTPException(status_code=422, detail=f"no reader available: {exc}") from exc
     # An OCR-only reading never auto-closes (PRD §5.3); the engine string is
     # what tells the reviewer which reader actually read this label.
-    reason = "daily spend cap reached" if capped else f"{provider} unavailable"
+    reason = "daily paid-call cap reached" if capped else f"{provider} unavailable"
     return (
         reading,
         f"rules check ({reason}, read by local OCR)",

@@ -26,6 +26,16 @@ are fictional, and no real applicant information exists anywhere in the system.
 | Node | 22 | the version CI builds against |
 | Tesseract | optional | only needed for `READER_PROVIDER=ocr`: `brew install tesseract` |
 
+Two processes, two terminals: the API on **:8000** and the frontend on **:5173**. Both read the
+same `.env` at the repo root. From a clean machine it is about three minutes.
+
+### 0. Get the code
+
+```bash
+git clone https://github.com/BryanZaneee/treasury-ttb-build.git
+cd treasury-ttb-build
+```
+
 ### 1. Configure
 
 ```bash
@@ -79,6 +89,18 @@ that is filed and never verified costs nothing.
 > `api/fixtures/expectations.json`, so every fixture reaches its documented verdict instantly,
 > offline and free. This is the reader CI uses, which is what keeps the test suite deterministic
 > — the vision model misreads a given label differently between runs.
+
+### 5. Run the checks
+
+```bash
+cd api && uv run ruff check . && uv run mypy . && uv run pytest -q
+cd web && npm run lint && npm run test && npm run build
+cd web && npx playwright test      # starts its own servers on :8031 and :5273
+```
+
+No API key needed — every suite runs against the fixture replayer. See
+[Quality gates](#quality-gates) for what each one covers, and
+[Troubleshooting](#troubleshooting) if something does not come up.
 
 ### Configuration reference
 
@@ -381,6 +403,34 @@ Run a single test with `uv run pytest tests/test_db.py::test_round_trip -q`,
 
 ---
 
+## Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| Inbox says **"Could not reach the API"** | The API is not up on :8000. Start it, or point the dev proxy elsewhere with `DEV_API_URL`. |
+| Inbox is **empty** on a fresh clone | `data/` is gitignored, so the store does not exist until you seed it: `cd api && uv run python seed.py`. |
+| Every record says **"Awaiting AI verification"** | Working as intended — nothing is read until you ask. Press **Run AI verification on all**. |
+| Amber strip: **"Verification is not using the vision reader"** | `READER_PROVIDER` is `fake` or `ocr`, or the vision reader could not be built. Check `OPENAI_API_KEY` and `GET /api/health`'s `reader_reachable`. |
+| A record carries a **"Read by local OCR"** chip | The vision reader was unreachable for that call and the service degraded rather than failing. The verdict stands; accuracy is lower on poor captures. |
+| Engine string says **"daily paid-call cap reached"** | Not a fault. `DAILY_VISION_CALL_CAP` is spent until UTC midnight; records finish with rules-only verdicts, read by local OCR. |
+| `npm install` fails on peer dependencies | Use `--legacy-peer-deps`, as CI does. |
+| `pytesseract`/Tesseract errors | Only needed for `READER_PROVIDER=ocr` and for the OCR fallback path: `brew install tesseract`. |
+| Port already in use | Both ports are explicit: `--port` on uvicorn, `--port` on `npm run dev`. |
+| A deep link 404s in production | `PUBLIC_BASE_PATH` disagrees between the build and the proxy. It is defined once in `.env`; rebuild the frontend after changing it. |
+| Store looks wrong after a deploy | Check `sqlite3 data/records.db 'SELECT MAX(version) FROM schema_version;'` against the highest file in `api/migrations/`. If it is behind, the API has not restarted. |
+
+**First thing to check, always:** `curl -s localhost:8000/api/health | jq`. It reports store
+readability, image writability, reader reachability, the running provider and model, paid calls
+against the daily cap, and the service counters (`cache_hits`, `reader_errors`,
+`spend_cap_reached`, `rate_limited` and the rest). Settings are parsed once at import, so an
+edited `.env` changes nothing until the API restarts.
+
+**Getting back to a known state:** **Records → Load the example set** restores the thirteen,
+**Remove all records** empties the store, and both snapshot the current store into
+`data/snapshots/` first. Nothing is destroyed without a copy.
+
+---
+
 ## Deployment
 
 The service runs on a VPS behind Caddy, served under a `/ttb-build` subpath.
@@ -393,7 +443,17 @@ Database migrations are applied at boot and tracked in `schema_version`, so a de
 the store in place — there is no separate migration step to forget.
 
 `deploy/backup.sh` takes a nightly encrypted copy of the store off the box, driven by
-`ttb-build-backup.timer`, and prunes both ends to 30 days. `GET /api/health` reports store
-readability, image writability, reader reachability, the running provider and model, paid calls
-against the daily cap, and the §8 service counters — it is the first thing to check when
-something looks wrong.
+`ttb-build-backup.timer`, and prunes both ends to 30 days. It needs `BACKUP_DEST` and
+`BACKUP_RECIPIENT` in the host's `.env` and refuses to run without them, rather than writing an
+unencrypted copy or leaving it on the disk it is protecting against losing.
+
+To restore without a shell, **Records → Download a restorable backup** then **Restore from a
+backup**, both admin-token gated; the restore snapshots first. The file matters —
+`/api/export/backup.csv` is the full 26-column mirror and is what the import reads, while
+**Export records as CSV** is the reviewer's 18-column take-away and is rejected as an import.
+
+Before a deploy that carries a migration, take a copy first:
+
+```bash
+sqlite3 /var/www/ttb-build/data/records.db ".backup '/var/backups/ttb-build/pre-deploy.db'"
+```
